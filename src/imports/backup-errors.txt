@@ -1,0 +1,78 @@
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17861  GET https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae/data/backups 500 (Internal Server Error)
+u @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17861
+await in u
+(익명) @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17851
+fp @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+Ja @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+yy @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:1
+dy @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:1이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17874 ❌ [Backup] Failed to load backups: 500 {error: 'Unknown error'}
+u @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17874
+await in u
+(익명) @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17851
+fp @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+Ja @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+yy @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:1
+dy @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:1이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17882 🔵 [DEBUG] createBackup function called!
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17885 💾 [Backup] Creating backup... {tokenToUse: 'EXISTS'}
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17886  POST https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae/data/auto-backup 500 (Internal Server Error)
+m @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17886
+await in m
+SD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+TD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+bD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+lE @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+_C @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+gS @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+oC @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Py @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Uv @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+VD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17906 ❌ [Backup] Failed: 500
+m @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17906
+await in m
+SD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+TD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+bD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+lE @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+_C @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+gS @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+oC @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Py @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Uv @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+VD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17906 ❌ [Backup] Error Response Text: {"error":"Unknown error"}
+m @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17906
+await in m
+SD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+TD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+bD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+lE @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+_C @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+gS @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+oC @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Py @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Uv @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+VD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17909 ❌ [Backup] Parsed JSON: {error: 'Unknown error'}
+m @ af5049c374776d36f9d7fb01a019299bd97f8f10.js:17909
+await in m
+SD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+TD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+bD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+lE @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+_C @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+(익명) @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+gS @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:8
+oC @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Py @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+Uv @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5
+VD @ sites-runtime.ed340f7bffa7e99869e4202e80427255dbdc8bff3e9b8cbc6cc79c5d908c29e6.js:5이 오류 이해하기
+af5049c374776d36f9d7fb01a019299bd97f8f10.js:17917 Create backup error: Error: Unknown error
+    at m (af5049c374776d36f9d7fb01a019299bd97f8f10.js:17914:57)

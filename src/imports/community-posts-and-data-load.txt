@@ -1,0 +1,100 @@
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+--> GET /make-server-0b7d3bae/community/posts 200 253ms
+✅ [Community] Returning 21 posts
+📊 [Community] Found posts: 21
+👤 [Community] User role: admin
+📥 [Community] Fetching posts with prefix: beta_post_
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+booted (time: 62ms)
+shutdown
+shutdown
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+--> GET /make-server-0b7d3bae/community/posts 200 261ms
+✅ [Community] Returning 21 posts
+📊 [Community] Found posts: 21
+👤 [Community] User role: admin
+📥 [Community] Fetching posts with prefix: beta_post_
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+shutdown
+shutdown
+✅ [Community] Returning 21 posts
+📊 [Community] Found posts: 21
+--> GET /make-server-0b7d3bae/community/posts 200 216ms
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+👤 [Community] User role: admin
+📥 [Community] Fetching posts with prefix: beta_post_
+shutdown
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+shutdown
+<-- GET /make-server-0b7d3bae/community/posts
+shutdown
+shutdown
+shutdown
+shutdown
+shutdown
+shutdown
+shutdown
+--> GET /make-server-0b7d3bae/community/posts 200 253ms
+✅ [Community] Returning 21 posts
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+📊 [Community] Found posts: 21
+👤 [Community] User role: admin
+📥 [Community] Fetching posts with prefix: beta_post_
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+booted (time: 51ms)
+✅ [Load] Data loaded successfully for user: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com last modified: 2026-02-28T18:06:30.624Z
+Owned: 20, Wishlist: 5, Play records: 1
+--> GET /make-server-0b7d3bae/data/load 200 290ms
+- Sample owned: [ { id: "1772204935663", rating: 8, savedAt: 1772301990819, imageUrl: "https://cf.geekdo-images.com/peUgu3A20LRmAXAMyDQfpQ__original/img/bP18m_PYjyFOv1IBGgMOteQUneA=/0x0/filters:format(jpeg)/pic8621446.jpg", listType: "owned", playTime: "30-45분", videoUrl: "", createdAt: "2026-02-27T15:08:55.663Z", difficulty: "초급 (1.9/5)", koreanName: "카르카손", englishName: "", isExpansion: false, parentGameId: "", languageEdition: "korean", recommendedPlayers: "2명" }, { id: "1772260517835", bggId: "35677", rating: 8, savedAt: 1772301990820, imageUrl: "https://cf.geekdo-images.com/y7Rqd3S6J7vyVhicR1bqTQ__original/img/tQFXv1w2R-J-1cjyaKG9LAS2UOs=/0x0/filters:format(jpeg)/pic6091101.jpg", listType: "owned", playTime: "30-150분", videoUrl: "", createdAt: "2026-02-28T06:35:17.835Z", hasSleeve: true, difficulty: "중상급 (3.7/5)", hasStorage: false, koreanName: "르 아브르", englishName: "", isExpansion: false, boxCondition: "B", parentGameId: "", languageEdition: "korean", recommendedPlayers: "3명", hasComponentUpgrade: false } ]
+📥 [Load] Read from KV store for user c4b0b1a0-741c-45d3-97b5-f4712393f564:
+- Wishlist: 5 games
+- Owned: 20 games
+✅ [Individual Load] Found 5 wishlist games
+✅ [Load with Fallback] Using NEW format: 5 games
+📥 [Individual Load] Loading wishlist games for user c4b0b1a0-741c-45d3-97b5-f4712393f564
+✅ [Load with Fallback] Using NEW format: 20 games
+✅ [Individual Load] Found 20 owned games
+📥 [Load with Fallback] Loading wishlist for user c4b0b1a0-741c-45d3-97b5-f4712393f564
+📥 [Individual Load] Loading owned games for user c4b0b1a0-741c-45d3-97b5-f4712393f564
+📥 [Load with Fallback] Loading owned for user c4b0b1a0-741c-45d3-97b5-f4712393f564
+🔐 [Load] Authorization header: present
+🔐 [Load] Token prefix: eyJhbGciOiJIUzI1NiIs...
+🔐 [Load] Token length: 758
+<-- GET /make-server-0b7d3bae/data/load
+✅ [Community] Returning 21 posts
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+--> GET /make-server-0b7d3bae/community/posts 200 169ms
+📊 [Community] Found posts: 21
+📥 [Community] Fetching posts with prefix: beta_post_
+👤 [Community] User role: admin
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+--> GET /make-server-0b7d3bae/community/posts 200 234ms
+📊 [Community] Found posts: 21
+✅ [Community] Returning 21 posts
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+👤 [Community] User role: admin
+📥 [Community] Fetching posts with prefix: beta_post_
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+shutdown
+shutdown
+shutdown
+shutdown
+--> GET /make-server-0b7d3bae/community/posts 200 137ms
+📝 [Community] Sample post keys: [ "1772260564602_5evqel", "1772263232075_ktnqr", "1772263453484_7xlumi" ]
+📊 [Community] Found posts: 21
+✅ [Community] Returning 21 posts
+📥 [Community] Fetching posts with prefix: beta_post_
+👤 [Community] User role: admin
+✅ [Community] User authenticated: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com
+<-- GET /make-server-0b7d3bae/community/posts
+--> GET /make-server-0b7d3bae/data/load 200 133ms
+✅ [Load] Data loaded successfully for user: c4b0b1a0-741c-45d3-97b5-f4712393f564 sityplanner2@naver.com last modified: 2026-02-28T18:06:30.624Z
+- Sample owned: [ { id: "1772204935663", rating: 8, savedAt: 1772301990819, imageUrl: "https://cf.geekdo-images.com/peUgu3A20LRmAXAMyDQfpQ__original/img/bP18m_PYjyFOv1IBGgMOteQUneA=/0x0/filters:format(jpeg)/pic8621446.jpg", listType: "owned", playTime: "30-45분", videoUrl: "", createdAt: "2026-02-27T15:08:55.663Z", difficulty: "초급 (1.9/5)", koreanName: "카르카손", englishName: "", isExpansion: false, parentGameId: "", languageEdition: "korean", recommendedPlayers: "2명" }, { id: "1772260517835", bggId: "35677", rating: 8, savedAt: 1772301990820, imageUrl: "https://cf.geekdo-images.com/y7Rqd3S6J7vyVhicR1bqTQ__original/img/tQFXv1w2R-J-1cjyaKG9LAS2UOs=/0x0/filters:format(jpeg)/pic6091101.jpg", listType: "owned", playTime: "30-150분", videoUrl: "", createdAt: "2026-02-28T06:35:17.835Z", hasSleeve: true, difficulty: "중상급 (3.7/5)", hasStorage: false, koreanName: "르 아브르", englishName: "", isExpansion: false, boxCondition: "B", parentGameId: "", languageEdition: "korean", recommendedPlayers: "3명", hasComponentUpgrade: false } ]
+Owned: 20, Wishlist: 5, Play records: 1
+📥 [Load] Read from KV store for user c4b0b1a0-741c-45d3-97b5-f4712393f564:
+- Wishlist: 5 games

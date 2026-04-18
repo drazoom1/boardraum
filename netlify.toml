@@ -1,0 +1,17 @@
+[build]
+  publish = "dist"
+
+# Edge Function 설정 - 크롤러 감지 및 prerender
+[[edge_functions]]
+  path = "/game/*"
+  function = "bot-prerender"
+
+[[edge_functions]]
+  path = "/post/*"
+  function = "bot-prerender"
+
+# SPA fallback (정적 파일이 없는 경우 index.html로)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(cat src/main.tsx)",
+      "Bash(cat src/main.ts)",
+      "Bash(cat src/index.tsx)",
+      "Bash(npx vite *)",
+      "Bash(open *)",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

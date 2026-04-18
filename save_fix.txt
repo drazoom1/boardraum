@@ -1,0 +1,11 @@
+Save 함수 간단화 완료.
+
+이제 간단한 동기화 시스템:
+
+1. loadFromServer(): 서버 데이터를 무조건 로드
+2. saveToServer(): 즉시 서버에 저장 + Broadcast
+3. Auto-save: 500ms debounce로 저장
+4. Polling: 10초마다 서버 체크
+5. Broadcast: 알림 받으면 loadFromServer() 호출
+
+간단하고 확실합니다.
