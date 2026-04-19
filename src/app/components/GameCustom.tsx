@@ -85,6 +85,7 @@ function setMeta(name: string, content: string) {
 
 export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, accessToken, userEmail, initialCategory, initialGame, initialTab = 'info' }: GameCustomProps) {
   const [selectedGame, setSelectedGame] = useState<BoardGame | null>(initialGame || null);
+  const [ownerCount, setOwnerCount] = useState<number>(0);
   const isFirstMount = useRef(true);
 
   // initialGame에 유효한 bggId 없으면 이름으로 BGG 검색해서 자동 매칭
@@ -155,6 +156,17 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         }).catch(() => {});
     }
   }, [selectedGame?.id, selectedGame?.bggId]);
+
+  // 보유자 수 fetch
+  useEffect(() => {
+    if (!selectedGame) { setOwnerCount(0); return; }
+    const id = selectedGame.id || '';
+    const name = selectedGame.koreanName || selectedGame.englishName || '';
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/owner-count?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } })
+      .then(r => r.ok ? r.json() : { count: 0 })
+      .then(d => setOwnerCount(d.count || 0))
+      .catch(() => setOwnerCount(0));
+  }, [selectedGame?.id]);
 
   // 게임 진입/이탈 시 URL + 메타태그 + JSON-LD 업데이트
   useEffect(() => {
@@ -1941,6 +1953,9 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                     )}
                     {selectedGame.difficulty && (
                       <span className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">⚡ {selectedGame.difficulty}</span>
+                    )}
+                    {ownerCount > 0 && (
+                      <span className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">🧑‍🤝‍🧑 {ownerCount}명 보유</span>
                     )}
                   </div>
                   {imageUpdateSuccess && (

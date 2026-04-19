@@ -1110,6 +1110,50 @@ app.get("/make-server-0b7d3bae/game/info", async (c) => {
   }
 });
 
+// 게임 보유 인원 수 (공개, 목록 없음)
+app.get("/make-server-0b7d3bae/game/owner-count", async (c) => {
+  try {
+    const gameId = c.req.query('id') || '';
+    const gameName = c.req.query('name') || '';
+    if (!gameId && !gameName) return c.json({ count: 0 });
+
+    const normG = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+    const tn = normG(gameName);
+
+    const hasGame = (g: any): boolean => {
+      if (!g?.id) return false;
+      if (gameId && (g.id === gameId || g.bggId === gameId)) return true;
+      if (tn) {
+        if (normG(g.koreanName || g.name || '') === tn) return true;
+        if (normG(g.englishName || '') === tn) return true;
+      }
+      return false;
+    };
+
+    const seenUsers = new Set<string>();
+    const getUserId = (key: string): string | null => {
+      const rest = key.slice(5);
+      const gi = rest.indexOf('_game_');
+      if (gi > 0) return rest.slice(0, gi);
+      if (rest.endsWith('_owned')) return rest.slice(0, rest.length - 6);
+      if (rest.endsWith('_wishlist')) return rest.slice(0, rest.length - 9);
+      return null;
+    };
+
+    const allUserItems = await kv.getByPrefixWithKeys('user_');
+    for (const { key, value } of allUserItems) {
+      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp')) continue;
+      const uid = getUserId(key);
+      if (!uid || seenUsers.has(uid)) continue;
+      const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
+      if (games.some(hasGame)) seenUsers.add(uid);
+    }
+
+    return c.json({ count: seenUsers.size });
+  } catch (e) { return c.json({ count: 0 }); }
+});
+
+
 app.get("/make-server-0b7d3bae/game/image-override", async (c) => {
   try {
     const bggId = c.req.query('bggId');
