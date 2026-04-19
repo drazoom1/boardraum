@@ -3279,7 +3279,9 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             prev.map(e => e.id === data.updatedEvent.id ? data.updatedEvent : e)
           );
         }
-        toast.success('⏱ 타이머가 30초 줄었어요!');
+        const secs: number = data.updatedEvent?.cardReductionSeconds ?? 300;
+        const reductionLabel = secs >= 60 ? `${Math.round(secs / 60)}분` : `${secs}초`;
+        toast.success(`⏱ 타이머가 ${reductionLabel} 줄었어요!`);
         // 서버와 재동기화 (정확한 카드 수 보장)
         setTimeout(() => loadBonusCards(), 500);
       } else {
