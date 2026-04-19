@@ -162,13 +162,14 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   // 보유자 수 fetch
   useEffect(() => {
     if (!selectedGame) { setOwnerCount(0); return; }
-    const id = selectedGame.id || '';
+    // bggId 우선 사용 (컬렉션 게임은 id가 타임스탬프, bggId가 실제 BGG ID)
+    const id = selectedGame.bggId || selectedGame.id || '';
     const name = selectedGame.koreanName || selectedGame.englishName || '';
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/owner-count?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } })
       .then(r => r.ok ? r.json() : { count: 0 })
       .then(d => setOwnerCount(d.count || 0))
       .catch(() => setOwnerCount(0));
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, selectedGame?.bggId]);
 
   // 게임 진입/이탈 시 URL + 메타태그 + JSON-LD 업데이트
   useEffect(() => {
