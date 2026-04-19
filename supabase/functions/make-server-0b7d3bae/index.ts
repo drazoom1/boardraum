@@ -9887,11 +9887,21 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
   try {
     const gameMap: Record<string, any> = {};
 
+    const normName = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+    const seenNames = new Set<string>(); // 이름 기준 중복 방지 (같은 게임 다른 ID)
+
     const addGame = (g: any, source: string) => {
       if (!g?.id || !(g.koreanName || g.englishName || g.name)) return;
-      const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
-      if (gameMap[key]) return; // 이미 있으면 스킵
-      gameMap[key] = {
+      const idKey = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      if (gameMap[idKey]) return;
+      // 이름 중복 방지: 같은 한글명/영문명이면 스킵 (site_game_* 이후에만 적용)
+      const kn = normName(g.koreanName || g.name || '');
+      const en = normName(g.englishName || '');
+      if (kn && seenNames.has(kn)) return;
+      if (en && seenNames.has(en)) return;
+      if (kn) seenNames.add(kn);
+      if (en) seenNames.add(en);
+      gameMap[idKey] = {
         id: g.id,
         bggId: g.bggId,
         koreanName: g.koreanName,
@@ -9903,12 +9913,16 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
       };
     };
 
-    // 1) site_game_* (직접등록 + BGG 영구 데이터) — 최우선
+    // 1) site_game_* (직접등록 + BGG 영구 데이터) — 최우선, seenNames에 등록
     const siteData = await getByPrefix('site_game_');
     for (const { value: g } of siteData) {
       if (!g?.id) continue;
       const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
       gameMap[key] = { ...g, _source: 'site' };
+      const kn = normName(g.koreanName || g.name || '');
+      const en = normName(g.englishName || '');
+      if (kn) seenNames.add(kn);
+      if (en) seenNames.add(en);
     }
 
     // 2) 유저 컬렉션 전체 스캔: 레거시 배열(owned/wishlist) + 개별 키(_game_) 모두 처리
