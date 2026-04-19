@@ -2342,20 +2342,22 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
         setRemaining(diff);
         setInitialized(true);
-        // 선두 없이 타이머 종료 → 즉시 auto-close
+        // 선두 없이 타이머 종료
         if (diff === 0 && !autoCloseCalledRef.current) {
           autoCloseCalledRef.current = true;
-          setAutoClosing(true);
+          // ★ 즉시 낙관적 업데이트 — 로컬 상태로 배너 즉시 표시 (API 응답 불필요)
+          const optimistic = { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString() };
+          onAutoClose?.(ev.id, optimistic);
+          // 백그라운드에서 서버 확인 (당첨자 정보 업데이트)
           fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/auto-close`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` },
             body: JSON.stringify({ eventId: ev.id }),
           }).then(r => r.json()).then(data => {
             if (data.winner || data.success || data.alreadyClosed) {
-              // winner가 null이어도 이벤트 제거 + 배너 전환 (당첨자 없음으로 표시)
-              onAutoClose?.(ev.id, data.winner || { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', closedAt: new Date().toISOString() });
-            } else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
-          }).catch(() => { autoCloseCalledRef.current = false; setAutoClosing(false); });
+              onAutoClose?.(ev.id, data.winner || optimistic);
+            }
+          }).catch(() => {});
         }
         return;
       }
@@ -2368,20 +2370,22 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
       setRemaining(diff);
       setInitialized(true);
-      // 타이머 0 → 즉시 auto-close
+      // 타이머 0 → 즉시 낙관적 업데이트 + 백그라운드 서버 확인
       if (diff === 0 && !autoCloseCalledRef.current) {
         autoCloseCalledRef.current = true;
-        setAutoClosing(true);
+        // ★ 즉시 낙관적 업데이트 — 로컬 lastPost 기반으로 당첨자 배너 즉시 표시
+        const optimistic = { eventId: ev.id, winnerUserName: lp?.userName || null, winnerUserId: lp?.userId || null, winnerPostId: lp?.id || null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString() };
+        onAutoClose?.(ev.id, optimistic);
+        // 백그라운드에서 서버 확인 (서버 계산 당첨자로 업데이트)
         fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/auto-close`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` },
           body: JSON.stringify({ eventId: ev.id }),
         }).then(r => r.json()).then(data => {
           if (data.winner || data.success || data.alreadyClosed) {
-            // winner가 null이어도 이벤트 제거 + 배너 전환 (당첨자 없음으로 표시)
-            onAutoClose?.(ev.id, data.winner || { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', closedAt: new Date().toISOString() });
-          } else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
-        }).catch(() => { autoCloseCalledRef.current = false; setAutoClosing(false); });
+            onAutoClose?.(ev.id, data.winner || optimistic);
+          }
+        }).catch(() => {});
       }
     };
 
@@ -3381,13 +3385,13 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     }
   }, [highlightPostId, loading, posts]);
 
-  // 자동 종료 콜백: 당첨자 즉시 반영
+  // 자동 종료 콜백: 당첨자 즉시 반영 (낙관적 업데이트 → 서버 확인 업데이트 순으로 두 번 호출됨)
   const handleAutoClose = (eventId: string, winner: any) => {
     setLastPostEvents(prev => prev.filter(e => e.id !== eventId));
     setEventWinners(prev => {
-      const already = prev.find(w => w.eventId === eventId);
-      if (already) return prev;
-      return [...prev, winner];
+      // 기존 항목 replace (낙관적 → 서버 확인 업데이트 허용)
+      const filtered = prev.filter(w => w.eventId !== eventId);
+      return [...filtered, winner];
     });
   };
 
