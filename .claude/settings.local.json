@@ -11,7 +11,23 @@
       "Bash(gh auth *)",
       "Bash(git --version)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(brew install *)",
+      "Bash(git push *)",
+      "Bash(npx vercel *)",
+      "Bash(curl -sI \"https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae/sitemap.xml\")",
+      "Bash(curl -s \"https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae/sitemap.xml\" -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHZudG11ZWFmaWVlc3NnbmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3MDczMjUsImV4cCI6MjA3MDI4MzMyNX0.KG4yuo02jACcVOlG7av3bMFmRcfHK6lzu0x78RMhz0c\")",
+      "Bash(supabase *)",
+      "WebSearch",
+      "WebFetch(domain:supabase.com)",
+      "Bash(cp supabase/functions/server/index.tsx supabase/functions/server/index.ts)",
+      "Bash(cp supabase/functions/server/index.tsx supabase/functions/make-server-0b7d3bae/index.ts)",
+      "Bash(awk '/site-games\\\\/register/,/^}\\);/' supabase/functions/make-server-0b7d3bae/index.ts)",
+      "Bash(npx supabase *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]\")",
+      "Bash(netlify --version)",
+      "Bash(git commit *)"
     ]
   }
 }

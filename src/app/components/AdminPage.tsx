@@ -5310,14 +5310,21 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [showDirectOnly, setShowDirectOnly] = useState(false);
   const [editGame, setEditGame] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState<{ koreanName: string; englishName: string; imageUrl: string }>({ koreanName: '', englishName: '', imageUrl: '' });
+  const [editForm, setEditForm] = useState<{ koreanName: string; englishName: string; imageUrl: string; bggId: string; yearPublished: string }>({ koreanName: '', englishName: '', imageUrl: '', bggId: '', yearPublished: '' });
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeFrom, setMergeFrom] = useState<any | null>(null);
   const [mergeTo, setMergeTo] = useState<any | null>(null);
   const [mergeQ, setMergeQ] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // 마이그레이션 상태
+  const [migrateGame, setMigrateGame] = useState<any | null>(null);
+  const [migrateBggQ, setMigrateBggQ] = useState('');
+  const [migrateBggResults, setMigrateBggResults] = useState<any[]>([]);
+  const [migrateBggLoading, setMigrateBggLoading] = useState(false);
+  const [migrateBggTarget, setMigrateBggTarget] = useState<any | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -5339,13 +5346,27 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
   const normalize = (s: string) => (s || '').trim().toLowerCase().replace(/[：:].*/g, '').replace(/\s+/g, ' ');
 
-  const filtered = games.filter(g => {
-    if (!q) return true;
-    const name = normalize(g.koreanName || g.englishName || g.name || '');
-    return name.includes(q.toLowerCase());
-  });
+  // 직접등록 = numeric bggId 없는 게임
+  const isCustom = (g: any) => !g.bggId || !/^\d+$/.test(String(g.bggId));
 
-  // 중복 감지
+  // 중복의심: 직접등록 게임 이름이 BGG 게임 이름과 일치
+  const bggGamesByName: Record<string, any> = {};
+  for (const g of games) {
+    if (!isCustom(g)) {
+      const kn = normalize(g.koreanName || g.name || '');
+      const en = normalize(g.englishName || '');
+      if (kn) bggGamesByName[kn] = g;
+      if (en) bggGamesByName[en] = g;
+    }
+  }
+  const getDupSuspect = (g: any): any | null => {
+    if (!isCustom(g)) return null;
+    const kn = normalize(g.koreanName || g.name || '');
+    const en = normalize(g.englishName || '');
+    return bggGamesByName[kn] || bggGamesByName[en] || null;
+  };
+
+  // 중복 감지 (같은 이름 여러 개)
   const dupMap: Record<string, any[]> = {};
   for (const g of games) {
     const key = normalize(g.koreanName || g.englishName || g.name || '');
@@ -5354,9 +5375,14 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
   }
   const dupGroups = Object.values(dupMap).filter(arr => arr.length > 1);
 
+  const displayGames = games.filter(g => {
+    const nameMatch = !q || normalize(g.koreanName || g.englishName || g.name || '').includes(q.toLowerCase());
+    const directMatch = !showDirectOnly || isCustom(g);
+    return nameMatch && directMatch;
+  });
+
   const handleDelete = async (g: any) => {
-    if (!confirm(`"${g.koreanName || g.name}" 을 삭제할까요?
-보유 회원 목록에서는 삭제되지 않아요.`)) return;
+    if (!confirm(`"${g.koreanName || g.name}" 을 삭제할까요?\n보유 회원 목록에서는 삭제되지 않아요.`)) return;
     setSaving(true);
     try {
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/${g.id}`, {
@@ -5386,8 +5412,7 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
   const handleMerge = async () => {
     if (!mergeFrom || !mergeTo) return;
     if (mergeFrom.id === mergeTo.id) { toast.error('같은 게임이에요'); return; }
-    if (!confirm(`"${mergeFrom.koreanName || mergeFrom.name}" → "${mergeTo.koreanName || mergeTo.name}" 으로 통합
-${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
+    if (!confirm(`"${mergeFrom.koreanName || mergeFrom.name}" → "${mergeTo.koreanName || mergeTo.name}" 으로 통합\n${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
     setSaving(true);
     try {
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/merge`, {
@@ -5404,10 +5429,51 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
     setSaving(false);
   };
 
+  const handleMigrate = async () => {
+    if (!migrateGame || !migrateBggTarget) return;
+    const targetBggId = migrateBggTarget.id || migrateBggTarget.bggId;
+    if (!targetBggId || !/^\d+$/.test(String(targetBggId))) { toast.error('유효한 BGG 게임을 선택해주세요'); return; }
+    if (!confirm(`"${migrateGame.koreanName || migrateGame.name}" 을 BGG 게임 "${migrateBggTarget.name || migrateBggTarget.koreanName}" (ID: ${targetBggId}) 으로 마이그레이션합니다.\n\n보유 회원 데이터와 게시물 태그가 모두 교체됩니다.`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/${migrateGame.id}/migrate-to-bgg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ bggId: targetBggId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`마이그레이션 완료 (유저 ${data.updatedUsers || 0}명, 게시물 ${data.updatedPosts || 0}개 업데이트됨)`);
+        setMigrateGame(null); setMigrateBggTarget(null); setMigrateBggResults([]); setMigrateBggQ('');
+        load();
+      } else toast.error(data.error || '마이그레이션 실패');
+    } catch { toast.error('오류'); }
+    setSaving(false);
+  };
+
+  const searchBggForMigration = async (val: string) => {
+    setMigrateBggQ(val);
+    if (!val.trim()) { setMigrateBggResults([]); return; }
+    setMigrateBggLoading(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ query: val }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMigrateBggResults(data.filter((g: any) => /^\d+$/.test(String(g.id || g.bggId || ''))).slice(0, 10));
+      }
+    } catch {}
+    setMigrateBggLoading(false);
+  };
+
   const mergeFiltered = games.filter(g => {
     if (!mergeQ) return true;
     return normalize(g.koreanName || g.englishName || g.name || '').includes(mergeQ.toLowerCase());
   });
+
+  const directCount = games.filter(isCustom).length;
 
   return (
     <div className="space-y-4">
@@ -5419,16 +5485,14 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
             {loading ? '로딩 중...' : '새로고침'}
           </button>
         </div>
-        <p className="text-sm text-gray-400">총 {games.length}개 등록됨</p>
+        <p className="text-sm text-gray-400">총 {games.length}개 등록됨 · 직접등록 {directCount}개</p>
 
-        {error && (
-          <div className="mt-3 p-3 bg-red-50 rounded-xl text-sm text-red-600">❌ {error}</div>
-        )}
+        {error && <div className="mt-3 p-3 bg-red-50 rounded-xl text-sm text-red-600">❌ {error}</div>}
 
         {/* 중복 경고 */}
         {dupGroups.length > 0 && (
           <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <p className="text-sm font-bold text-amber-700 mb-2">⚠️ 중복 의심 {dupGroups.length}건</p>
+            <p className="text-sm font-bold text-amber-700 mb-2">⚠️ 동일 이름 중복 {dupGroups.length}건</p>
             <div className="space-y-1.5">
               {dupGroups.map((grp, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
@@ -5441,13 +5505,17 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
           </div>
         )}
 
-        {/* 검색 + 통합모드 버튼 */}
+        {/* 검색 + 필터 버튼 */}
         <div className="flex gap-2 mt-4">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="게임 이름 검색..."
             className="flex-1 h-10 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+          <button onClick={() => setShowDirectOnly(v => !v)}
+            className={`px-3 py-1.5 text-sm rounded-xl font-medium transition-colors whitespace-nowrap ${showDirectOnly ? 'bg-purple-500 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}>
+            직접등록만
+          </button>
           <button onClick={() => { setMergeMode(!mergeMode); setMergeFrom(null); setMergeTo(null); }}
             className={`px-3 py-1.5 text-sm rounded-xl font-medium transition-colors ${mergeMode ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
-            🔀 통합모드
+            🔀 통합
           </button>
         </div>
       </div>
@@ -5495,7 +5563,7 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
           {mergeFrom && mergeTo && (
             <button onClick={handleMerge} disabled={saving}
               className="w-full py-2.5 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 disabled:opacity-50">
-              통합 실행 — "{mergeFrom.koreanName || mergeFrom.name}" 삭제 후 "{mergeTo.koreanName || mergeTo.name}" 으로 합치기
+              통합 실행 — "{mergeFrom.koreanName || mergeFrom.name}" → "{mergeTo.koreanName || mergeTo.name}"
             </button>
           )}
         </div>
@@ -5507,62 +5575,80 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
           <div className="text-center py-16 text-gray-400">
             <div className="text-3xl mb-2">⏳</div>
             <p className="text-sm">게임 목록 로딩 중...</p>
-            <p className="text-xs mt-1 text-gray-300">보유 게임 수에 따라 시간이 걸릴 수 있어요</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : displayGames.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-3xl mb-2">🎲</div>
-            <p className="text-sm">{q ? '검색 결과가 없어요' : '등록된 게임이 없어요'}</p>
+            <p className="text-sm">{q || showDirectOnly ? '검색 결과가 없어요' : '등록된 게임이 없어요'}</p>
           </div>
         ) : (
           <div className="space-y-1.5 max-h-[65vh] overflow-y-auto">
-            {filtered.map(g => (
-              <div key={g.id} className={`flex items-center gap-3 p-3 rounded-xl border hover:bg-gray-50 transition-colors ${g._source === 'site' ? 'border-cyan-100' : 'border-gray-100'}`}>
-                {g.imageUrl
-                  ? <img src={g.imageUrl} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
-                  : <div className="w-11 h-11 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-xl">🎲</div>
-                }
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{g.koreanName || g.englishName || g.name}</p>
-                    {g._source === 'site' && <span className="text-xs px-1.5 py-0.5 bg-cyan-50 text-cyan-600 rounded font-medium flex-shrink-0">DB</span>}
+            {displayGames.map(g => {
+              const custom = isCustom(g);
+              const dupSuspect = getDupSuspect(g);
+              return (
+                <div key={g.id} className={`flex items-center gap-3 p-3 rounded-xl border hover:bg-gray-50 transition-colors ${custom ? 'border-purple-100 bg-purple-50/30' : 'border-cyan-100'}`}>
+                  {g.imageUrl
+                    ? <img src={g.imageUrl} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
+                    : <div className="w-11 h-11 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-xl">🎲</div>
+                  }
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{g.koreanName || g.englishName || g.name}</p>
+                      {custom && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded font-medium flex-shrink-0">직접등록</span>}
+                      {!custom && <span className="text-xs px-1.5 py-0.5 bg-cyan-50 text-cyan-600 rounded font-medium flex-shrink-0">BGG</span>}
+                      {dupSuspect && <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-600 rounded font-medium flex-shrink-0">⚠️ 중복의심</span>}
+                    </div>
+                    {g.koreanName && g.englishName && <p className="text-xs text-gray-400 truncate">{g.englishName}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {g.yearPublished && <p className="text-xs text-gray-300">{g.yearPublished}년</p>}
+                      {g.bggId && <p className="text-xs text-gray-300">BGG: {g.bggId}</p>}
+                      {dupSuspect && <p className="text-xs text-red-400">BGG에 "{dupSuspect.koreanName || dupSuspect.englishName}" (ID: {dupSuspect.id || dupSuspect.bggId}) 이미 있음</p>}
+                    </div>
                   </div>
-                  {g.koreanName && g.englishName && <p className="text-xs text-gray-400 truncate">{g.englishName}</p>}
-                  {g.yearPublished && <p className="text-xs text-gray-300">{g.yearPublished}년</p>}
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    {mergeMode ? (
+                      <div className="flex gap-1">
+                        <button onClick={() => setMergeFrom(g)} className={`px-2 py-0.5 text-xs rounded-lg font-medium ${mergeFrom?.id === g.id ? 'bg-red-400 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>FROM</button>
+                        <button onClick={() => setMergeTo(g)} className={`px-2 py-0.5 text-xs rounded-lg font-medium ${mergeTo?.id === g.id ? 'bg-green-400 text-white' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>TO</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setEditGame(g); setEditForm({ koreanName: g.koreanName || '', englishName: g.englishName || '', imageUrl: g.imageUrl || '', bggId: g.bggId || '', yearPublished: g.yearPublished || '' }); }}
+                            className="px-2.5 py-1 text-xs bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100">게임정보</button>
+                          <button onClick={() => handleDelete(g)}
+                            className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100">삭제</button>
+                        </div>
+                        {custom && (
+                          <button onClick={() => { setMigrateGame(g); setMigrateBggQ(g.koreanName || g.englishName || g.name || ''); setMigrateBggTarget(dupSuspect || null); setMigrateBggResults([]); }}
+                            className="px-2.5 py-1 text-xs bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 w-full text-center">
+                            BGG 마이그레이션
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-1.5 flex-shrink-0">
-                  {mergeMode ? (
-                    <>
-                      <button onClick={() => setMergeFrom(g)} className={`px-2.5 py-1 text-xs rounded-lg font-medium ${mergeFrom?.id === g.id ? 'bg-red-400 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>FROM</button>
-                      <button onClick={() => setMergeTo(g)} className={`px-2.5 py-1 text-xs rounded-lg font-medium ${mergeTo?.id === g.id ? 'bg-green-400 text-white' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>TO</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => { setEditGame(g); setEditForm({ koreanName: g.koreanName || '', englishName: g.englishName || '', imageUrl: g.imageUrl || '' }); }}
-                        className="px-2.5 py-1 text-xs bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100">수정</button>
-                      <button onClick={() => handleDelete(g)}
-                        className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100">삭제</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* 수정 모달 */}
+      {/* 게임정보 수정 모달 */}
       {editGame && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-5">
               {editForm.imageUrl
-                ? <img src={editForm.imageUrl} className="w-14 h-14 rounded-xl object-cover" />
+                ? <img src={editForm.imageUrl} className="w-14 h-14 rounded-xl object-cover" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
                 : <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center text-2xl">🎲</div>
               }
               <div>
-                <h3 className="font-bold text-gray-900">게임 수정</h3>
-                <p className="text-xs text-gray-400">ID: {editGame.id}</p>
+                <h3 className="font-bold text-gray-900">게임정보 수정</h3>
+                <p className="text-xs text-gray-400 font-mono">ID: {editGame.id}</p>
+                {isCustom(editGame) && <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">직접등록</span>}
               </div>
             </div>
             <div className="space-y-3">
@@ -5581,6 +5667,20 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
                 <input value={editForm.imageUrl} onChange={e => setEditForm((f: any) => ({ ...f, imageUrl: e.target.value }))}
                   className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">BGG ID</label>
+                  <input value={editForm.bggId} onChange={e => setEditForm((f: any) => ({ ...f, bggId: e.target.value }))}
+                    placeholder="숫자 ID (없으면 공백)"
+                    className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">출판연도</label>
+                  <input value={editForm.yearPublished} onChange={e => setEditForm((f: any) => ({ ...f, yearPublished: e.target.value }))}
+                    placeholder="예: 2023"
+                    className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                </div>
+              </div>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={handleSaveEdit} disabled={saving}
@@ -5588,6 +5688,89 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
                 {saving ? '저장 중...' : '저장'}
               </button>
               <button onClick={() => setEditGame(null)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BGG 마이그레이션 모달 */}
+      {migrateGame && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 mb-1">🔄 BGG 마이그레이션</h3>
+              <p className="text-xs text-gray-400">직접등록 게임을 BGG 데이터 기반 게임으로 교체합니다. 보유 회원 데이터와 게시물 태그가 모두 업데이트됩니다.</p>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* FROM */}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-xs font-semibold text-red-500 mb-2">삭제될 직접등록 게임</p>
+                <div className="flex items-center gap-3">
+                  {migrateGame.imageUrl
+                    ? <img src={migrateGame.imageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                    : <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center text-xl flex-shrink-0">🎲</div>}
+                  <div>
+                    <p className="font-semibold text-red-800 text-sm">{migrateGame.koreanName || migrateGame.name}</p>
+                    <p className="text-xs text-red-400 font-mono">{migrateGame.id}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* TO — BGG 게임 선택 */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">교체될 BGG 게임 검색</p>
+                <input
+                  value={migrateBggQ}
+                  onChange={e => searchBggForMigration(e.target.value)}
+                  placeholder="BGG 게임 이름 검색..."
+                  className="w-full h-10 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/30 mb-2"
+                />
+                {migrateBggLoading && <p className="text-xs text-gray-400 text-center py-2">검색 중...</p>}
+                {migrateBggResults.length > 0 && (
+                  <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-100 rounded-xl">
+                    {migrateBggResults.map(g => {
+                      const gId = String(g.id || g.bggId || '');
+                      const thumb = (g.thumbnail || g.imageUrl || '').startsWith('//') ? 'https:' + (g.thumbnail || g.imageUrl) : (g.thumbnail || g.imageUrl || '');
+                      const selected = migrateBggTarget && (String(migrateBggTarget.id) === gId || String(migrateBggTarget.bggId) === gId);
+                      return (
+                        <button key={gId} onClick={() => setMigrateBggTarget(g)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-orange-50 transition-colors ${selected ? 'bg-orange-50 border-l-2 border-orange-400' : ''}`}>
+                          {thumb ? <img src={thumb} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
+                            : <div className="w-9 h-9 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center text-sm">🎲</div>}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{g.koreanName || g.name}</p>
+                            {g.englishName && g.koreanName && <p className="text-xs text-gray-400 truncate">{g.englishName || g.name}</p>}
+                            <p className="text-xs text-gray-300">BGG ID: {gId}{g.yearPublished ? ` · ${g.yearPublished}년` : ''}</p>
+                          </div>
+                          {selected && <span className="text-orange-500 text-sm flex-shrink-0">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* 선택된 대상 표시 */}
+                {migrateBggTarget && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <p className="text-xs font-semibold text-green-600 mb-1">선택된 BGG 게임 ✓</p>
+                    <div className="flex items-center gap-2">
+                      {(() => { const t = (migrateBggTarget.thumbnail || migrateBggTarget.imageUrl || '').replace(/^\/\//, 'https://'); return t ? <img src={t} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-lg flex-shrink-0">🎲</div>; })()}
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">{migrateBggTarget.koreanName || migrateBggTarget.name}</p>
+                        <p className="text-xs text-green-500">BGG ID: {migrateBggTarget.id || migrateBggTarget.bggId}</p>
+                      </div>
+                      <button onClick={() => setMigrateBggTarget(null)} className="ml-auto text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-100 flex gap-2">
+              <button onClick={handleMigrate} disabled={!migrateBggTarget || saving}
+                className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-40">
+                {saving ? '마이그레이션 중...' : '마이그레이션 실행'}
+              </button>
+              <button onClick={() => { setMigrateGame(null); setMigrateBggTarget(null); setMigrateBggResults([]); setMigrateBggQ(''); }}
                 className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200">취소</button>
             </div>
           </div>

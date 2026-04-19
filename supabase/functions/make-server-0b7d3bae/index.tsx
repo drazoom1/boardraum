@@ -336,12 +336,10 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
     if (!query) return c.json({ error: 'Query is required' }, 400);
 
     const q = query.toLowerCase();
-    const normalizeName = (n: string) => n.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
 
     // 0. site_game_ 직접 검색 (비로그인도 동작, BGG 없는 커스텀 게임 포함)
     const siteGames: any[] = [];
     const seenIds = new Set<string>();
-    const seenNames = new Set<string>();
     try {
       const siteGameKeys = await getByPrefix('site_game_');
       for (const item of siteGameKeys) {
@@ -352,13 +350,9 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
         if (!nameKo.includes(q) && !nameEn.includes(q)) continue;
         const dk = g.bggId ? `bgg_${g.bggId}` : `id_${g.id}`;
         if (seenIds.has(dk)) continue;
-        const normName = normalizeName(g.englishName || g.koreanName || g.name || '');
-        if (normName && seenNames.has(normName)) continue;
         seenIds.add(dk);
-        if (normName) seenNames.add(normName);
         siteGames.push({
           id: g.bggId && /^\d+$/.test(g.bggId) ? g.bggId : g.id,
-          bggId: g.bggId || null,
           name: g.koreanName || g.name || g.englishName,
           koreanName: g.koreanName || g.name || null,
           englishName: g.englishName || null,
@@ -388,13 +382,9 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
           if (!nameKo.includes(q) && !nameEn.includes(q)) continue;
           const dk = g.bggId ? `bgg_${g.bggId}` : `id_${g.id}`;
           if (seenIds.has(dk)) continue;
-          const normName = normalizeName(g.englishName || g.koreanName || '');
-          if (normName && seenNames.has(normName)) continue;
           seenIds.add(dk);
-          if (normName) seenNames.add(normName);
           siteGames.push({
             id: g.bggId || g.id,
-            bggId: g.bggId || null,
             name: g.koreanName || g.englishName,
             koreanName: g.koreanName || null,
             englishName: g.englishName || null,
@@ -419,14 +409,9 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
           const nameKo = (g.koreanName || '').toLowerCase();
           if (!nameKo.includes(q)) continue;
           const dk = `bgg_${g.id}`;
-          if (seenIds.has(dk)) continue;
-          const normName = normalizeName(g.name || g.englishName || '');
-          if (normName && seenNames.has(normName)) continue;
-          seenIds.add(dk);
-          if (normName) seenNames.add(normName);
+          if (siteGames.some(s => String(s.id) === String(g.id))) continue;
           siteGames.push({
             id: String(g.id),
-            bggId: String(g.id),
             name: g.koreanName || g.name || '',
             koreanName: g.koreanName || null,
             englishName: g.name || null,
@@ -464,14 +449,9 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
       }
     }
 
-    // 5. 통합: 사이트 게임 먼저, BGG는 ID와 이름 모두 기준으로 중복 제거
+    // 5. 통합: 사이트 게임 먼저, BGG는 사이트에 없는 것만
     const siteIds = new Set(siteGames.map((g: any) => String(g.id)));
-    const bggFiltered = bggItems.filter((g: any) => {
-      if (siteIds.has(String(g.id))) return false;
-      const normName = normalizeName(g.name || '');
-      if (normName && seenNames.has(normName)) return false;
-      return true;
-    });
+    const bggFiltered = bggItems.filter((g: any) => !siteIds.has(String(g.id)));
     return c.json([...siteGames, ...bggFiltered]);
   } catch (error) {
     console.error('BGG search error:', error);
@@ -749,31 +729,26 @@ app.post("/make-server-0b7d3bae/bgg-cache/migrate-all", async (c) => {
     const bggToken = Deno.env.get('BGG_API_TOKEN');
     if (!bggToken) return c.json({ error: 'BGG_API_TOKEN not configured' }, 500);
 
-    const body = await c.req.json().catch(() => ({}));
-    const offset: number = body.offset ?? 0;
-    const limit: number = body.limit ?? 10;
-
-    // site_game_* 에서 bggId 목록 수집
+    // site_game_* 에서 bggId가 있는 게임 수집
     const siteGames = await getByPrefix('site_game_');
-    const bggIds = [...new Set(
-      siteGames
-        .map(({ value: g }: any) => g?.bggId || (g?.id && /^\d+$/.test(g.id) ? g.id : null))
-        .filter(Boolean)
-        .map(String)
-    )];
-    const total = bggIds.length;
-    const batch = bggIds.slice(offset, offset + limit);
+    const bggIds = new Set<string>();
+    for (const { value: g } of siteGames) {
+      const id = g?.bggId || (g?.id && /^\d+$/.test(g.id) ? g.id : null);
+      if (id) bggIds.add(String(id));
+    }
 
     let cached = 0, skipped = 0, failed = 0;
     const errors: string[] = [];
 
-    for (const bggId of batch) {
+    for (const bggId of bggIds) {
       const cacheKey = `bgg_details_${bggId}`;
       const existing = await kv.get(cacheKey);
+      // 이미 완전한 캐시가 있으면 스킵
       if (existing && existing.averageRating !== undefined && existing.imageUrl) {
         skipped++;
         continue;
       }
+      // BGG API 호출 (Rate limit 방지: 500ms 간격)
       await new Promise(r => setTimeout(r, 500));
       const details = await fetchAndParseBggDetails(bggId, bggToken);
       if (details && details.averageRating !== undefined) {
@@ -785,19 +760,7 @@ app.post("/make-server-0b7d3bae/bgg-cache/migrate-all", async (c) => {
       }
     }
 
-    const nextOffset = offset + limit;
-    return c.json({
-      success: true,
-      total,
-      offset,
-      limit,
-      cached,
-      skipped,
-      failed,
-      errors,
-      done: nextOffset >= total,
-      nextOffset: nextOffset < total ? nextOffset : null,
-    });
+    return c.json({ success: true, total: bggIds.size, cached, skipped, failed, errors });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }
@@ -1057,59 +1020,6 @@ app.get("/make-server-0b7d3bae/bgg/thing/:id", async (c) => {
 
 // 게임 이미지 일괄 변경 (bggId 또는 koreanName 기준으로 모든 유저 보유/위시 데이터 업데이트)
 // 게임 이미지 오버라이드 조회 (bggId 기준)
-// 게임명으로 site_game + bgg_details 통합 조회 (보드위키 URL 직접 접속용)
-app.get("/make-server-0b7d3bae/game/info", async (c) => {
-  try {
-    const name = c.req.query('name');
-    if (!name) return c.json(null, 400);
-
-    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-    const q = norm(name);
-
-    // site_game_* 에서 이름으로 검색
-    const siteGames = await getByPrefix('site_game_');
-    let found: any = null;
-    for (const { value: g } of siteGames) {
-      if (!g?.id) continue;
-      if (norm(g.koreanName || '') === q || norm(g.englishName || '') === q || norm(g.name || '') === q) {
-        found = g;
-        break;
-      }
-    }
-    if (!found) return c.json(null, 404);
-
-    // bggId가 있으면 bgg_details 캐시도 병합
-    const bggId = found.bggId && /^\d+$/.test(found.bggId) ? found.bggId : null;
-    let details: any = null;
-    if (bggId) {
-      details = await kv.get(`bgg_details_${bggId}`);
-    }
-
-    const imageUrl = found.imageUrl || details?.imageUrl || '';
-    return c.json({
-      id: found.id,
-      bggId: bggId || found.id,
-      koreanName: found.koreanName || found.name || '',
-      englishName: found.englishName || '',
-      imageUrl: imageUrl.startsWith('//') ? 'https:' + imageUrl : imageUrl,
-      yearPublished: found.yearPublished || '',
-      minPlayers: details?.minPlayers || 0,
-      maxPlayers: details?.maxPlayers || 0,
-      minPlayTime: details?.minPlayTime || 0,
-      maxPlayTime: details?.maxPlayTime || 0,
-      complexity: details?.complexity || 0,
-      averageRating: details?.averageRating || 0,
-      rank: details?.rank || 0,
-      designers: details?.designers || [],
-      publishers: details?.publishers || [],
-      recommendedPlayers: details?.minPlayers && details?.maxPlayers ? `${details.minPlayers}-${details.maxPlayers}명` : '',
-      playTime: details?.maxPlayTime ? `${details.maxPlayTime}분` : '',
-    });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Unknown error' }, 500);
-  }
-});
-
 app.get("/make-server-0b7d3bae/game/image-override", async (c) => {
   try {
     const bggId = c.req.query('bggId');
@@ -3767,39 +3677,11 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
       return { ...post, userRankPoints: pts };
     }));
 
-    // site_game_* 데이터로 linkedGames imageUrl 보완 (직접 등록 게임 이미지 누락 방지)
-    let postsEnriched = postsWithRank;
-    try {
-      const siteGameItems = await getByPrefix('site_game_');
-      const normName = (n: string) => (n || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      const imgById = new Map<string, string>();
-      const imgByName = new Map<string, string>();
-      for (const { value: sg } of siteGameItems) {
-        if (!sg?.imageUrl) continue;
-        const img = sg.imageUrl.startsWith('//') ? 'https:' + sg.imageUrl : sg.imageUrl;
-        if (sg.id) imgById.set(String(sg.id), img);
-        if (sg.bggId) imgById.set(String(sg.bggId), img);
-        if (sg.koreanName) imgByName.set(normName(sg.koreanName), img);
-        if (sg.englishName) imgByName.set(normName(sg.englishName), img);
-        if (sg.name) imgByName.set(normName(sg.name), img);
-      }
-      const enrichGame = (g: any) => {
-        if (g?.imageUrl) return g;
-        const img = imgById.get(String(g.id || '')) || imgById.get(String(g.bggId || '')) || imgByName.get(normName(g.name || g.koreanName || '')) || '';
-        return img ? { ...g, imageUrl: img } : g;
-      };
-      postsEnriched = postsWithRank.map((post: any) => ({
-        ...post,
-        linkedGames: Array.isArray(post.linkedGames) ? post.linkedGames.map(enrichGame) : post.linkedGames,
-        linkedGame: post.linkedGame ? enrichGame(post.linkedGame) : post.linkedGame,
-      }));
-    } catch {}
-
     // 캐시 저장 (백그라운드)
-    kv.set(cacheKey, { posts: postsEnriched, cachedAt: Date.now() }).catch(() => {});
+    kv.set(cacheKey, { posts: postsWithRank, cachedAt: Date.now() }).catch(() => {});
 
     // 응답 시 비공개 게시물 필터
-    const visiblePosts = postsEnriched.filter((p: any) => !p.isPrivate || p.userId === userId || isAdmin);
+    const visiblePosts = postsWithRank.filter((p: any) => !p.isPrivate || p.userId === userId || isAdmin);
     return c.json({ posts: visiblePosts });
   } catch (error) {
     console.error('❌ [Community] Get community posts error:', error);
@@ -9948,91 +9830,6 @@ app.delete("/make-server-0b7d3bae/admin/site-games/:gameId", async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
-// 직접등록 게임 → BGG 게임으로 마이그레이션
-// 1) site_game_{bggId} 업서트  2) user_* 컬렉션 교체  3) 게시물 태그 교체  4) 원본 삭제
-app.post("/make-server-0b7d3bae/admin/site-games/:id/migrate-to-bgg", async (c) => {
-  const { user, error } = await requireAdmin(c);
-  if (error) return error;
-  try {
-    const fromId = c.req.param('id');
-    const { bggId: rawBggId } = await c.req.json();
-    const bggId = String(rawBggId || '');
-    if (!bggId || !/^\d+$/.test(bggId)) return c.json({ error: '유효한 BGG ID가 필요해요' }, 400);
-    if (fromId === bggId) return c.json({ error: '같은 게임이에요' }, 400);
-
-    const fromGame = await kv.get(`site_game_${fromId}`);
-    if (!fromGame) return c.json({ error: '원본 게임을 찾을 수 없어요' }, 404);
-
-    const bggDetails = await kv.get(`bgg_details_${bggId}`);
-    const toName = fromGame.koreanName || fromGame.name || bggDetails?.koreanName || bggDetails?.name || '';
-    const toEnglish = bggDetails?.name || fromGame.englishName || '';
-    const rawImg = bggDetails?.imageUrl || fromGame.imageUrl || '';
-    const toImage = rawImg.startsWith('//') ? 'https:' + rawImg : rawImg;
-
-    // 1. site_game_{bggId} 업서트 (한글명은 직접등록명 우선 유지)
-    const existingBgg = await kv.get(`site_game_${bggId}`);
-    await kv.set(`site_game_${bggId}`, {
-      ...(existingBgg || {}),
-      id: bggId, bggId,
-      koreanName: existingBgg?.koreanName || toName,
-      englishName: existingBgg?.englishName || toEnglish,
-      imageUrl: existingBgg?.imageUrl || toImage,
-      yearPublished: existingBgg?.yearPublished || bggDetails?.yearPublished || fromGame.yearPublished || '',
-    });
-
-    // 2. user_* 컬렉션에서 fromId → bggId 교체
-    const allUserItems = await getByPrefixWithKeys('user_');
-    let updatedUsers = 0;
-    for (const { key, value } of allUserItems) {
-      if (!value) continue;
-      if (key.includes('_backup') || key.includes('_last_modified') ||
-          key.includes('_timestamp') || key.includes('_metadata') || key.includes('_temp')) continue;
-      if (Array.isArray(value)) {
-        let changed = false;
-        const updated = value.map((g: any) => {
-          if (g?.id === fromId || g?.bggId === fromId) {
-            changed = true;
-            return { ...g, id: bggId, bggId, koreanName: toName, englishName: toEnglish, imageUrl: g.imageUrl || toImage };
-          }
-          return g;
-        });
-        if (changed) { await kv.set(key, updated); updatedUsers++; }
-      } else if (value?.id === fromId || value?.bggId === fromId) {
-        await kv.set(key, { ...value, id: bggId, bggId, koreanName: toName, englishName: toEnglish, imageUrl: value.imageUrl || toImage });
-        updatedUsers++;
-      }
-    }
-
-    // 3. 게시물 linkedGames/linkedGame 교체
-    const allPosts = await getByPrefixWithKeys('beta_post_');
-    let updatedPosts = 0;
-    for (const { key, value: post } of allPosts) {
-      if (!post) continue;
-      let changed = false;
-      const newLinkedGames = Array.isArray(post.linkedGames)
-        ? post.linkedGames.map((g: any) => {
-            if (g.id === fromId || g.bggId === fromId) {
-              changed = true;
-              return { ...g, id: bggId, bggId, name: toName, imageUrl: g.imageUrl || toImage };
-            }
-            return g;
-          })
-        : post.linkedGames;
-      let newLinkedGame = post.linkedGame;
-      if (post.linkedGame?.id === fromId || post.linkedGame?.bggId === fromId) {
-        changed = true;
-        newLinkedGame = { ...post.linkedGame, id: bggId, bggId, name: toName, imageUrl: post.linkedGame.imageUrl || toImage };
-      }
-      if (changed) { await kv.set(key, { ...post, linkedGames: newLinkedGames, linkedGame: newLinkedGame }); updatedPosts++; }
-    }
-
-    // 4. 원본 삭제
-    await kv.del(`site_game_${fromId}`);
-
-    return c.json({ success: true, updatedUsers, updatedPosts });
-  } catch (e) { return c.json({ error: String(e) }, 500); }
-});
-
 // 게임 통합 (from → to로 합치고 from 삭제)
 app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
   const { user, error } = await requireAdmin(c);
@@ -10043,44 +9840,11 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
     const from = await kv.get(`site_game_${fromId}`);
     const to = await kv.get(`site_game_${toId}`);
     if (!from || !to) return c.json({ error: '게임을 찾을 수 없어요' }, 404);
-
-    // to 게임에 이미지 없으면 from 이미지 복사
-    const mergedTo = { ...to, imageUrl: to.imageUrl || from.imageUrl || '' };
-    await kv.set(`site_game_${toId}`, mergedTo);
-
-    // from 게임 삭제
-    await kv.del(`site_game_${fromId}`);
-
-    // 모든 게시물에서 linkedGames/linkedGame의 fromId → toId 업데이트
-    const toName = mergedTo.koreanName || mergedTo.name || mergedTo.englishName || '';
-    const toImage = mergedTo.imageUrl || '';
-    const allPosts = await getByPrefixWithKeys('beta_post_');
-    let updatedCount = 0;
-    for (const { key, value: post } of allPosts) {
-      if (!post) continue;
-      let changed = false;
-      let newLinkedGames = post.linkedGames;
-      if (Array.isArray(post.linkedGames)) {
-        newLinkedGames = post.linkedGames.map((g: any) => {
-          if (g.id === fromId || g.bggId === fromId) {
-            changed = true;
-            return { ...g, id: toId, bggId: toId, name: toName, imageUrl: toImage };
-          }
-          return g;
-        });
-      }
-      let newLinkedGame = post.linkedGame;
-      if (post.linkedGame?.id === fromId || post.linkedGame?.bggId === fromId) {
-        changed = true;
-        newLinkedGame = { ...post.linkedGame, id: toId, bggId: toId, name: toName, imageUrl: toImage };
-      }
-      if (changed) {
-        await kv.set(key, { ...post, linkedGames: newLinkedGames, linkedGame: newLinkedGame });
-        updatedCount++;
-      }
+    if (!to.imageUrl && from.imageUrl) {
+      await kv.set(`site_game_${toId}`, { ...to, imageUrl: from.imageUrl });
     }
-
-    return c.json({ success: true, updatedPosts: updatedCount });
+    await kv.del(`site_game_${fromId}`);
+    return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

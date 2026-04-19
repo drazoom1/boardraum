@@ -11,13 +11,12 @@ const SUPABASE_URL = 'https://wwpvntmueafieessgnbu.supabase.co';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHZudG11ZWFmaWVlc3NnbmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3MDczMjUsImV4cCI6MjA3MDI4MzMyNX0.KG4yuo02jACcVOlG7av3bMFmRcfHK6lzu0x78RMhz0c';
 const SERVER_BASE = `${SUPABASE_URL}/functions/v1/make-server-0b7d3bae`;
 
-// ✏️ 여기에 관리자 계정 입력
-const ADMIN_EMAIL = '';
-const ADMIN_PASSWORD = '';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'sityplanner2@naver.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 async function getAdminToken() {
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-    throw new Error('ADMIN_EMAIL 과 ADMIN_PASSWORD 를 스크립트에 입력해주세요.');
+  if (!ADMIN_PASSWORD) {
+    throw new Error('비밀번호를 환경변수로 전달해주세요: ADMIN_PASSWORD=비밀번호 node scripts/migrate-bgg-cache.mjs');
   }
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -41,27 +40,45 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('📡 서버에 마이그레이션 요청 중... (게임 수에 따라 수 분 소요될 수 있습니다)');
+  let offset = 0;
+  const limit = 10;
+  let totalCached = 0, totalSkipped = 0, totalFailed = 0;
+  const allErrors = [];
+  let total = '?';
 
-  const res = await fetch(`${SERVER_BASE}/bgg-cache/migrate-all`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  while (true) {
+    process.stdout.write(`\r📡 처리 중... offset=${offset} | 캐싱=${totalCached} 스킵=${totalSkipped} 실패=${totalFailed} / 전체=${total}   `);
 
-  if (!res.ok) {
-    const err = await res.text();
-    console.error(`❌ 서버 오류 (${res.status}):`, err);
-    process.exit(1);
+    const res = await fetch(`${SERVER_BASE}/bgg-cache/migrate-all`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offset, limit }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`\n❌ 서버 오류 (${res.status}):`, err);
+      process.exit(1);
+    }
+
+    const result = await res.json();
+    total = result.total;
+    totalCached += result.cached;
+    totalSkipped += result.skipped;
+    totalFailed += result.failed;
+    if (result.errors?.length) allErrors.push(...result.errors);
+
+    if (result.done) break;
+    offset = result.nextOffset;
   }
 
-  const result = await res.json();
-  console.log('\n✅ 마이그레이션 완료!');
-  console.log(`   전체 게임: ${result.total}개`);
-  console.log(`   새로 캐싱: ${result.cached}개`);
-  console.log(`   이미 존재: ${result.skipped}개`);
-  console.log(`   실패:      ${result.failed}개`);
-  if (result.errors?.length) {
-    console.log(`   실패한 BGG ID: ${result.errors.join(', ')}`);
+  console.log('\n\n✅ 마이그레이션 완료!');
+  console.log(`   전체 게임: ${total}개`);
+  console.log(`   새로 캐싱: ${totalCached}개`);
+  console.log(`   이미 존재: ${totalSkipped}개`);
+  console.log(`   실패:      ${totalFailed}개`);
+  if (allErrors.length) {
+    console.log(`   실패한 BGG ID: ${allErrors.join(', ')}`);
   }
 }
 
