@@ -386,34 +386,54 @@ export function BoardWikiModal({ game, open, onOpenChange, onNavigateToWiki, acc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Book className="w-6 h-6 text-gray-700" />
-            보드위키 정보
-          </DialogTitle>
-          <DialogDescription className="text-base">
-            {game.koreanName} {game.englishName && `(${game.englishName})`}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto p-0">
+        {/* 접근성용 숨김 타이틀 */}
+        <DialogTitle className="sr-only">{game.koreanName} 보드위키</DialogTitle>
 
-        <div className="space-y-4 py-4">
-          {/* 게임 이미지 */}
-          {game.imageUrl && (
-            <div className="flex justify-center bg-gray-50 rounded-lg p-6 border border-gray-200">
+        {/* 게임 헤더: 이미지 + 이름/정보 가로 배치 */}
+        <div className="flex items-start gap-4 p-5 pr-12 border-b border-gray-100">
+          {game.imageUrl ? (
+            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
               <img
                 src={game.imageUrl}
                 alt={game.koreanName}
-                className="h-56 w-auto object-contain rounded-lg shadow-sm"
+                className="w-full h-full object-cover"
               />
             </div>
+          ) : (
+            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center">
+              <Book className="w-8 h-8 text-gray-300" />
+            </div>
           )}
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight truncate">{game.koreanName}</h2>
+                {game.englishName && (
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{game.englishName}</p>
+                )}
+              </div>
+            </div>
+            {/* 기본 정보 뱃지 */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {game.recommendedPlayers && (
+                <span className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
+                  <Users className="w-3 h-3" />{game.recommendedPlayers}
+                </span>
+              )}
+              {game.playTime && (
+                <span className="inline-flex items-center gap-1 text-[11px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full border border-green-100">
+                  ⏱ {game.playTime}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
 
+        <div className="space-y-3 p-4">
           {/* 카테고리 목록 (아코디언) */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900 text-lg mb-3">
-              보드위키 카테고리
-            </h3>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">보드위키 카테고리</p>
             
             <div className="space-y-2">
               {WIKI_CATEGORIES.map((category) => {
