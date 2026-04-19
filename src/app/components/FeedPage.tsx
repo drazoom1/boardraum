@@ -3088,6 +3088,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [showSubSheet, setShowSubSheet] = useState(false); // 모바일 바텀시트
   const [showCategories, setShowCategories] = useState(false); // 카테고리 바 펼침
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showSubPicker, setShowSubPicker] = useState<string | null>(null); // 하위 카테고리 드롭다운
   const [showComposer, setShowComposer] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -3444,93 +3445,102 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         </div>
       )}
       {/* 카테고리 헤더 */}
-      <div className="bg-white rounded-2xl shadow-sm px-4 py-3">
-        {/* 상단: 현재 카테고리 + 검색 */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-bold text-gray-900 text-sm">
-            {subCategory ?? (category === '이벤트' ? '🎉 이벤트' : category)}
-            {subCategory && <span className="ml-1.5 text-xs font-normal text-gray-400">{category}</span>}
-          </span>
+      <div className="bg-white rounded-2xl shadow-sm">
+        {/* 상단: 현재선택 토글버튼 + 검색 */}
+        <div className="flex items-center gap-2 px-4 py-3">
+          <button
+            onClick={() => { setShowCategories(v => !v); setShowSubPicker(null); }}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all
+              ${showCategories ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+            {(() => {
+              if (subCategory) return subCategory;
+              if (category === '이벤트') return '🎉 이벤트';
+              return category;
+            })()}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCategories ? 'rotate-180' : ''}`} />
+          </button>
+          {/* 현재 선택된 카테고리 경로 표시 */}
+          {(category !== '전체' || subCategory) && (
+            <div className="flex items-center gap-1 min-w-0">
+              {subCategory && (
+                <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full truncate">{category}</span>
+              )}
+              <button
+                onClick={() => { setCategory('전체'); setSubCategory(null); setShowCategories(false); setShowSubPicker(null); }}
+                className="flex items-center gap-0.5 text-xs text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <div className="flex-1" />
           <button onClick={() => setShowSearch(true)}
             className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors ${searchQuery ? 'text-gray-900' : 'text-gray-400'}`}>
             <Search className="w-4 h-4" />
           </button>
         </div>
 
-        {/* 상위 카테고리 탭바 */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
-          {/* 전체 버튼 (항상 표시) */}
-          <button
-            onClick={() => { setCategory('전체'); setSubCategory(null); setShowSubSheet(false); }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
-              ${category === '전체' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            전체
-          </button>
+        {/* 펼쳐지는 카테고리 바 */}
+        {showCategories && (
+          <div className="border-t border-gray-100 px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {BASE_CATEGORIES.map(c => {
+                const hasSub = !!SUBCATEGORIES[c];
+                const isActive = category === c && !subCategory;
+                const hasActiveSub = category === c && !!subCategory;
+                return (
+                  <div key={c} className="relative">
+                    <button
+                      onClick={() => {
+                        if (hasSub) {
+                          setShowSubPicker(prev => prev === c ? null : c);
+                        } else {
+                          setCategory(c);
+                          setSubCategory(null);
+                          setShowCategories(false);
+                          setShowSubPicker(null);
+                        }
+                      }}
+                      className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all whitespace-nowrap
+                        ${(isActive || hasActiveSub)
+                          ? c === '이벤트' ? 'bg-cyan-500 text-white shadow-sm' : 'bg-gray-900 text-white shadow-sm'
+                          : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200 hover:bg-cyan-100'
+                          : c === '전체' ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        } ${showSubPicker === c ? 'ring-2 ring-gray-900/20' : ''}`}>
+                      {c === '이벤트' ? '🎉 이벤트' : c}
+                      {hasSub && <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showSubPicker === c ? 'rotate-180' : ''}`} />}
+                    </button>
 
-          {/* 펼치기/접기 화살표 */}
-          <button
-            onClick={() => setShowCategories(v => !v)}
-            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 transition-all">
-            <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${showCategories ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* 나머지 카테고리들 (슬라이드 애니메이션) */}
-          <div className={`flex items-center gap-1.5 overflow-hidden transition-all duration-300 ${showCategories ? 'max-w-[800px] opacity-100' : 'max-w-0 opacity-0'}`}>
-            {BASE_CATEGORIES.filter(c => c !== '전체').map(c => {
-              const hasSub = !!SUBCATEGORIES[c];
-              const isActive = category === c;
-              return (
-                <button key={c}
-                  onClick={() => {
-                    if (hasSub) {
-                      if (window.innerWidth < 768) {
-                        setCategory(c);
-                        setSubCategory(null);
-                        setShowSubSheet(true);
-                      } else {
-                        if (isActive) { setCategory('전체'); setSubCategory(null); }
-                        else { setCategory(c); setSubCategory(null); }
-                      }
-                    } else {
-                      setCategory(c);
-                      setSubCategory(null);
-                      setShowSubSheet(false);
-                    }
-                  }}
-                  className={`flex-shrink-0 flex items-center gap-0.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                    ${isActive
-                      ? c === '이벤트' ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white'
-                      : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}>
-                  {c === '이벤트' ? '🎉 이벤트' : c}
-                  {hasSub && <ChevronDown className={`w-3 h-3 transition-transform ${isActive && window.innerWidth >= 768 ? 'rotate-180' : ''}`} />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* PC 전용: 하위 카테고리 탭바 (인라인) */}
-        {SUBCATEGORIES[category] && (
-          <div className="hidden md:flex gap-1.5 mt-2 pt-2 border-t border-gray-100 overflow-x-auto scrollbar-none">
-            <button
-              onClick={() => setSubCategory(null)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${!subCategory ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-              전체
-            </button>
-            {SUBCATEGORIES[category].map(s => (
-              <button key={s}
-                onClick={() => setSubCategory(s === subCategory ? null : s)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${subCategory === s ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                {s}
-              </button>
-            ))}
+                    {/* 하위 카테고리 드롭다운 */}
+                    {hasSub && showSubPicker === c && (
+                      <div className="absolute top-full mt-1.5 left-0 bg-white rounded-2xl shadow-xl border border-gray-100 z-[9999] min-w-[160px] overflow-hidden py-1.5">
+                        <button
+                          onClick={() => { setCategory(c); setSubCategory(null); setShowSubPicker(null); setShowCategories(false); }}
+                          className={`w-full text-left px-4 py-2.5 text-sm font-semibold transition-colors
+                            ${category === c && !subCategory ? 'text-gray-900 bg-gray-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                          {c} 전체
+                        </button>
+                        <div className="mx-3 my-1 h-px bg-gray-100" />
+                        {SUBCATEGORIES[c].map(s => (
+                          <button key={s}
+                            onClick={() => { setCategory(c); setSubCategory(s); setShowSubPicker(null); setShowCategories(false); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors
+                              ${subCategory === s ? 'font-semibold text-gray-900 bg-gray-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* 검색어 표시 */}
         {searchQuery && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className={`${showCategories ? '' : 'border-t border-gray-50'} px-4 py-2 flex items-center gap-2`}>
             <span className="text-xs text-gray-500">검색: <span className="font-semibold text-gray-900">"{searchQuery}"</span></span>
             <button onClick={() => setSearchQuery('')} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-0.5">
               <X className="w-3 h-3" /> 초기화
@@ -3539,30 +3549,9 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         )}
       </div>
 
-      {/* 모바일 전용: 하위 카테고리 바텀시트 */}
-      {showSubSheet && SUBCATEGORIES[category] && (
-        <div className="md:hidden fixed inset-0 z-[9998]" onClick={() => setShowSubSheet(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl px-5 pt-4 pb-8 shadow-xl"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-            <p className="text-sm font-bold text-gray-900 mb-3">{category} 하위 카테고리</p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => { setSubCategory(null); setShowSubSheet(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${!subCategory ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                {category} 전체
-              </button>
-              {SUBCATEGORIES[category].map(s => (
-                <button key={s}
-                  onClick={() => { setSubCategory(s); setShowSubSheet(false); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${subCategory === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* 드롭다운 외부 클릭 시 닫기 */}
+      {showSubPicker && (
+        <div className="fixed inset-0 z-[9998]" onClick={() => setShowSubPicker(null)} />
       )}
 
       {/* 검색 모달 */}
