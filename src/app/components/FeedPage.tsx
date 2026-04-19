@@ -17,8 +17,13 @@ const supabase = getSupabaseClient();
 
 const BASE_CATEGORIES = ['전체', '이벤트', '자유', '정보', '게임리뷰', '질문'] as const;
 type BaseCategory = typeof BASE_CATEGORIES[number];
-// 정보 하위 카테고리
-const INFO_SUB = ['보드게임 소식', '보드게임 정보등록'];
+const SUBCATEGORIES: Record<string, string[]> = {
+  '정보': ['보드게임 소식', '보드게임 정보등록', '재능판매'],
+  '질문': ['살래말래', '보드게임 QnA'],
+};
+// 정보 하위 카테고리 (필터링용)
+const INFO_SUB = ['보드게임 소식', '보드게임 정보등록', '재능판매'];
+const QUESTION_SUB = ['살래말래', '보드게임 QnA'];
 type Category = BaseCategory | '이벤트' | string;
 
 export interface FeedPost {
@@ -3079,6 +3084,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   // ★ posts가 최초 1회 이상 로드됐는지 추적 → 배너 초기화 타이밍 제어
   const [postsEverLoaded, setPostsEverLoaded] = useState(false);
   const [category, setCategory] = useState<string>('전체');
+  const [subCategory, setSubCategory] = useState<string | null>(null);
+  const [showSubSheet, setShowSubSheet] = useState(false); // 모바일 바텀시트
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3436,29 +3443,75 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         </div>
       )}
       {/* 카테고리 헤더 */}
-      <div className="bg-white rounded-2xl shadow-sm px-5 py-3">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setShowCategoryPicker(!showCategoryPicker)}
-            className="flex items-center gap-1.5 font-bold text-gray-900">
-            {category === '이벤트' ? '🎉 이벤트' : category}
-            <ChevronDown className={`w-4 h-4 transition-transform ${showCategoryPicker ? 'rotate-180' : ''}`} />
-          </button>
+      <div className="bg-white rounded-2xl shadow-sm px-4 py-3">
+        {/* 상단: 현재 카테고리 + 검색 */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-bold text-gray-900 text-sm">
+            {subCategory ?? (category === '이벤트' ? '🎉 이벤트' : category)}
+            {subCategory && <span className="ml-1.5 text-xs font-normal text-gray-400">{category}</span>}
+          </span>
           <button onClick={() => setShowSearch(true)}
             className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors ${searchQuery ? 'text-gray-900' : 'text-gray-400'}`}>
             <Search className="w-4 h-4" />
           </button>
         </div>
-        {showCategoryPicker && (
-          <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t border-gray-50">
-            {BASE_CATEGORIES.map(c => (
-              <button key={c} onClick={() => { setCategory(c); setShowCategoryPicker(false); }}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${category === c ? c === '이벤트' ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white' : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border border-cyan-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+
+        {/* 상위 카테고리 탭바 */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
+          {BASE_CATEGORIES.map(c => {
+            const hasSub = !!SUBCATEGORIES[c];
+            const isActive = category === c;
+            return (
+              <button key={c}
+                onClick={() => {
+                  if (hasSub) {
+                    if (window.innerWidth < 768) {
+                      // 모바일: 바텀시트
+                      setCategory(c);
+                      setSubCategory(null);
+                      setShowSubSheet(true);
+                    } else {
+                      // PC: 인라인 서브탭 토글
+                      if (isActive) { setCategory('전체'); setSubCategory(null); }
+                      else { setCategory(c); setSubCategory(null); }
+                    }
+                  } else {
+                    setCategory(c);
+                    setSubCategory(null);
+                    setShowSubSheet(false);
+                  }
+                }}
+                className={`flex-shrink-0 flex items-center gap-0.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
+                  ${isActive
+                    ? c === '이벤트' ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white'
+                    : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
                 {c === '이벤트' ? '🎉 이벤트' : c}
+                {hasSub && <ChevronDown className={`w-3 h-3 transition-transform ${isActive && window.innerWidth >= 768 ? 'rotate-180' : ''}`} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* PC 전용: 하위 카테고리 탭바 (인라인) */}
+        {SUBCATEGORIES[category] && (
+          <div className="hidden md:flex gap-1.5 mt-2 pt-2 border-t border-gray-100 overflow-x-auto scrollbar-none">
+            <button
+              onClick={() => setSubCategory(null)}
+              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${!subCategory ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              전체
+            </button>
+            {SUBCATEGORIES[category].map(s => (
+              <button key={s}
+                onClick={() => setSubCategory(s === subCategory ? null : s)}
+                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${subCategory === s ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                {s}
               </button>
             ))}
           </div>
         )}
-        {/* 검색 중일 때 검색어 표시 */}
+
+        {/* 검색어 표시 */}
         {searchQuery && (
           <div className="mt-2 flex items-center gap-2">
             <span className="text-xs text-gray-500">검색: <span className="font-semibold text-gray-900">"{searchQuery}"</span></span>
@@ -3468,6 +3521,32 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           </div>
         )}
       </div>
+
+      {/* 모바일 전용: 하위 카테고리 바텀시트 */}
+      {showSubSheet && SUBCATEGORIES[category] && (
+        <div className="md:hidden fixed inset-0 z-[9998]" onClick={() => setShowSubSheet(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl px-5 pt-4 pb-8 shadow-xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+            <p className="text-sm font-bold text-gray-900 mb-3">{category} 하위 카테고리</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { setSubCategory(null); setShowSubSheet(false); }}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${!subCategory ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                {category} 전체
+              </button>
+              {SUBCATEGORIES[category].map(s => (
+                <button key={s}
+                  onClick={() => { setSubCategory(s); setShowSubSheet(false); }}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${subCategory === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 검색 모달 */}
       {showSearch && (
@@ -3594,10 +3673,14 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                 p.content?.toLowerCase().includes(q) ||
                 p.userName?.toLowerCase().includes(q)
               )
-            : category === '이벤트'
+            : subCategory
+              ? posts.filter(p => p.category === subCategory)
+              : category === '이벤트'
               ? posts.filter(p => p.category === '이벤트')
               : category === '정보'
               ? posts.filter(p => p.category === '정보' || INFO_SUB.includes(p.category))
+              : category === '질문'
+              ? posts.filter(p => p.category === '질문' || QUESTION_SUB.includes(p.category))
               : category !== '전체'
               ? posts.filter(p => p.category === category)
               : posts;
