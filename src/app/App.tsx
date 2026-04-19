@@ -1626,7 +1626,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             </button>
 
             {/* 찾기 = 보드위키 */}
-            <button onClick={() => setActiveTab('custom')}
+            <button onClick={() => { setActiveTab('custom'); setWikiGame(undefined); }}
               className="w-12 h-12 flex items-center justify-center" title="보드위키">
               <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-8 h-8 object-contain" />
             </button>
@@ -1775,7 +1775,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 )}
               </button>
               {/* 찾기=보드위키 */}
-              <button onClick={() => setActiveTab('custom')} className="flex flex-col items-center gap-1">
+              <button onClick={() => { setActiveTab('custom'); setWikiGame(undefined); }} className="flex flex-col items-center gap-1">
                 <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 플러스 */}
