@@ -544,10 +544,78 @@ export function BoardGameCard({
             </div>
           </div>
         )}
-        <div className={isInModal ? "flex flex-col" : "flex flex-col sm:flex-row"}>
-          {/* 이미지 영역 */}
-          {game.imageUrl && (
-            <div className={isInModal ? "w-full flex-shrink-0 bg-white flex items-center justify-center p-4 border-b border-gray-100" : "w-full sm:w-64 flex-shrink-0 bg-white flex items-center justify-center p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-gray-100"}>
+        {/* ── 모달 컴팩트 헤더: 이미지 + 제목 + 정보 가로 배치 ── */}
+        {isInModal && (
+          <div className="flex items-start gap-3 p-4 pr-5 border-b border-gray-100">
+            {game.imageUrl && (
+              <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
+                <img src={game.imageUrl} alt={game.koreanName} className="w-full h-full object-cover" />
+              </div>
+            )}
+            <div className="flex-1 overflow-hidden">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="font-bold text-base text-gray-900 break-words">{game.koreanName}</h3>
+                    {game.isExpansion && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        {game.expansionType === 'series' ? '시리즈' : game.expansionType === 'legacy' ? '레거시' : '확장'}
+                      </span>
+                    )}
+                    {game.languageEdition && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                        game.languageEdition === 'korean' ? 'bg-cyan-100 text-cyan-800'
+                        : game.languageEdition === 'english' ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                      }`}>
+                        {game.languageEdition === 'korean' ? '한글판' : game.languageEdition === 'english' ? '영문판' : '다국어판'}
+                      </span>
+                    )}
+                    {game.quantity && game.quantity > 1 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                        보유({game.quantity})
+                      </span>
+                    )}
+                  </div>
+                  {game.englishName && (
+                    <p className="text-xs text-gray-400 break-words mt-0.5">{game.englishName}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsRatingModalOpen(true)}
+                  className="flex-shrink-0 flex items-center gap-1 bg-yellow-50 px-2.5 py-1 rounded-lg hover:bg-yellow-100 transition-colors"
+                >
+                  <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                  <span className="font-bold text-sm text-gray-900">{game.rating || '-'}</span>
+                  <span className="text-xs text-gray-500">/10</span>
+                </button>
+              </div>
+              {/* 게임 정보 인라인 뱃지 */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {game.recommendedPlayers && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded-lg border border-gray-200 whitespace-nowrap">
+                    <Users className="w-3 h-3 text-gray-400" />{game.recommendedPlayers}
+                  </span>
+                )}
+                {game.playTime && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded-lg border border-gray-200 whitespace-nowrap">
+                    <Clock className="w-3 h-3 text-gray-400" />{game.playTime}
+                  </span>
+                )}
+                {game.difficulty && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded-lg border border-gray-200 whitespace-nowrap">
+                    <BarChart3 className="w-3 h-3 text-gray-400" />{game.difficulty}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={isInModal ? "" : "flex flex-col sm:flex-row"}>
+          {/* 이미지 영역 (일반 뷰 전용) */}
+          {!isInModal && game.imageUrl && (
+            <div className="w-full sm:w-64 flex-shrink-0 bg-white flex items-center justify-center p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-gray-100">
               <img
                 src={game.imageUrl}
                 alt={game.koreanName}
@@ -555,45 +623,44 @@ export function BoardGameCard({
               />
             </div>
           )}
-          
+
           {/* 정보 영역 */}
-          <CardContent className="flex-1 p-4 sm:p-6">
-            {/* 제목과 평점 */}
-            <div className="mb-4">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-xl text-gray-900 break-words">{game.koreanName}</h3>
-                    {game.isExpansion && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                        {game.expansionType === 'series' ? '시리즈' : game.expansionType === 'legacy' ? '레거시' : '확장'}
-                      </span>
-                    )}
-                    {game.languageEdition && (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        game.languageEdition === 'korean' 
-                          ? 'bg-cyan-100 text-cyan-800' 
-                          : game.languageEdition === 'english'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-purple-100 text-purple-800'
-                      }`}>
-                        {game.languageEdition === 'korean' ? '한글판' : game.languageEdition === 'english' ? '영문판' : '다국어판'}
-                      </span>
-                    )}
-                    {game.quantity && game.quantity > 1 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        보유({game.quantity})
-                      </span>
+          <CardContent className={isInModal ? "flex-1 p-4" : "flex-1 p-4 sm:p-6"}>
+            {/* 제목과 평점 (일반 뷰 전용 — 모달은 상단 헤더에서 표시) */}
+            {!isInModal && (
+              <div className="mb-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-xl text-gray-900 break-words">{game.koreanName}</h3>
+                      {game.isExpansion && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {game.expansionType === 'series' ? '시리즈' : game.expansionType === 'legacy' ? '레거시' : '확장'}
+                        </span>
+                      )}
+                      {game.languageEdition && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          game.languageEdition === 'korean'
+                            ? 'bg-cyan-100 text-cyan-800'
+                            : game.languageEdition === 'english'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {game.languageEdition === 'korean' ? '한글판' : game.languageEdition === 'english' ? '영문판' : '다국어판'}
+                        </span>
+                      )}
+                      {game.quantity && game.quantity > 1 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                          보유({game.quantity})
+                        </span>
+                      )}
+                    </div>
+                    {game.englishName && (
+                      <p className="text-sm text-gray-400 font-medium break-words mt-1">{game.englishName}</p>
                     )}
                   </div>
-                  {game.englishName && (
-                    <p className="text-sm text-gray-400 font-medium break-words mt-1">{game.englishName}</p>
-                  )}
-                </div>
-                
-                {/* 평점 */}
-                <div className="flex-shrink-0">
-                  <button
+                  <div className="flex-shrink-0">
+                    <button
                       onClick={() => setIsRatingModalOpen(true)}
                       className="flex items-center gap-1 bg-yellow-50 px-3 py-1.5 rounded-lg hover:bg-yellow-100 transition-colors"
                     >
@@ -601,31 +668,34 @@ export function BoardGameCard({
                       <span className="font-bold text-gray-900">{game.rating || '-'}</span>
                       <span className="text-xs text-gray-500">/10</span>
                     </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* 게임 정보 */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {game.recommendedPlayers && (
-                <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
-                  <Users className="w-4 h-4 flex-shrink-0 text-gray-500" />
-                  <span className="font-medium text-center">{game.recommendedPlayers}</span>
-                </div>
-              )}
-              {game.playTime && (
-                <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
-                  <Clock className="w-4 h-4 flex-shrink-0 text-gray-500" />
-                  <span className="font-medium text-center">{game.playTime}</span>
-                </div>
-              )}
-              {game.difficulty && (
-                <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
-                  <BarChart3 className="w-4 h-4 flex-shrink-0 text-gray-500" />
-                  <span className="font-medium text-center">{game.difficulty}</span>
-                </div>
-              )}
-            </div>
+            {/* 게임 정보 그리드 (일반 뷰 전용 — 모달은 상단 헤더에서 표시) */}
+            {!isInModal && (
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {game.recommendedPlayers && (
+                  <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
+                    <Users className="w-4 h-4 flex-shrink-0 text-gray-500" />
+                    <span className="font-medium text-center">{game.recommendedPlayers}</span>
+                  </div>
+                )}
+                {game.playTime && (
+                  <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
+                    <Clock className="w-4 h-4 flex-shrink-0 text-gray-500" />
+                    <span className="font-medium text-center">{game.playTime}</span>
+                  </div>
+                )}
+                {game.difficulty && (
+                  <div className="flex flex-col items-center gap-1.5 text-xs sm:text-sm text-gray-600 bg-gray-50 rounded-lg px-2 py-2.5">
+                    <BarChart3 className="w-4 h-4 flex-shrink-0 text-gray-500" />
+                    <span className="font-medium text-center">{game.difficulty}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 구매 예정 리스트가 아니고 읽기 전용이 아닐 때만 플레이 기록 & 게임 정보 표시 */}
             {listType !== '구매 예정' && !readOnly && (

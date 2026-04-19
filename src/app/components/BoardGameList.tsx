@@ -647,6 +647,7 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
                     onEdit={(g) => { handleEditGame(g); setShelfModalGame(null); }}
                     onDelete={(id) => { handleDeleteGame(id); setShelfModalGame(null); }}
                     viewMode="detailed"
+                    isInModal={true}
                     listType={listType}
                     allGames={games}
                     isExpanded={expandedGames.has(shelfModalGame.id)}
