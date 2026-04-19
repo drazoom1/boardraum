@@ -10000,7 +10000,7 @@ app.post("/make-server-0b7d3bae/admin/site-games/:id/migrate-to-bgg", async (c) 
     });
 
     // 2. user_* 컬렉션에서 fromId → bggId 교체
-    const allUserItems = await getByPrefixWithKeys('user_');
+    const allUserItems = await kv.getByPrefixWithKeys('user_');
     let updatedUsers = 0;
     for (const { key, value } of allUserItems) {
       if (!value) continue;
@@ -10023,7 +10023,7 @@ app.post("/make-server-0b7d3bae/admin/site-games/:id/migrate-to-bgg", async (c) 
     }
 
     // 3. 게시물 linkedGames/linkedGame 교체
-    const allPosts = await getByPrefixWithKeys('beta_post_');
+    const allPosts = await kv.getByPrefixWithKeys('beta_post_');
     let updatedPosts = 0;
     for (const { key, value: post } of allPosts) {
       if (!post) continue;
@@ -10073,7 +10073,7 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
     // 모든 게시물에서 linkedGames/linkedGame의 fromId → toId 업데이트
     const toName = mergedTo.koreanName || mergedTo.name || mergedTo.englishName || '';
     const toImage = mergedTo.imageUrl || '';
-    const allPosts = await getByPrefixWithKeys('beta_post_');
+    const allPosts = await kv.getByPrefixWithKeys('beta_post_');
     let updatedCount = 0;
     for (const { key, value: post } of allPosts) {
       if (!post) continue;
