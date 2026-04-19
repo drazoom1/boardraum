@@ -198,8 +198,16 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
       onAddDialogClose?.();
     }
   }, [openAddDialog]);
-  const [sortOption, setSortOption] = useState<SortOption>('recent-desc');
-  const [viewMode, setViewMode] = useState<ViewMode>('detailed');
+  const sortKey = `boardraum-sort-${listType}`;
+  const viewKey = `boardraum-view-${listType}`;
+  const [sortOption, setSortOptionRaw] = useState<SortOption>(
+    () => (localStorage.getItem(sortKey) as SortOption) || 'recent-desc'
+  );
+  const [viewMode, setViewModeRaw] = useState<ViewMode>(
+    () => (localStorage.getItem(viewKey) as ViewMode) || 'detailed'
+  );
+  const setSortOption = (v: SortOption) => { localStorage.setItem(sortKey, v); setSortOptionRaw(v); };
+  const setViewMode = (v: ViewMode) => { localStorage.setItem(viewKey, v); setViewModeRaw(v); };
   const [showExpansionsSeparately, setShowExpansionsSeparately] = useState(false);
   const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set());
   const [showShareDialog, setShowShareDialog] = useState(false);
