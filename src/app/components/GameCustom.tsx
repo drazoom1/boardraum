@@ -101,7 +101,8 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     }).then(r => r.ok ? r.json() : []).then((results: any[]) => {
       if (!results.length) return;
       const match = results[0];
-      setSelectedGame(prev => prev ? { ...prev, bggId: match.id, id: match.id, englishName: prev.englishName || match.name } : prev);
+      // id는 변경하지 않음 — id 변경 시 useEffect([selectedGame?.id])가 재발동해 게임피드 탭이 info로 리셋되는 버그 방지
+      setSelectedGame(prev => prev ? { ...prev, bggId: match.id, englishName: prev.englishName || match.name } : prev);
     }).catch(() => {});
   }, []);
 
@@ -408,6 +409,20 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     }
   }, [selectedGame?.id]);
 
+  // BGG ID가 비동기적으로 resolve된 후 게임피드 재로드
+  // (BGG 이름 검색으로 bggId가 채워졌지만 id는 그대로인 경우)
+  const prevBggIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const newBggId = selectedGame?.bggId;
+    if (newBggId && newBggId !== prevBggIdRef.current && !isFirstMount.current) {
+      prevBggIdRef.current = newBggId;
+      // 피드 탭에 있고 아직 로드 안 된 경우에만 재시도
+      if (mainTab === 'feed' && gameFeedPosts.length === 0 && !gameFeedLoading) {
+        loadGameFeedPosts();
+      }
+    }
+  }, [selectedGame?.bggId]);
+
   const loadGameFeedPosts = async () => {
     if (!selectedGame) return;
     setGameFeedLoading(true);
@@ -420,16 +435,18 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       // (custom_${Date.now()} 같은 13자리 타임스탬프 ID는 서버에 없으므로 제외)
       const isBggId = (id: string) => /^\d+$/.test(id) && id.length <= 9;
 
-      const idsToTry = new Set<string>();
+      const idsToTry = new Set<string>();      // BGG 숫자 ID — bgg_ 접두사 변형도 추가됨
+      const rawIdsToTry = new Set<string>(); // UUID 등 비-BGG ID — 정확히 일치만
 
-      if (selectedGame.bggId) {
-        const n = normalize(selectedGame.bggId);
+      const addId = (id: string) => {
+        const n = normalize(id);
+        if (!n) return;
         if (isBggId(n)) idsToTry.add(n);
-      }
-      if (selectedGame.id) {
-        const n = normalize(selectedGame.id);
-        if (isBggId(n)) idsToTry.add(n);
-      }
+        else rawIdsToTry.add(n); // UUID, custom_* 등 비-BGG ID
+      };
+
+      if (selectedGame.bggId) addId(selectedGame.bggId);
+      if (selectedGame.id) addId(selectedGame.id);
 
       // ownedGames / allRegisteredGames에서 같은 게임 이름 찾아 원본 id 추가
       const sKorean = (selectedGame.koreanName || '').toLowerCase().trim();
@@ -444,17 +461,18 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
           selectedGame.bggId && g.bggId &&
           normalize(g.bggId) === normalize(selectedGame.bggId);
         if (nameMatch || bggMatch) {
-          if (g.bggId) { const n = normalize(g.bggId); if (isBggId(n)) idsToTry.add(n); }
-          if (g.id)    { const n = normalize(g.id);    if (isBggId(n)) idsToTry.add(n); }
+          if (g.bggId) addId(g.bggId);
+          if (g.id)    addId(g.id);
         }
       });
 
-      // bgg_ 접두사 변형도 추가 (서버에 저장된 형식이 다를 수 있음)
+      // BGG ID는 bgg_ 접두사 변형도 추가, 비-BGG ID는 원본만
       const withPrefixes = new Set<string>();
       idsToTry.forEach(id => {
-        withPrefixes.add(id);            // "367966"
-        withPrefixes.add(`bgg_${id}`);  // "bgg_367966"
+        withPrefixes.add(id);
+        withPrefixes.add(`bgg_${id}`);
       });
+      rawIdsToTry.forEach(id => withPrefixes.add(id));
 
       const validIds = [...withPrefixes].filter(id => id.length > 0 && id !== 'bgg_');
       if (validIds.length === 0) { setGameFeedLoading(false); return; }
