@@ -4,7 +4,7 @@
  */
 
 const DEFAULT_TITLE = '보드라움 - 보드게임 컬렉션 관리 커뮤니티';
-const DEFAULT_DESC = '보드게임 컬렉션을 관리하고, 위시리스트를 만들고, 보드게이머들과 소통하는 커뮤니티. 보드라움에서 내 보드게임을 정리해보세요.';
+const DEFAULT_DESC = '보드게임 컬렉션을 관리하고, 위시리스트를 만들고, 보드게이머들과 소통하는 커뮤니티 플랫폼입니다.';
 const SITE_URL = 'https://boardraum.site';
 const DEFAULT_IMAGE = `${SITE_URL}/icon.png`;
 
