@@ -10059,22 +10059,67 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
   try {
     const { fromId, toId } = await c.req.json();
     if (!fromId || !toId) return c.json({ error: 'fromId, toId 필요' }, 400);
-    const from = await kv.get(`site_game_${fromId}`);
-    const to = await kv.get(`site_game_${toId}`);
+
+    // site_game_* 우선, 없으면 user 컬렉션에서 게임 정보 조회
+    const findGame = async (id: string) => {
+      const site = await kv.get(`site_game_${id}`);
+      if (site) return site;
+      const allUserItems = await kv.getByPrefixWithKeys('user_');
+      for (const { key, value } of allUserItems) {
+        if (key.includes('_backup') || key.includes('_metadata')) continue;
+        const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
+        for (const g of games) {
+          if (g?.id === id || g?.bggId === id) return g;
+        }
+      }
+      return null;
+    };
+
+    const [from, to] = await Promise.all([findGame(fromId), findGame(toId)]);
     if (!from || !to) return c.json({ error: '게임을 찾을 수 없어요' }, 404);
 
-    // to 게임에 이미지 없으면 from 이미지 복사
-    const mergedTo = { ...to, imageUrl: to.imageUrl || from.imageUrl || '' };
-    await kv.set(`site_game_${toId}`, mergedTo);
+    const mergedData = {
+      id: toId,
+      bggId: to.bggId || from.bggId || toId,
+      koreanName: to.koreanName || from.koreanName || '',
+      englishName: to.englishName || from.englishName || '',
+      name: to.koreanName || from.koreanName || '',
+      imageUrl: to.imageUrl || from.imageUrl || '',
+      yearPublished: to.yearPublished || from.yearPublished || '',
+    };
 
-    // from 게임 삭제
+    // site_game_ 업서트 (to 게임 보강)
+    await kv.set(`site_game_${toId}`, mergedData);
+    // from site_game_ 삭제 (없어도 무방)
     await kv.del(`site_game_${fromId}`);
 
-    // 모든 게시물에서 linkedGames/linkedGame의 fromId → toId 업데이트
-    const toName = mergedTo.koreanName || mergedTo.name || mergedTo.englishName || '';
-    const toImage = mergedTo.imageUrl || '';
+    const toName = mergedData.koreanName || mergedData.name || '';
+    const toImage = mergedData.imageUrl || '';
+
+    // user 컬렉션에서 fromId → toId 교체
+    const allUserItems = await kv.getByPrefixWithKeys('user_');
+    let updatedUsers = 0;
+    for (const { key, value } of allUserItems) {
+      if (!value || key.includes('_backup') || key.includes('_metadata') || key.includes('_temp')) continue;
+      if (Array.isArray(value)) {
+        let changed = false;
+        const updated = value.map((g: any) => {
+          if (g?.id === fromId || g?.bggId === fromId) {
+            changed = true;
+            return { ...g, id: toId, bggId: mergedData.bggId, koreanName: toName, imageUrl: g.imageUrl || toImage };
+          }
+          return g;
+        });
+        if (changed) { await kv.set(key, updated); updatedUsers++; }
+      } else if (value?.id === fromId || value?.bggId === fromId) {
+        await kv.set(key, { ...value, id: toId, bggId: mergedData.bggId, koreanName: toName, imageUrl: value.imageUrl || toImage });
+        updatedUsers++;
+      }
+    }
+
+    // 게시물 태그 교체
     const allPosts = await kv.getByPrefixWithKeys('beta_post_');
-    let updatedCount = 0;
+    let updatedPosts = 0;
     for (const { key, value: post } of allPosts) {
       if (!post) continue;
       let changed = false;
@@ -10083,7 +10128,7 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
         newLinkedGames = post.linkedGames.map((g: any) => {
           if (g.id === fromId || g.bggId === fromId) {
             changed = true;
-            return { ...g, id: toId, bggId: toId, name: toName, imageUrl: toImage };
+            return { ...g, id: toId, bggId: mergedData.bggId, name: toName, imageUrl: g.imageUrl || toImage };
           }
           return g;
         });
@@ -10091,15 +10136,12 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
       let newLinkedGame = post.linkedGame;
       if (post.linkedGame?.id === fromId || post.linkedGame?.bggId === fromId) {
         changed = true;
-        newLinkedGame = { ...post.linkedGame, id: toId, bggId: toId, name: toName, imageUrl: toImage };
+        newLinkedGame = { ...post.linkedGame, id: toId, bggId: mergedData.bggId, name: toName, imageUrl: post.linkedGame.imageUrl || toImage };
       }
-      if (changed) {
-        await kv.set(key, { ...post, linkedGames: newLinkedGames, linkedGame: newLinkedGame });
-        updatedCount++;
-      }
+      if (changed) { await kv.set(key, { ...post, linkedGames: newLinkedGames, linkedGame: newLinkedGame }); updatedPosts++; }
     }
 
-    return c.json({ success: true, updatedPosts: updatedCount });
+    return c.json({ success: true, updatedUsers, updatedPosts });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
