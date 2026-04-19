@@ -1120,9 +1120,12 @@ app.get("/make-server-0b7d3bae/game/owner-count", async (c) => {
     const normG = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
     const tn = normG(gameName);
 
+    const sid = String(gameId);
     const hasGame = (g: any): boolean => {
       if (!g?.id) return false;
-      if (gameId && (g.id === gameId || g.bggId === gameId)) return true;
+      const gid = String(g.id);
+      const gbgg = g.bggId ? String(g.bggId) : '';
+      if (gameId && (gid === sid || gbgg === sid)) return true;
       if (tn) {
         if (normG(g.koreanName || g.name || '') === tn) return true;
         if (normG(g.englishName || '') === tn) return true;
@@ -1142,7 +1145,7 @@ app.get("/make-server-0b7d3bae/game/owner-count", async (c) => {
 
     const allUserItems = await kv.getByPrefixWithKeys('user_');
     for (const { key, value } of allUserItems) {
-      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp')) continue;
+      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp') || key.includes('_profile_')) continue;
       const uid = getUserId(key);
       if (!uid || seenUsers.has(uid)) continue;
       const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
@@ -9938,7 +9941,9 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
 
     const getGameKey = (g: any): string | null => {
       if (!g?.id && !(g?.bggId)) return null;
-      return g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : (g.id ? `id_${g.id}` : null);
+      const bggId = g.bggId != null ? String(g.bggId) : '';
+      const id = g.id != null ? String(g.id) : '';
+      return bggId && /^\d+$/.test(bggId) ? `bgg_${bggId}` : (id ? `id_${id}` : null);
     };
 
     const getUserId = (key: string): string | null => {
@@ -9969,7 +9974,8 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
 
     const addGame = (g: any, source: string) => {
       if (!g?.id || !(g.koreanName || g.englishName || g.name)) return;
-      const idKey = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      const bggIdStr = g.bggId != null ? String(g.bggId) : '';
+      const idKey = bggIdStr && /^\d+$/.test(bggIdStr) ? `bgg_${bggIdStr}` : `id_${String(g.id)}`;
       if (gameMap[idKey]) return;
       const kn = normName(g.koreanName || g.name || '');
       const en = normName(g.englishName || '');
@@ -9990,7 +9996,8 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
     const siteData = await getByPrefix('site_game_');
     for (const { value: g } of siteData) {
       if (!g?.id) continue;
-      const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      const _b = g.bggId != null ? String(g.bggId) : '';
+      const key = _b && /^\d+$/.test(_b) ? `bgg_${_b}` : `id_${String(g.id)}`;
       gameMap[key] = { ...g, _source: 'site' };
       const kn = normName(g.koreanName || g.name || '');
       const en = normName(g.englishName || '');
@@ -10011,7 +10018,8 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
     }
 
     const games = Object.values(gameMap).map((g: any) => {
-      const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      const _kb = g.bggId != null ? String(g.bggId) : '';
+      const key = _kb && /^\d+$/.test(_kb) ? `bgg_${_kb}` : `id_${String(g.id)}`;
       return { ...g, ownerCount: ownerMap[key]?.size || 0 };
     }).sort((a: any, b: any) =>
       (a.koreanName || a.englishName || '').localeCompare(b.koreanName || b.englishName || '', 'ko')
@@ -10026,12 +10034,18 @@ app.get("/make-server-0b7d3bae/admin/site-games/:id/owners", async (c) => {
   if (error) return error;
   try {
     const gameId = c.req.param('id');
-    const targetIds = new Set([gameId]);
-
-    // 같은 이름 게임 ID도 포함 (이름 기반 역조회용)
-    const siteGame = await kv.get(`site_game_${gameId}`);
-    const gameName = siteGame?.koreanName || siteGame?.name || siteGame?.englishName || '';
+    const sid = String(gameId);
     const normGame = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+
+    // 프론트에서 넘긴 값 우선 사용, 없으면 site_game_* 조회
+    const qBggId = c.req.query('bggId') || '';
+    const qKorean = c.req.query('koreanName') || '';
+    const qEnglish = c.req.query('englishName') || '';
+
+    const siteGame = (!qKorean && !qEnglish) ? await kv.get(`site_game_${gameId}`) : null;
+    const siteBggId = qBggId || (siteGame?.bggId ? String(siteGame.bggId) : '');
+    const tn = normGame(qKorean || siteGame?.koreanName || siteGame?.name || '');
+    const te = normGame(qEnglish || siteGame?.englishName || '');
 
     const owners: any[] = [];
     const seenUserIds = new Set<string>();
@@ -10047,13 +10061,17 @@ app.get("/make-server-0b7d3bae/admin/site-games/:id/owners", async (c) => {
 
     const hasGame = (g: any): boolean => {
       if (!g?.id) return false;
-      if (g.id === gameId || g.bggId === gameId) return true;
-      if (gameName) {
-        const gn = normGame(g.koreanName || g.name || '');
-        const ge = normGame(g.englishName || '');
-        const tn = normGame(gameName);
-        if (tn && (gn === tn || ge === tn)) return true;
-      }
+      const gid = String(g.id);
+      const gbgg = g.bggId ? String(g.bggId) : '';
+      // ID / bggId 직접 매칭
+      if (gid === sid) return true;
+      if (siteBggId && (gid === siteBggId || gbgg === siteBggId)) return true;
+      if (gbgg && gbgg === sid) return true;
+      // 이름 기반 폴백
+      const gkn = normGame(g.koreanName || g.name || '');
+      const gen = normGame(g.englishName || '');
+      if (tn && (gkn === tn || gen === tn)) return true;
+      if (te && (gkn === te || gen === te)) return true;
       return false;
     };
 

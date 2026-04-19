@@ -27,7 +27,8 @@
       "Bash(npx supabase *)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]\")",
       "Bash(netlify --version)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(curl *)"
     ]
   }
 }

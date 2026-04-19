@@ -5414,7 +5414,11 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
     setOwners([]);
     setOwnersLoading(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/${g.id}/owners`, {
+      const params = new URLSearchParams();
+      if (g.bggId) params.set('bggId', String(g.bggId));
+      if (g.koreanName) params.set('koreanName', g.koreanName);
+      if (g.englishName) params.set('englishName', g.englishName);
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/${g.id}/owners?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (res.ok) { const data = await res.json(); setOwners(data.owners || []); }
