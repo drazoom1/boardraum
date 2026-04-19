@@ -407,7 +407,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     if (!initialPostId) return;
     setActiveTab('feed');
     setNotificationPostLoading(true);
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${initialPostId}`)
+    window.history.replaceState({}, '', '/');
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${initialPostId}`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` }
+    })
       .then(r => r.json())
       .then(d => {
         if (d.post) {
