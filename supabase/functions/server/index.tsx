@@ -647,11 +647,122 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
       publishers: publishers.slice(0, 3),
     };
 
-    await kv.set(cacheKey, details, { expiresIn: 604800 });
+    await kv.set(cacheKey, details); // 영구 저장 (TTL 없음)
     return c.json(details);
   } catch (error) {
     console.error('BGG details error:', error);
     return c.json({ error: `Details error: ${error instanceof Error ? error.message : 'Unknown error'}` }, 500);
+  }
+});
+
+// BGG 데이터 파싱 헬퍼 (migrate-all에서도 재사용)
+async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<any | null> {
+  try {
+    const url = `https://boardgamegeek.com/xmlapi2/thing?id=${id}&stats=1`;
+    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${bggToken}` } });
+    if (!response.ok) return null;
+    const xmlText = await response.text();
+
+    const imageMatch = xmlText.match(/<image>([^<]+)<\/image>/);
+    const minPlayersMatch = xmlText.match(/<minplayers[^>]*value="(\d+)"/);
+    const maxPlayersMatch = xmlText.match(/<maxplayers[^>]*value="(\d+)"/);
+    const minPlayTimeMatch = xmlText.match(/<minplaytime[^>]*value="(\d+)"/);
+    const maxPlayTimeMatch = xmlText.match(/<maxplaytime[^>]*value="(\d+)"/);
+    const averageWeightMatch = xmlText.match(/<averageweight[^>]*value="([\d.]+)"/);
+    const averageRatingMatch = xmlText.match(/<average[^>]*value="([\d.]+)"/);
+    const minAgeMatch = xmlText.match(/<minage[^>]*value="(\d+)"/);
+    const rankMatch = xmlText.match(/<rank[^>]*type="subtype"[^>]*value="(\d+)"/);
+
+    const designers: string[] = [];
+    const artists: string[] = [];
+    const publishers: string[] = [];
+    for (const m of xmlText.matchAll(/<link[^>]*type="boardgamedesigner"[^>]*value="([^"]+)"/g)) designers.push(m[1]);
+    for (const m of xmlText.matchAll(/<link[^>]*type="boardgameartist"[^>]*value="([^"]+)"/g)) artists.push(m[1]);
+    for (const m of xmlText.matchAll(/<link[^>]*type="boardgamepublisher"[^>]*value="([^"]+)"/g)) publishers.push(m[1]);
+
+    let bestPlayerCount = '';
+    let recommendedPlayerCount = '';
+    const pollMatch = xmlText.match(/<poll[^>]*name="suggested_numplayers"[^>]*>([\s\S]*?)<\/poll>/);
+    if (pollMatch) {
+      let maxBestVotes = 0, maxRecVotes = 0;
+      for (const r of pollMatch[1].matchAll(/<results[^>]*numplayers="([^"]+)"[^>]*>([\s\S]*?)<\/results>/g)) {
+        const numP = r[1];
+        const bm = r[2].match(/<result[^>]*value="Best"[^>]*numvotes="(\d+)"/);
+        const rm = r[2].match(/<result[^>]*value="Recommended"[^>]*numvotes="(\d+)"/);
+        if (bm && parseInt(bm[1]) > maxBestVotes) { maxBestVotes = parseInt(bm[1]); bestPlayerCount = numP; }
+        if (rm && parseInt(rm[1]) > maxRecVotes) { maxRecVotes = parseInt(rm[1]); recommendedPlayerCount = numP; }
+      }
+    }
+
+    const rawImage = imageMatch ? imageMatch[1].trim() : '';
+    return {
+      imageUrl: rawImage.startsWith('//') ? 'https:' + rawImage : rawImage,
+      minPlayers: minPlayersMatch ? parseInt(minPlayersMatch[1]) : 0,
+      maxPlayers: maxPlayersMatch ? parseInt(maxPlayersMatch[1]) : 0,
+      minPlayTime: minPlayTimeMatch ? parseInt(minPlayTimeMatch[1]) : 0,
+      maxPlayTime: maxPlayTimeMatch ? parseInt(maxPlayTimeMatch[1]) : 0,
+      complexity: averageWeightMatch ? parseFloat(averageWeightMatch[1]) : 0,
+      averageRating: averageRatingMatch ? parseFloat(averageRatingMatch[1]) : 0,
+      minAge: minAgeMatch ? parseInt(minAgeMatch[1]) : 0,
+      rank: rankMatch ? parseInt(rankMatch[1]) : 0,
+      bestPlayerCount,
+      recommendedPlayerCount,
+      designers: designers.slice(0, 5),
+      artists: artists.slice(0, 5),
+      publishers: publishers.slice(0, 3),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// BGG 캐시 일괄 마이그레이션 (관리자 전용)
+app.post("/make-server-0b7d3bae/bgg-cache/migrate-all", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin') return c.json({ error: 'Admin only' }, 403);
+
+    const bggToken = Deno.env.get('BGG_API_TOKEN');
+    if (!bggToken) return c.json({ error: 'BGG_API_TOKEN not configured' }, 500);
+
+    // site_game_* 에서 bggId가 있는 게임 수집
+    const siteGames = await getByPrefix('site_game_');
+    const bggIds = new Set<string>();
+    for (const { value: g } of siteGames) {
+      const id = g?.bggId || (g?.id && /^\d+$/.test(g.id) ? g.id : null);
+      if (id) bggIds.add(String(id));
+    }
+
+    let cached = 0, skipped = 0, failed = 0;
+    const errors: string[] = [];
+
+    for (const bggId of bggIds) {
+      const cacheKey = `bgg_details_${bggId}`;
+      const existing = await kv.get(cacheKey);
+      // 이미 완전한 캐시가 있으면 스킵
+      if (existing && existing.averageRating !== undefined && existing.imageUrl) {
+        skipped++;
+        continue;
+      }
+      // BGG API 호출 (Rate limit 방지: 500ms 간격)
+      await new Promise(r => setTimeout(r, 500));
+      const details = await fetchAndParseBggDetails(bggId, bggToken);
+      if (details && details.averageRating !== undefined) {
+        await kv.set(cacheKey, details);
+        cached++;
+      } else {
+        failed++;
+        errors.push(bggId);
+      }
+    }
+
+    return c.json({ success: true, total: bggIds.size, cached, skipped, failed, errors });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }
 });
 
