@@ -5431,7 +5431,7 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
   const handleMigrate = async () => {
     if (!migrateGame || !migrateBggTarget) return;
-    const targetBggId = migrateBggTarget.id || migrateBggTarget.bggId;
+    const targetBggId = migrateBggTarget.bggId || migrateBggTarget.id;
     if (!targetBggId || !/^\d+$/.test(String(targetBggId))) { toast.error('유효한 BGG 게임을 선택해주세요'); return; }
     if (!confirm(`"${migrateGame.koreanName || migrateGame.name}" 을 BGG 게임 "${migrateBggTarget.name || migrateBggTarget.koreanName}" (ID: ${targetBggId}) 으로 마이그레이션합니다.\n\n보유 회원 데이터와 게시물 태그가 모두 교체됩니다.`)) return;
     setSaving(true);
