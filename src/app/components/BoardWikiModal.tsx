@@ -405,24 +405,20 @@ export function BoardWikiModal({ game, open, onOpenChange, onNavigateToWiki, acc
               <Book className="w-8 h-8 text-gray-300" />
             </div>
           )}
-          <div className="flex-1 min-w-0 pt-0.5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight truncate">{game.koreanName}</h2>
-                {game.englishName && (
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">{game.englishName}</p>
-                )}
-              </div>
-            </div>
+          <div className="flex-1 overflow-hidden pt-0.5">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight break-words">{game.koreanName}</h2>
+            {game.englishName && (
+              <p className="text-xs text-gray-400 mt-0.5 break-words">{game.englishName}</p>
+            )}
             {/* 기본 정보 뱃지 */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {game.recommendedPlayers && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
+                <span className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 whitespace-nowrap">
                   <Users className="w-3 h-3" />{game.recommendedPlayers}
                 </span>
               )}
               {game.playTime && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full border border-green-100">
+                <span className="inline-flex items-center gap-1 text-[11px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full border border-green-100 whitespace-nowrap">
                   ⏱ {game.playTime}
                 </span>
               )}
