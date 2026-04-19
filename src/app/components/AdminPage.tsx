@@ -3463,32 +3463,65 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'site-games', label: '게임 DB 관리', icon: <span className="text-base leading-none">🎲</span>, desc: '등록 게임 수정·삭제·통합' },
   ];
 
+  const menuGroups: { label: string; ids: Tab[] }[] = [
+    { label: '콘텐츠 관리', ids: ['approval', 'image-review', 'calculators', 'popup', 'notices', 'recommended'] },
+    { label: '회원 관리',   ids: ['members', 'spam', 'bulk-mail'] },
+    { label: '커뮤니티',    ids: ['homework', 'sallae', 'last-event'] },
+    { label: '게임 · DB',   ids: ['site-games', 'migration', 'player-migration'] },
+    { label: '통계 · 데이터', ids: ['analytics', 'backup', 'activity-cards'] },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        {/* 헤더 */}
+        <div className="mb-5 sm:mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-sm shrink-0">
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">관리자 페이지</h1>
-              <p className="text-sm text-gray-400">BOARDRAUM Admin Dashboard</p>
+              <p className="text-sm text-gray-400 hidden sm:block">BOARDRAUM Admin Dashboard</p>
             </div>
           </div>
-          <button onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 shadow-sm">
+          <button onClick={onBack} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 shadow-sm">
             <X className="w-4 h-4" /> 닫기
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-8">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-start p-4 rounded-xl border transition-all text-left ${activeTab === tab.id ? 'bg-white border-cyan-300 shadow-md ring-1 ring-cyan-200' : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${activeTab === tab.id ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500'}`}>{tab.icon}</div>
-              <span className={`text-sm font-semibold ${activeTab === tab.id ? 'text-cyan-700' : 'text-gray-700'}`}>{tab.label}</span>
-              <span className="text-xs text-gray-400 mt-0.5">{tab.desc}</span>
-            </button>
+        {/* 그룹형 메뉴 */}
+        <div className="space-y-4 mb-6">
+          {menuGroups.map(group => (
+            <div key={group.label}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{group.label}</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {group.ids.map(id => {
+                  const tab = tabs.find(t => t.id === id);
+                  if (!tab) return null;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left ${
+                        isActive
+                          ? 'bg-white border-cyan-300 shadow-md ring-1 ring-cyan-200'
+                          : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                      }`}>
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        isActive ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500'
+                      }`}>{tab.icon}</div>
+                      <div className="min-w-0">
+                        <span className={`text-xs font-semibold block truncate leading-tight ${isActive ? 'text-cyan-700' : 'text-gray-700'}`}>{tab.label}</span>
+                        <span className="text-[10px] text-gray-400 block truncate mt-0.5 hidden sm:block">{tab.desc}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -3981,7 +4014,7 @@ function NoticesSection({ accessToken }: { accessToken: string }) {
   if (!loaded) return <div className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" /></div>;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-gray-900">공지 배너 관리</h3>
@@ -4094,7 +4127,7 @@ function PlayerMigrationSection({ accessToken }: { accessToken: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-1">가능 인원 일괄 업데이트</h2>
         <p className="text-sm text-gray-500 mb-4">
           기존에 "최적 인원"으로 저장된 게임들을 BGG 기준 "가능 인원(min~max)"으로 업데이트해요.<br />
@@ -4133,7 +4166,7 @@ function PlayerMigrationSection({ accessToken }: { accessToken: string }) {
       </div>
 
       {result && (
-        <div className={`rounded-xl border p-6 ${result.error ? 'border-red-200 bg-red-50' : result.dryRun ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
+        <div className={`rounded-xl border p-4 sm:p-6 ${result.error ? 'border-red-200 bg-red-50' : result.dryRun ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
           {result.error ? (
             <p className="text-red-700 font-medium">❌ 오류: {result.error}</p>
           ) : (
@@ -4161,8 +4194,8 @@ function PlayerMigrationSection({ accessToken }: { accessToken: string }) {
               {result.preview?.length > 0 && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">변경 예시 (최대 30개)</p>
-                  <div className="rounded-lg overflow-hidden border border-gray-200 bg-white">
-                    <table className="w-full text-xs">
+                  <div className="rounded-lg overflow-hidden border border-gray-200 bg-white overflow-x-auto">
+                    <table className="w-full text-xs min-w-[280px]">
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-3 py-2 text-left text-gray-600">게임</th>
@@ -4265,7 +4298,7 @@ function RecommendedGamesAdminSection({ accessToken }: { accessToken: string }) 
   if (!loaded) return <div className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" /></div>;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-gray-900">추천 게임 관리</h3>
@@ -5031,7 +5064,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+    <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 space-y-5">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="text-2xl">📧</span>
