@@ -10078,9 +10078,13 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
     const [from, to] = await Promise.all([findGame(fromId), findGame(toId)]);
     if (!from || !to) return c.json({ error: '게임을 찾을 수 없어요' }, 404);
 
+    // bggId: 진짜 숫자 BGG id만 유지, 없으면 null (toId fallback 금지 — 숫자 toId가 BGG 게임으로 오분류됨)
+    const isRealBggId = (id: any) => id && /^\d+$/.test(String(id)) && String(id) !== String(to.id) && String(id) !== String(from.id);
+    const mergedBggId = isRealBggId(to.bggId) ? to.bggId : isRealBggId(from.bggId) ? from.bggId : (to.bggId || from.bggId || null);
+
     const mergedData = {
       id: toId,
-      bggId: to.bggId || from.bggId || toId,
+      bggId: mergedBggId,
       koreanName: to.koreanName || from.koreanName || '',
       englishName: to.englishName || from.englishName || '',
       name: to.koreanName || from.koreanName || '',
