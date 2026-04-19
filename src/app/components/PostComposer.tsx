@@ -34,7 +34,7 @@ interface FeedPost {
 // ─── 게임 검색 모달 ───
 function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selectedIds = [] }: {
   ownedGames: BoardGame[];
-  onConfirm: (games: { id: string; name: string; imageUrl: string }[]) => void;
+  onConfirm: (games: { id: string; name: string; imageUrl: string; bggId?: string }[]) => void;
   onClose: () => void;
   accessToken: string;
   selectedIds?: string[];
@@ -96,7 +96,7 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
           {g?.englishName && g?.koreanName && <p className="text-xs text-gray-400 truncate">{g.englishName}</p>}
           {g?.yearPublished && !g?.koreanName && <p className="text-xs text-gray-400">{g.yearPublished}년</p>}
         </div>
-        <button onClick={() => toggleQueue({ id, name, imageUrl })}
+        <button onClick={() => toggleQueue({ id, name, imageUrl, bggId: g?.bggId })}
           className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
             ${added ? 'bg-gray-200 text-gray-400 cursor-default' : inQueue ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-cyan-500 hover:text-white'}`}
           disabled={added}>
@@ -234,7 +234,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const [pollQuestion, setPollQuestion] = useState((editPost as any)?.poll?.question || '');
   const [pollOptions, setPollOptions] = useState<string[]>((editPost as any)?.poll?.options?.map((o: any) => o.text) || ['', '']);
   const dragIndexRef = useRef<number | null>(null);
-  const [linkedGames, setLinkedGames] = useState<{ id: string; name: string; imageUrl: string }[]>(
+  const [linkedGames, setLinkedGames] = useState<{ id: string; name: string; imageUrl: string; bggId?: string }[]>(
     editPost?.linkedGames || (editPost?.linkedGame ? [editPost.linkedGame] : []) ||
     draftPost?.linkedGames || (draftPost?.linkedGame ? [draftPost.linkedGame] : [])
   );

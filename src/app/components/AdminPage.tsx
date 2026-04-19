@@ -5395,8 +5395,11 @@ ${mergeFrom.koreanName || mergeFrom.name}은 삭제됩니다.`)) return;
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ fromId: mergeFrom.id, toId: mergeTo.id }),
       });
-      if (res.ok) { toast.success('통합 완료'); setMergeMode(false); setMergeFrom(null); setMergeTo(null); load(); }
-      else toast.error('통합 실패');
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`통합 완료${data.updatedPosts ? ` (게시물 ${data.updatedPosts}개 태그 업데이트됨)` : ''}`);
+        setMergeMode(false); setMergeFrom(null); setMergeTo(null); load();
+      } else toast.error('통합 실패');
     } catch { toast.error('오류'); }
     setSaving(false);
   };

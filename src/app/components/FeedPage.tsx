@@ -1505,7 +1505,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               <div className="flex items-center gap-2 mb-3 mx-4 sm:mx-8">
                 <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors min-w-0">
                   <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-0"
-                    onClick={(e) => { e.stopPropagation(); if (onGameClick) onGameClick(g.id, g.name); }}>
+                    onClick={(e) => { e.stopPropagation(); if (onGameClick) onGameClick(g.bggId || g.id, g.name, g.imageUrl); }}>
                     {g.imageUrl && <img src={g.imageUrl} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />}
                     <span className="text-sm font-medium text-gray-700 truncate flex-1">{g.imageUrl ? '' : '🎲 '}{g.name}</span>
                   </div>
@@ -1525,7 +1525,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                 const isWished = wishlistGames.some(w => w.id === g.id || (g.id && w.bggId === g.id));
                 return (
                   <div key={g.id} className="relative cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); if (onGameClick) onGameClick(g.id, g.name); }}>
+                    onClick={(e) => { e.stopPropagation(); if (onGameClick) onGameClick(g.bggId || g.id, g.name, g.imageUrl); }}>
                     {g.imageUrl
                       ? <img src={g.imageUrl} className="w-16 h-16 rounded-xl object-cover" onError={e => { const t = e.target as HTMLImageElement; t.style.display='none'; t.nextElementSibling?.removeAttribute('hidden'); }} />
                       : <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center"><Gamepad2 className="w-6 h-6 text-gray-400" /></div>}

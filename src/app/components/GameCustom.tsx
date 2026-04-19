@@ -106,24 +106,55 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     }).catch(() => {});
   }, []);
 
-  // selectedGame이 바뀔 때 이미지 없으면 자동 로드
+  // game/info를 이미 fetch한 게임 ID 추적 (중복 fetch 방지)
+  const siteInfoFetchedRef = useRef<Set<string>>(new Set());
+
+  // selectedGame이 바뀔 때 이미지/상세정보 없으면 자동 로드
   useEffect(() => {
     if (!selectedGame) return;
     // 숫자 bggId만 유효한 것으로 취급
     const bggId = /^\d+$/.test(selectedGame.bggId || '') ? selectedGame.bggId
       : /^\d+$/.test(selectedGame.id || '') ? selectedGame.id : '';
-    if (!bggId) return;
-    if (selectedGame.imageUrl) return; // 이미 이미지 있으면 스킵
-    Promise.all([
-      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/image-override?bggId=${bggId}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } }),
-      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-details`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` }, body: JSON.stringify({ id: bggId }) }),
-    ]).then(async ([overrideRes, detailRes]) => {
-      const override = overrideRes.ok ? await overrideRes.json() : null;
-      const detail = detailRes.ok ? await detailRes.json() : null;
-      const img = override?.imageUrl || detail?.imageUrl || '';
-      if (img) setSelectedGame(prev => prev ? { ...prev, imageUrl: img, recommendedPlayers: prev.recommendedPlayers || (detail?.minPlayers && detail?.maxPlayers ? `${detail.minPlayers}-${detail.maxPlayers}명` : ''), playTime: prev.playTime || (detail?.maxPlayTime ? `${detail.maxPlayTime}분` : '') } : prev);
-    }).catch(() => {});
-  }, [selectedGame?.id]);
+    if (bggId) {
+      // BGG 게임: 이미지 없을 때만 image-override + bgg-details에서 로드
+      if (selectedGame.imageUrl) return;
+      Promise.all([
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/image-override?bggId=${bggId}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } }),
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-details`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` }, body: JSON.stringify({ id: bggId }) }),
+      ]).then(async ([overrideRes, detailRes]) => {
+        const override = overrideRes.ok ? await overrideRes.json() : null;
+        const detail = detailRes.ok ? await detailRes.json() : null;
+        const img = override?.imageUrl || detail?.imageUrl || '';
+        if (img) setSelectedGame(prev => prev ? { ...prev, imageUrl: img, recommendedPlayers: prev.recommendedPlayers || (detail?.minPlayers && detail?.maxPlayers ? `${detail.minPlayers}-${detail.maxPlayers}명` : ''), playTime: prev.playTime || (detail?.maxPlayTime ? `${detail.maxPlayTime}분` : '') } : prev);
+      }).catch(() => {});
+    } else {
+      // 직접 등록 게임(비BGG): game/info?name=으로 site_game_* 전체 데이터 로드
+      const fetchKey = selectedGame.id;
+      if (siteInfoFetchedRef.current.has(fetchKey)) return; // 이미 fetch했으면 스킵
+      if (selectedGame.imageUrl && selectedGame.yearPublished) return; // 이미 완전한 데이터 있으면 스킵
+      const name = selectedGame.koreanName || selectedGame.englishName || '';
+      if (!name) return;
+      siteInfoFetchedRef.current.add(fetchKey);
+      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/info?name=${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${publicAnonKey}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(info => {
+          if (!info) return;
+          setSelectedGame(prev => prev ? {
+            ...prev,
+            imageUrl: prev.imageUrl || info.imageUrl || '',
+            englishName: prev.englishName || info.englishName || '',
+            koreanName: prev.koreanName || info.koreanName || '',
+            yearPublished: prev.yearPublished || info.yearPublished || '',
+            recommendedPlayers: prev.recommendedPlayers || info.recommendedPlayers || '',
+            playTime: prev.playTime || info.playTime || '',
+            complexity: (prev as any).complexity ?? info.complexity,
+            averageRating: (prev as any).averageRating ?? info.averageRating,
+            designers: (prev as any).designers || info.designers || [],
+            publishers: (prev as any).publishers || info.publishers || [],
+          } : prev);
+        }).catch(() => {});
+    }
+  }, [selectedGame?.id, selectedGame?.bggId]);
 
   // 게임 진입/이탈 시 URL + 메타태그 + JSON-LD 업데이트
   useEffect(() => {
@@ -409,13 +440,15 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     }
   }, [selectedGame?.id]);
 
-  // BGG ID가 비동기적으로 resolve된 후 게임피드 재로드
+  // BGG ID가 비동기적으로 resolve된 후 위키 콘텐츠 + 게임피드 재로드
   // (BGG 이름 검색으로 bggId가 채워졌지만 id는 그대로인 경우)
   const prevBggIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const newBggId = selectedGame?.bggId;
     if (newBggId && newBggId !== prevBggIdRef.current && !isFirstMount.current) {
       prevBggIdRef.current = newBggId;
+      // wiki key가 바뀌었으므로 위키 콘텐츠도 재로드
+      loadPosts();
       // 피드 탭에 있고 아직 로드 안 된 경우에만 재시도
       if (mainTab === 'feed' && gameFeedPosts.length === 0 && !gameFeedLoading) {
         loadGameFeedPosts();
