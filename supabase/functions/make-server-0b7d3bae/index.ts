@@ -10032,8 +10032,9 @@ app.get("/make-server-0b7d3bae/admin/site-games/:id/owners", async (c) => {
         const profile = userProfileMap[userId];
         owners.push({
           userId,
-          userName: profile?.userName || profile?.nickname || profile?.name || userId.slice(0, 8),
-          userAvatar: profile?.userAvatar || profile?.profileImage || null,
+          userName: profile?.username || profile?.userName || profile?.nickname || profile?.name || userId.slice(0, 8),
+          email: profile?.email || '',
+          userAvatar: profile?.profileImage || profile?.userAvatar || null,
         });
       }
     }

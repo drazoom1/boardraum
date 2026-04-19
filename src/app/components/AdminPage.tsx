@@ -5631,7 +5631,10 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
                       {o.userAvatar
                         ? <img src={o.userAvatar} className="w-8 h-8 rounded-full object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
                         : <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm flex-shrink-0">👤</div>}
-                      <p className="text-sm text-gray-800 truncate">{o.userName}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{o.userName}</p>
+                        {o.email && <p className="text-xs text-gray-400 truncate">{o.email}</p>}
+                      </div>
                     </div>
                   ))}
                 </div>
