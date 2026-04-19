@@ -5340,15 +5340,22 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
           cardsAfter: current - 1,
           reductionSeconds: perCardSecs,
         };
-        useEvents[idx] = {
-          ...useEvents[idx],
-          reductionSeconds: (useEvents[idx].reductionSeconds || 0) + perCardSecs,
-          lastReductionAt: Date.now(),
-          lastReductionBy: user.id,
-          cardUsageLog: [...(useEvents[idx].cardUsageLog || []), usageEntry],
-        };
-        await kv.set('last_post_events', useEvents);
-        updatedEvent = useEvents[idx];
+        // ★ 쓰기 직전 재조회 — auto-close가 이미 이벤트를 제거했으면 덮어쓰지 않음
+        const freshEvents: any[] = await kv.get('last_post_events') || [];
+        const freshIdx = freshEvents.findIndex((e: any) => e.id === useEvents[idx].id && e.active);
+        if (freshIdx >= 0) {
+          freshEvents[freshIdx] = {
+            ...freshEvents[freshIdx],
+            reductionSeconds: (freshEvents[freshIdx].reductionSeconds || 0) + perCardSecs,
+            lastReductionAt: Date.now(),
+            lastReductionBy: user.id,
+            cardUsageLog: [...(freshEvents[freshIdx].cardUsageLog || []), usageEntry],
+          };
+          await kv.set('last_post_events', freshEvents);
+          updatedEvent = freshEvents[freshIdx];
+        } else {
+          console.log(`[카드사용] 이벤트 ${useEvents[idx].id} 이미 종료됨 — last_post_events 덮어쓰기 skip`);
+        }
       }
     } else {
       const event = await kv.get('last_post_event');

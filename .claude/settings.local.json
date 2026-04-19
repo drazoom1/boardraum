@@ -35,7 +35,9 @@
       "Bash(ls .github/)",
       "Bash(ls vercel.json netlify.toml)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(len\\(d\\)\\)\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(cat .github/workflows/*.yml)",
+      "Bash(ls .github/workflows/)"
     ]
   }
 }

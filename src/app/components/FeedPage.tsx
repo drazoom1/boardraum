@@ -3298,7 +3298,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       } catch {}
     };
     fetchEvent();
-    const t = setInterval(fetchEvent, 60000);
+    const t = setInterval(fetchEvent, 15000); // 15초마다 폴링 (종료된 이벤트 빠른 감지)
     return () => clearInterval(t);
   }, [accessToken]);
 
@@ -3423,9 +3423,11 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {/* ★ postsEverLoaded: posts 첫 fetch 완료 전엔 배너를 마운트하지 않음 */}
       {/* → 이벤트 데이터가 posts보다 먼저 도착해 lastPost=null로 잘못된 타이머를 계산하는 버그 방지 */}
       {postsEverLoaded && lastPostEvents.length > 0 && (
-        <div className={lastPostEvents.length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
-          {lastPostEvents.map((evt: any) => (
-            <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.length >= 2} onAutoClose={handleAutoClose} />
+        <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
+          {lastPostEvents
+            .filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id))
+            .map((evt: any) => (
+            <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} />
           ))}
         </div>
       )}
