@@ -9345,12 +9345,15 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
 
     // ── 4) 조기 종료 방지: 서버가 직접 sinceTimestamp 계산 ──
     // 선두 글이 있으면 createdAt, 없으면 이벤트 startedAt 기준
-    const sinceMs       = leaderPost ? new Date(leaderPost.createdAt).getTime() : startedAtMs;
-    const elapsedMs     = Date.now() - sinceMs;
-    const durationMs    = (event.durationMinutes || 60) * 60 * 1000;
-    const minRequiredMs = durationMs * 0.85;
+    // ★ reductionSeconds(보너스카드 감소량)를 반영한 유효 duration으로 검증
+    const sinceMs          = leaderPost ? new Date(leaderPost.createdAt).getTime() : startedAtMs;
+    const elapsedMs        = Date.now() - sinceMs;
+    const durationMs       = (event.durationMinutes || 60) * 60 * 1000;
+    const reductionMs      = (event.reductionSeconds || 0) * 1000;
+    const effectiveDurMs   = Math.max(durationMs - reductionMs, 60 * 1000); // 최소 1분
+    const minRequiredMs    = effectiveDurMs * 0.85;
     if (elapsedMs < minRequiredMs) {
-      console.log(`[auto-close] 조기 종료 거부: eventId=${eventId}, leader=${leaderPost?.id || 'none'}, elapsed=${Math.round(elapsedMs/1000)}s, required=${Math.round(minRequiredMs/1000)}s`);
+      console.log(`[auto-close] 조기 종료 거부: eventId=${eventId}, leader=${leaderPost?.id || 'none'}, elapsed=${Math.round(elapsedMs/1000)}s, required=${Math.round(minRequiredMs/1000)}s, reduction=${Math.round(reductionMs/1000)}s`);
       return c.json({ tooEarly: true, message: "타이머가 아직 충분히 경과하지 않았습니다" });
     }
 

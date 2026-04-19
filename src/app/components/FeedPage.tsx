@@ -2351,8 +2351,10 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` },
             body: JSON.stringify({ eventId: ev.id }),
           }).then(r => r.json()).then(data => {
-            if (data.winner) onAutoClose?.(ev.id, data.winner);
-            else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
+            if (data.winner || data.success || data.alreadyClosed) {
+              // winner가 null이어도 이벤트 제거 + 배너 전환 (당첨자 없음으로 표시)
+              onAutoClose?.(ev.id, data.winner || { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', closedAt: new Date().toISOString() });
+            } else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
           }).catch(() => { autoCloseCalledRef.current = false; setAutoClosing(false); });
         }
         return;
@@ -2375,8 +2377,10 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` },
           body: JSON.stringify({ eventId: ev.id }),
         }).then(r => r.json()).then(data => {
-          if (data.winner) onAutoClose?.(ev.id, data.winner);
-          else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
+          if (data.winner || data.success || data.alreadyClosed) {
+            // winner가 null이어도 이벤트 제거 + 배너 전환 (당첨자 없음으로 표시)
+            onAutoClose?.(ev.id, data.winner || { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', closedAt: new Date().toISOString() });
+          } else if (data.tooEarly) { autoCloseCalledRef.current = false; setAutoClosing(false); }
         }).catch(() => { autoCloseCalledRef.current = false; setAutoClosing(false); });
       }
     };
