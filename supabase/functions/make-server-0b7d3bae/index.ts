@@ -10016,10 +10016,17 @@ app.get("/make-server-0b7d3bae/admin/site-games/:id/owners", async (c) => {
     const allUserItems = await kv.getByPrefixWithKeys('user_');
     const userProfileMap: Record<string, any> = {};
 
-    // 프로필 미리 수집
+    // beta_user_* → email, name, username
     const betaUsers = await getByPrefix('beta_user_');
     for (const { value: u } of betaUsers) {
-      if (u?.id) userProfileMap[u.id] = u;
+      const uid = u?.userId || u?.id;
+      if (uid) userProfileMap[uid] = { ...userProfileMap[uid], ...u };
+    }
+    // user_profile_* → profileImage, 최신 닉네임 등
+    const profileItems = await getByPrefix('user_profile_');
+    for (const { value: p } of profileItems) {
+      const uid = p?.userId || p?.id;
+      if (uid) userProfileMap[uid] = { ...userProfileMap[uid], ...p };
     }
 
     for (const { key, value } of allUserItems) {
