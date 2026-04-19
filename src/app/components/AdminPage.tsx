@@ -5417,8 +5417,18 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
       });
       if (res.ok) {
         const data = await res.json();
+        const suspect = getDupSuspect(to);
         toast.success(`통합 완료${data.updatedPosts ? ` (게시물 ${data.updatedPosts}개 태그 업데이트됨)` : ''}`);
         load();
+        // BGG 중복 의심 게임이면 바로 마이그레이션 모달 열기
+        if (suspect && isCustom(to)) {
+          setTimeout(() => {
+            setMigrateGame(to);
+            setMigrateBggQ(to.koreanName || to.englishName || to.name || '');
+            setMigrateBggTarget(suspect);
+            setMigrateBggResults([]);
+          }, 300);
+        }
       } else toast.error('통합 실패');
     } catch { toast.error('오류'); }
     setSaving(false);
