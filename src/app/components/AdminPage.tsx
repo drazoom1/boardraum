@@ -5462,7 +5462,7 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
       });
       if (res.ok) {
         const data = await res.json();
-        setMigrateBggResults(data.filter((g: any) => /^\d+$/.test(String(g.id || g.bggId || ''))).slice(0, 10));
+        setMigrateBggResults(data.filter((g: any) => /^\d+$/.test(String(g.bggId || ''))).slice(0, 10));
       }
     } catch {}
     setMigrateBggLoading(false);
