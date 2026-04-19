@@ -445,10 +445,24 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
   // /game/:gameId URL 진입 시 해당 게임 위키로 자동 이동
   useEffect(() => {
-    if (initialGameId) {
-      setWikiGame({ id: initialGameId, koreanName: initialGameId, englishName: initialGameId, imageUrl: '', bggId: initialGameId } as any);
-      setActiveTab('custom');
-    }
+    if (!initialGameId) return;
+    setActiveTab('custom');
+    // Supabase 캐시에서 실제 게임 데이터 조회
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game/info?name=${encodeURIComponent(initialGameId)}`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.id) {
+          setWikiGame(data as any);
+        } else {
+          // 캐시에 없으면 이름만으로 플레이스홀더 세팅 (GameCustom이 BGG 검색 처리)
+          setWikiGame({ id: initialGameId, koreanName: initialGameId, englishName: '', imageUrl: '', bggId: '' } as any);
+        }
+      })
+      .catch(() => {
+        setWikiGame({ id: initialGameId, koreanName: initialGameId, englishName: '', imageUrl: '', bggId: '' } as any);
+      });
   }, [initialGameId]);
 
   // SEO 메타태그 동적 업데이트 (게임 위키 진입/이탈 시)

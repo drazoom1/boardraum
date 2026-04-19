@@ -87,11 +87,11 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   const [selectedGame, setSelectedGame] = useState<BoardGame | null>(initialGame || null);
   const isFirstMount = useRef(true);
 
-  // initialGame에 bggId 없으면 이름으로 BGG 검색해서 자동 매칭
+  // initialGame에 유효한 bggId 없으면 이름으로 BGG 검색해서 자동 매칭
   useEffect(() => {
     if (!initialGame) return;
-    const hasBggId = initialGame.bggId || /^\d+$/.test(initialGame.id || '');
-    if (hasBggId) return;
+    const hasValidBggId = /^\d+$/.test(initialGame.bggId || '') || /^\d+$/.test(initialGame.id || '');
+    if (hasValidBggId) return;
     const name = initialGame.koreanName || initialGame.englishName || '';
     if (!name) return;
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`, {
@@ -100,7 +100,6 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       body: JSON.stringify({ query: name }),
     }).then(r => r.ok ? r.json() : []).then((results: any[]) => {
       if (!results.length) return;
-      // 이름이 가장 비슷한 첫 번째 결과 선택
       const match = results[0];
       setSelectedGame(prev => prev ? { ...prev, bggId: match.id, id: match.id, englishName: prev.englishName || match.name } : prev);
     }).catch(() => {});
@@ -109,7 +108,9 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   // selectedGame이 바뀔 때 이미지 없으면 자동 로드
   useEffect(() => {
     if (!selectedGame) return;
-    const bggId = selectedGame.bggId || (/^\d+$/.test(selectedGame.id) ? selectedGame.id : '');
+    // 숫자 bggId만 유효한 것으로 취급
+    const bggId = /^\d+$/.test(selectedGame.bggId || '') ? selectedGame.bggId
+      : /^\d+$/.test(selectedGame.id || '') ? selectedGame.id : '';
     if (!bggId) return;
     if (selectedGame.imageUrl) return; // 이미 이미지 있으면 스킵
     Promise.all([
