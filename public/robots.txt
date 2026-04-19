@@ -3,4 +3,4 @@ Allow: /
 Allow: /game/
 Allow: /post/
 
-Sitemap: https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae/sitemap.xml
+Sitemap: https://boardraum.site/sitemap.xml
