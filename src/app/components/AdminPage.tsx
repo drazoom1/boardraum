@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, X, RefreshCw, Loader2,
   Check, HardDrive, TrendingUp, Plus,
   Activity, Clock, AlertCircle, Gamepad2, List, Calendar,
-  Eye, MessageSquare, Trophy, Megaphone, Save, ToggleLeft, ToggleRight, Star, Trash2, Gift, Camera
+  Eye, MessageSquare, Trophy, Megaphone, Save, ToggleLeft, ToggleRight, Star, Trash2, Gift, Camera, Heart, Link
 } from 'lucide-react';
 import type { BoardGame } from '../App';
 
@@ -901,181 +901,611 @@ function MembersSection({ accessToken }: { accessToken: string }) {
 
 // ─── Analytics ──────────────────────────────────────────────────────────────
 
+// ── 미니 바 차트 ──
+function MiniBarChart({ data, color = '#06b6d4', height = 80 }: {
+  data: { label: string; value: number }[];
+  color?: string;
+  height?: number;
+}) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  const barZone = height - 18;
+  return (
+    <div className="flex items-end gap-0.5 w-full" style={{ height }}>
+      {data.map((d, i) => (
+        <div key={i} className="flex flex-col items-center justify-end flex-1 min-w-0 h-full gap-0.5">
+          <div
+            title={`${d.label}: ${d.value}`}
+            style={{ height: d.value > 0 ? Math.max(2, (d.value / max) * barZone) : 1, backgroundColor: d.value > 0 ? color : '#e5e7eb' }}
+            className="w-full rounded-t-sm transition-all duration-300"
+          />
+          <span className="text-[8px] text-gray-400 truncate w-full text-center leading-tight">{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 수평 바 차트 ──
+function HBarChart({ data }: { data: { label: string; value: number; color?: string }[] }) {
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  const max = Math.max(...sorted.map(d => d.value), 1);
+  return (
+    <div className="space-y-2.5">
+      {sorted.map((d, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="text-xs text-gray-600 w-16 flex-shrink-0 truncate text-right">{d.label}</span>
+          <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden">
+            <div
+              style={{ width: `${Math.max(d.value > 0 ? 1 : 0, (d.value / max) * 100)}%`, backgroundColor: d.color || '#06b6d4' }}
+              className="h-full rounded-full transition-all duration-500"
+            />
+          </div>
+          <span className="text-xs font-bold text-gray-700 w-7 text-right">{d.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 기간별 카운트 헬퍼 ──
+function getDailyCounts(items: any[], dateField: string, days = 14): { label: string; value: number }[] {
+  const now = new Date();
+  return Array.from({ length: days }, (_, i) => {
+    const day = new Date(now); day.setDate(day.getDate() - (days - 1 - i)); day.setHours(0, 0, 0, 0);
+    const next = new Date(day); next.setDate(next.getDate() + 1);
+    return {
+      label: `${day.getMonth() + 1}/${day.getDate()}`,
+      value: items.filter(item => { const t = new Date(item[dateField] || 0).getTime(); return !isNaN(t) && t >= day.getTime() && t < next.getTime(); }).length,
+    };
+  });
+}
+function getWeeklyCounts(items: any[], dateField: string, weeks = 8): { label: string; value: number }[] {
+  const now = new Date(); now.setHours(23, 59, 59, 999);
+  return Array.from({ length: weeks }, (_, i) => {
+    const end = new Date(now); end.setDate(end.getDate() - (weeks - 1 - i) * 7);
+    const start = new Date(end); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+    return {
+      label: `${start.getMonth() + 1}/${start.getDate()}`,
+      value: items.filter(item => { const t = new Date(item[dateField] || 0).getTime(); return !isNaN(t) && t >= start.getTime() && t <= end.getTime(); }).length,
+    };
+  });
+}
+function getMonthlyCounts(items: any[], dateField: string, months = 6): { label: string; value: number }[] {
+  const now = new Date();
+  return Array.from({ length: months }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    return {
+      label: `${d.getMonth() + 1}월`,
+      value: items.filter(item => { const t = new Date(item[dateField] || 0).getTime(); return !isNaN(t) && t >= d.getTime() && t < next.getTime(); }).length,
+    };
+  });
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  '이벤트': '#ef4444', '자유': '#06b6d4', '정보': '#8b5cf6', '게임리뷰': '#f59e0b',
+  '질문': '#10b981', '보드게임 소식': '#3b82f6', '보드게임 정보등록': '#6366f1',
+  '재능판매': '#ec4899', '살래말래': '#14b8a6', '보드게임 QnA': '#f97316',
+};
+
 function AnalyticsSection({ accessToken }: { accessToken: string }) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'posts' | 'ga4'>('overview');
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [onlineData, setOnlineData] = useState<{ count: number; users: { email: string; lastSeen: number }[] }>({ count: 0, users: [] });
+  const [betaUsers, setBetaUsers] = useState<any[]>([]);
+  const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [userPeriod, setUserPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  // GA4 상태
+  const [ga4PropId, setGa4PropId] = useState(() => localStorage.getItem('ga4_property_id') || '');
+  const [ga4PropInput, setGa4PropInput] = useState(() => localStorage.getItem('ga4_property_id') || '');
+  const [ga4TokenInput, setGa4TokenInput] = useState('');
+  const [ga4Token, setGa4Token] = useState(() => localStorage.getItem('ga4_access_token') || '');
+  const [ga4Data, setGa4Data] = useState<any>(null);
+  const [ga4Loading, setGa4Loading] = useState(false);
+  const [ga4Error, setGa4Error] = useState<string | null>(null);
 
   const loadOnline = async () => {
     try {
-      console.log('[AdminPage] 🔍 Loading online users...');
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/presence/online`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      console.log('[AdminPage] 📡 Online API response status:', res.status);
-
-      if (res.ok) {
-        const d = await res.json();
-        console.log('[AdminPage] ✅ Online data:', d);
-        setOnlineData(d);
-      } else {
-        const errorText = await res.text();
-        console.error('[AdminPage] ❌ Online API error:', res.status, errorText);
-        if (res.status === 403) {
-          console.error('[AdminPage] 🚫 Access forbidden - Attempting to setup admin...');
-          // 자동으로 setup-admin 호출
-          try {
-            const setupRes = await fetch(
-              `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/setup-admin`,
-              {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${accessToken}` }
-              }
-            );
-            if (setupRes.ok) {
-              const setupData = await setupRes.json();
-              console.log('[AdminPage] ✅ Admin setup successful:', setupData);
-              // 다시 online 데이터 로드 시도
-              const retryRes = await fetch(
-                `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/presence/online`,
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-              );
-              if (retryRes.ok) {
-                const d = await retryRes.json();
-                console.log('[AdminPage] ✅ Online data after setup:', d);
-                setOnlineData(d);
-              }
-            } else {
-              console.error('[AdminPage] ❌ Setup admin failed:', await setupRes.text());
-            }
-          } catch (setupError) {
-            console.error('[AdminPage] 💥 Setup admin exception:', setupError);
-          }
-        }
+      if (res.ok) setOnlineData(await res.json());
+      else if (res.status === 403) {
+        await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/setup-admin`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } });
+        const r2 = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/presence/online`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (r2.ok) setOnlineData(await r2.json());
       }
-    } catch (e) {
-      console.error('[AdminPage] 💥 Online API exception:', e);
-    }
+    } catch {}
   };
 
-  useEffect(() => {
-    load();
-    loadOnline();
-    const interval = setInterval(loadOnline, 30_000); // 30초마다 갱신
-    return () => clearInterval(interval);
-  }, []);
-
-  const load = async () => {
-    setLoading(true);
-    setError(null);
+  const loadStats = async () => {
+    setLoading(true); setError(null);
     try {
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/analytics/stats`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/analytics/stats`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (res.ok) {
         const d = await res.json();
         setStats({
-          totalVisits: d.totalVisits ?? d.total_visits ?? 0,
-          uniqueVisitors: d.uniqueVisitors ?? d.unique_visitors ?? 0,
-          todayVisitsCount: d.todayVisitsCount ?? d.today_visits ?? 0,
-          todayUniqueVisitors: d.todayUniqueVisitors ?? d.today_unique_visitors ?? 0,
-          totalUsers: d.totalUsers ?? d.total_users ?? 0,
-          approvedUsers: d.approvedUsers ?? d.approved_users ?? 0,
-          pendingUsers: d.pendingUsers ?? d.pending_users ?? 0,
-          todayUsersCount: d.todayUsersCount ?? d.today_users ?? 0,
-          totalOwnedGames: d.totalOwnedGames ?? d.total_owned_games ?? 0,
-          totalWishlistGames: d.totalWishlistGames ?? d.total_wishlist_games ?? 0,
+          totalVisits: d.totalVisits ?? 0, uniqueVisitors: d.uniqueVisitors ?? 0,
+          todayVisitsCount: d.todayVisitsCount ?? 0, todayUniqueVisitors: d.todayUniqueVisitors ?? 0,
+          totalUsers: d.totalUsers ?? 0, approvedUsers: d.approvedUsers ?? 0,
+          pendingUsers: d.pendingUsers ?? 0, todayUsersCount: d.todayUsersCount ?? 0,
+          totalOwnedGames: d.totalOwnedGames ?? 0, totalWishlistGames: d.totalWishlistGames ?? 0,
         });
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setError(err.error || `서버 오류 (${res.status})`);
-      }
-    } catch {
-      setError('네트워크 오류가 발생했습니다');
-    } finally { setLoading(false); }
+      } else { const e = await res.json().catch(() => ({})); setError(e.error || `오류 (${res.status})`); }
+    } catch { setError('네트워크 오류'); }
+    finally { setLoading(false); }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-cyan-500" /></div>;
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/beta-testers`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (res.ok) { const d = await res.json(); setBetaUsers(Array.isArray(d) ? d : (d.testers ?? d.users ?? [])); }
+    } catch {}
+    finally { setUsersLoading(false); }
+  };
 
-  if (error || !stats) return (
+  const loadPosts = async () => {
+    setPostsLoading(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (res.ok) { const d = await res.json(); setRecentPosts((Array.isArray(d) ? d : (d.posts ?? [])).filter((p: any) => !p.isDraft)); }
+    } catch {}
+    finally { setPostsLoading(false); }
+  };
+
+  const loadGA4 = async (token: string, propId: string) => {
+    if (!token || !propId) return;
+    setGa4Loading(true); setGa4Error(null);
+    try {
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const base = `https://analyticsdata.googleapis.com/v1beta/properties/${propId}`;
+
+      const [rtRes, srcRes, pvRes] = await Promise.all([
+        fetch(`${base}:runRealtimeReport`, { method: 'POST', headers, body: JSON.stringify({ metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], dimensions: [{ name: 'unifiedScreenName' }], limit: 10 }) }),
+        fetch(`${base}:runReport`, { method: 'POST', headers, body: JSON.stringify({ dateRanges: [{ startDate: '7daysAgo', endDate: 'today' }], metrics: [{ name: 'sessions' }], dimensions: [{ name: 'sessionSource' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: 8 }) }),
+        fetch(`${base}:runReport`, { method: 'POST', headers, body: JSON.stringify({ dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }], metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }], dimensions: [{ name: 'date' }], orderBys: [{ dimension: { dimensionName: 'date' } }] }) }),
+      ]);
+
+      if (!rtRes.ok) { const e = await rtRes.json().catch(() => ({})); throw new Error(e.error?.message || `GA4 오류 (${rtRes.status})`); }
+      const rt = await rtRes.json();
+      const src = srcRes.ok ? await srcRes.json() : null;
+      const pv = pvRes.ok ? await pvRes.json() : null;
+
+      setGa4Data({
+        activeUsers: (rt.rows || []).reduce((s: number, r: any) => s + parseInt(r.metricValues?.[0]?.value || '0'), 0),
+        topPages: (rt.rows || []).map((r: any) => ({ page: r.dimensionValues?.[0]?.value || '/', users: parseInt(r.metricValues?.[0]?.value || '0') })),
+        sources: (src?.rows || []).map((r: any) => ({ source: r.dimensionValues?.[0]?.value || '(direct)', sessions: parseInt(r.metricValues?.[0]?.value || '0') })),
+        pvTrend: (pv?.rows || []).map((r: any) => ({ date: r.dimensionValues?.[0]?.value || '', views: parseInt(r.metricValues?.[0]?.value || '0'), users: parseInt(r.metricValues?.[1]?.value || '0') })),
+      });
+    } catch (e: any) { setGa4Error(e.message || 'GA4 데이터를 불러올 수 없습니다'); }
+    finally { setGa4Loading(false); }
+  };
+
+  const connectGA4 = () => {
+    const t = ga4TokenInput || ga4Token;
+    const p = ga4PropInput;
+    if (p) localStorage.setItem('ga4_property_id', p);
+    if (t) localStorage.setItem('ga4_access_token', t);
+    setGa4PropId(p); setGa4Token(t);
+    loadGA4(t, p);
+  };
+
+  useEffect(() => {
+    loadStats(); loadOnline(); loadUsers(); loadPosts();
+    const interval = setInterval(loadOnline, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'ga4' && ga4PropId && ga4Token && !ga4Data && !ga4Loading) loadGA4(ga4Token, ga4PropId);
+  }, [activeTab]);
+
+  // ── 계산된 통계 ──
+  const totalLikes = recentPosts.reduce((s, p) => s + (Array.isArray(p.likes) ? p.likes.length : 0), 0);
+  const totalComments = recentPosts.reduce((s, p) => s + (Array.isArray(p.comments) ? p.comments.length : 0), 0);
+  const categoryDist = recentPosts.reduce((acc: Record<string, number>, p) => { const c = p.category || '기타'; acc[c] = (acc[c] || 0) + 1; return acc; }, {});
+  const categoryData = Object.entries(categoryDist).map(([label, value]) => ({ label, value: value as number, color: CATEGORY_COLORS[label] || '#9ca3af' }));
+  const dailyPosts = getDailyCounts(recentPosts, 'createdAt', 14);
+  const todayPosts = dailyPosts[dailyPosts.length - 1]?.value ?? 0;
+  const dailyUsers = getDailyCounts(betaUsers, 'created_at', 14);
+  const weeklyUsers = getWeeklyCounts(betaUsers, 'created_at', 8);
+  const monthlyUsers = getMonthlyCounts(betaUsers, 'created_at', 6);
+  const userPeriodData = userPeriod === 'daily' ? dailyUsers : userPeriod === 'weekly' ? weeklyUsers : monthlyUsers;
+  const newUsersThisWeek = weeklyUsers[weeklyUsers.length - 1]?.value ?? 0;
+  const newUsersThisMonth = monthlyUsers[monthlyUsers.length - 1]?.value ?? 0;
+
+  // GA4 차트 데이터 변환
+  const ga4PvChart = (ga4Data?.pvTrend ?? []).slice(-14).map((d: any) => ({
+    label: `${parseInt(d.date.slice(4, 6))}/${parseInt(d.date.slice(6, 8))}`,
+    value: d.views,
+  }));
+  const ga4SrcData = (ga4Data?.sources ?? []).map((s: any) => ({
+    label: s.source, value: s.sessions,
+    color: s.source === 'google' ? '#4285F4' : s.source === '(direct)' ? '#34A853' : s.source === 'naver' ? '#03C75A' : s.source === 'kakao' ? '#FEE500' : '#9ca3af',
+  }));
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-cyan-500" /></div>;
+  if (error && !stats) return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
       <AlertCircle className="w-10 h-10 text-red-400" />
       <p className="text-gray-600 font-medium">통계를 불러올 수 없습니다</p>
       <p className="text-sm text-gray-400">{error}</p>
-      <button onClick={load} className="flex items-center gap-2 px-4 py-2 text-sm bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors">
-        <RefreshCw className="w-4 h-4" /> 다시 시도
-      </button>
+      <button onClick={loadStats} className="flex items-center gap-2 px-4 py-2 text-sm bg-cyan-500 text-white rounded-lg hover:bg-cyan-600"><RefreshCw className="w-4 h-4" /> 다시 시도</button>
     </div>
   );
 
+  const tabs = [{ id: 'overview', label: '종합' }, { id: 'users', label: '사용자' }, { id: 'posts', label: '게시물' }, { id: 'ga4', label: 'GA4' }] as const;
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <button onClick={load} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"><RefreshCw className="w-3.5 h-3.5" /> 새로고침</button>
+    <div className="space-y-5">
+      {/* 탭 */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
-      {/* 현재 접속자 */}
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <div className="w-3 h-3 bg-green-500 rounded-full" />
-              <div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping opacity-60" />
+
+      {/* ─── 종합 탭 ─── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-5">
+          {/* 현재 접속자 */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="relative"><div className="w-2.5 h-2.5 bg-green-500 rounded-full" /><div className="absolute inset-0 w-2.5 h-2.5 bg-green-500 rounded-full animate-ping opacity-60" /></div>
+                <span className="text-sm font-bold text-green-800">현재 접속 중</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-black text-green-700">{onlineData.count}</span>
+                <span className="text-sm text-green-600">명</span>
+                <button onClick={loadOnline} className="text-green-500 hover:text-green-700"><RefreshCw className="w-3.5 h-3.5" /></button>
+              </div>
             </div>
-            <span className="text-sm font-bold text-green-800">현재 접속중</span>
+            {onlineData.users.length > 0 && (
+              <div className="space-y-1 max-h-24 overflow-y-auto">
+                {onlineData.users.map((u, i) => { const sec = Math.floor((Date.now() - u.lastSeen) / 1000); return (
+                  <div key={i} className="flex justify-between text-xs">
+                    <span className="text-green-800 font-medium">{u.email || '익명'}</span>
+                    <span className="text-green-500">{sec < 60 ? `${sec}초 전` : `${Math.floor(sec / 60)}분 전`}</span>
+                  </div>
+                ); })}
+              </div>
+            )}
+            <p className="text-xs text-green-500 mt-1.5">3분 이내 활동 기준 · 30초 자동 갱신</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-green-700">{onlineData.count}</span>
-            <span className="text-sm text-green-600">명</span>
-            <button onClick={loadOnline} className="ml-1 text-green-500 hover:text-green-700">
-              <RefreshCw className="w-3.5 h-3.5" />
+
+          {/* 방문 통계 */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">방문</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard icon={<Activity className="w-5 h-5 text-blue-600" />} label="총 방문 수" value={stats!.totalVisits.toLocaleString()} color="bg-blue-50" />
+              <StatCard icon={<Users className="w-5 h-5 text-purple-600" />} label="순 방문자" value={stats!.uniqueVisitors.toLocaleString()} color="bg-purple-50" />
+              <StatCard icon={<TrendingUp className="w-5 h-5 text-green-600" />} label="오늘 방문" value={stats!.todayVisitsCount.toLocaleString()} color="bg-green-50" />
+              <StatCard icon={<Eye className="w-5 h-5 text-orange-600" />} label="오늘 순방문자" value={stats!.todayUniqueVisitors.toLocaleString()} color="bg-orange-50" />
+            </div>
+          </div>
+
+          {/* 주요 지표 */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">주요 지표</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm text-center">
+                <div className="text-xl font-black text-cyan-600">{stats!.totalUsers}</div>
+                <div className="text-xs text-gray-500 mt-0.5">전체 회원</div>
+                <div className="text-xs text-green-500 font-medium">+{stats!.todayUsersCount} 오늘</div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm text-center">
+                <div className="text-xl font-black text-indigo-600">{postsLoading ? '…' : recentPosts.length === 100 ? '100+' : recentPosts.length}</div>
+                <div className="text-xs text-gray-500 mt-0.5">최근 게시물</div>
+                <div className="text-xs text-green-500 font-medium">+{postsLoading ? '…' : todayPosts} 오늘</div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm text-center">
+                <div className="text-xl font-black text-amber-600">{stats!.totalOwnedGames.toLocaleString()}</div>
+                <div className="text-xs text-gray-500 mt-0.5">게임 등록</div>
+                <div className="text-xs text-purple-500 font-medium">위시 {stats!.totalWishlistGames.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 신규 가입 추이 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">신규 가입 (최근 14일)</span>
+              {usersLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+            </div>
+            <MiniBarChart data={dailyUsers} color="#06b6d4" height={80} />
+          </div>
+
+          {/* 게시물 작성 추이 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">게시물 작성 (최근 14일)</span>
+              {postsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+            </div>
+            <MiniBarChart data={dailyPosts} color="#8b5cf6" height={80} />
+          </div>
+
+          <div className="flex justify-end">
+            <button onClick={() => { loadStats(); loadUsers(); loadPosts(); }} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+              <RefreshCw className="w-3.5 h-3.5" /> 새로고침
             </button>
           </div>
         </div>
-        {onlineData.users.length > 0 && (
-          <div className="space-y-1.5 max-h-32 overflow-y-auto">
-            {onlineData.users.map((u, i) => {
-              const secAgo = Math.floor((Date.now() - u.lastSeen) / 1000);
-              const timeLabel = secAgo < 60 ? `${secAgo}초 전` : `${Math.floor(secAgo / 60)}분 전`;
-              return (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-green-800 font-medium">{u.email || '익명'}</span>
-                  <span className="text-green-500">{timeLabel}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <p className="text-xs text-green-500 mt-2">최근 3분 이내 활동 기준 · 30초마다 자동 갱신</p>
-      </div>
+      )}
 
-      <div>
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">방문자</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={<Activity className="w-5 h-5 text-blue-600" />} label="총 방문 수" value={stats.totalVisits.toLocaleString()} color="bg-blue-50" />
-          <StatCard icon={<Users className="w-5 h-5 text-purple-600" />} label="순 방문자" value={stats.uniqueVisitors.toLocaleString()} color="bg-purple-50" />
-          <StatCard icon={<TrendingUp className="w-5 h-5 text-green-600" />} label="오늘 방문" value={stats.todayVisitsCount.toLocaleString()} color="bg-green-50" />
-          <StatCard icon={<Clock className="w-5 h-5 text-orange-600" />} label="오늘 순방문자" value={stats.todayUniqueVisitors.toLocaleString()} color="bg-orange-50" />
+      {/* ─── 사용자 탭 ─── */}
+      {activeTab === 'users' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard icon={<Users className="w-5 h-5 text-cyan-600" />} label="전체 가입자" value={stats!.totalUsers} color="bg-cyan-50" />
+            <StatCard icon={<Check className="w-5 h-5 text-green-600" />} label="승인된 회원" value={stats!.approvedUsers} color="bg-green-50" />
+            <StatCard icon={<AlertCircle className="w-5 h-5 text-orange-600" />} label="승인 대기" value={stats!.pendingUsers} color="bg-orange-50" />
+            <StatCard icon={<Calendar className="w-5 h-5 text-blue-600" />} label="오늘 신규" value={stats!.todayUsersCount} color="bg-blue-50" />
+          </div>
+
+          {/* 이번 주 / 이번 달 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-cyan-50 rounded-xl border border-cyan-100 p-3.5 text-center">
+              <div className="text-xl font-black text-cyan-700">{newUsersThisWeek}</div>
+              <div className="text-xs text-cyan-500 mt-0.5">이번 주 신규</div>
+            </div>
+            <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-3.5 text-center">
+              <div className="text-xl font-black text-indigo-700">{newUsersThisMonth}</div>
+              <div className="text-xs text-indigo-500 mt-0.5">이번 달 신규</div>
+            </div>
+          </div>
+
+          {/* 기간별 신규 가입 차트 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">신규 가입 추이</span>
+              <div className="flex gap-1">
+                {(['daily', 'weekly', 'monthly'] as const).map(p => (
+                  <button key={p} onClick={() => setUserPeriod(p)}
+                    className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${userPeriod === p ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {usersLoading ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-cyan-400" /></div>
+              : <MiniBarChart data={userPeriodData} color="#06b6d4" height={96} />}
+            <p className="text-xs text-gray-400 mt-2 text-right">{userPeriod === 'daily' ? '최근 14일' : userPeriod === 'weekly' ? '최근 8주' : '최근 6개월'}</p>
+          </div>
+
+          {/* 회원 상태 분포 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <span className="text-sm font-semibold text-gray-700">회원 상태 분포</span>
+            <div className="mt-3">
+              <HBarChart data={[
+                { label: '승인', value: stats!.approvedUsers, color: '#10b981' },
+                { label: '대기', value: stats!.pendingUsers, color: '#f59e0b' },
+                { label: '거절', value: Math.max(0, stats!.totalUsers - stats!.approvedUsers - stats!.pendingUsers), color: '#ef4444' },
+              ]} />
+            </div>
+          </div>
+
+          {/* 최근 가입 회원 */}
+          {!usersLoading && betaUsers.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <span className="text-sm font-semibold text-gray-700">최근 가입 회원 (최근 10명)</span>
+              <div className="mt-3 space-y-2.5">
+                {[...betaUsers].filter(u => u.created_at)
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .slice(0, 10).map((u, i) => {
+                    const d = new Date(u.created_at);
+                    return (
+                      <div key={i} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-700 font-medium truncate flex-1">{u.name || u.username || u.email || '이름없음'}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.status === 'approved' ? 'bg-green-100 text-green-700' : u.status === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                            {u.status === 'approved' ? '승인' : u.status === 'pending' ? '대기' : '거절'}
+                          </span>
+                          <span className="text-xs text-gray-400">{`${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-      <div>
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">사용자</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={<Users className="w-5 h-5 text-cyan-600" />} label="전체 가입자" value={stats.totalUsers} color="bg-cyan-50" />
-          <StatCard icon={<Check className="w-5 h-5 text-green-600" />} label="승인된 사용자" value={stats.approvedUsers} color="bg-green-50" />
-          <StatCard icon={<AlertCircle className="w-5 h-5 text-orange-600" />} label="승인 대기" value={stats.pendingUsers} color="bg-orange-50" />
-          <StatCard icon={<Calendar className="w-5 h-5 text-blue-600" />} label="오늘 신규" value={stats.todayUsersCount} color="bg-blue-50" />
+      )}
+
+      {/* ─── 게시물 탭 ─── */}
+      {activeTab === 'posts' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard icon={<MessageSquare className="w-5 h-5 text-indigo-600" />} label="수집된 게시물" value={postsLoading ? '…' : recentPosts.length} color="bg-indigo-50" />
+            <StatCard icon={<Calendar className="w-5 h-5 text-green-600" />} label="오늘 게시물" value={postsLoading ? '…' : todayPosts} color="bg-green-50" />
+            <StatCard icon={<Heart className="w-5 h-5 text-red-500" />} label="총 좋아요" value={postsLoading ? '…' : totalLikes.toLocaleString()} color="bg-red-50" />
+            <StatCard icon={<MessageSquare className="w-5 h-5 text-blue-500" />} label="총 댓글" value={postsLoading ? '…' : totalComments.toLocaleString()} color="bg-blue-50" />
+          </div>
+
+          {/* 평균 참여율 */}
+          {!postsLoading && recentPosts.length > 0 && (
+            <div className="bg-gradient-to-r from-cyan-50 to-indigo-50 rounded-xl border border-cyan-100 p-4">
+              <p className="text-xs font-semibold text-gray-500 mb-3">게시물당 평균 참여</p>
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <div className="text-xl font-black text-cyan-700">{(totalLikes / recentPosts.length).toFixed(1)}</div>
+                  <div className="text-xs text-cyan-500">좋아요 / 게시물</div>
+                </div>
+                <div>
+                  <div className="text-xl font-black text-indigo-700">{(totalComments / recentPosts.length).toFixed(1)}</div>
+                  <div className="text-xs text-indigo-500">댓글 / 게시물</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 일별 게시물 차트 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">일별 게시물 (최근 14일)</span>
+              {postsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+            </div>
+            <MiniBarChart data={dailyPosts} color="#8b5cf6" height={96} />
+          </div>
+
+          {/* 카테고리 분포 */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">카테고리별 분포</span>
+              {postsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+            </div>
+            {postsLoading ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-purple-400" /></div>
+              : categoryData.length > 0 ? <HBarChart data={categoryData} />
+              : <p className="text-center text-sm text-gray-400 py-4">데이터 없음</p>}
+          </div>
+
+          {/* 좋아요 TOP 5 */}
+          {!postsLoading && recentPosts.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <span className="text-sm font-semibold text-gray-700">좋아요 TOP 5</span>
+              <div className="mt-3 space-y-3">
+                {[...recentPosts]
+                  .sort((a, b) => (Array.isArray(b.likes) ? b.likes.length : 0) - (Array.isArray(a.likes) ? a.likes.length : 0))
+                  .slice(0, 5).map((p, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="text-xs font-black text-gray-300 w-4 flex-shrink-0 mt-0.5">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 truncate">{p.content?.replace(/\n/g, ' ').slice(0, 45) || '(내용없음)'}</p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-gray-400">{p.userName}</span>
+                          <span className="text-xs text-red-400 font-medium">♥ {Array.isArray(p.likes) ? p.likes.length : 0}</span>
+                          <span className="text-xs text-blue-400 font-medium">💬 {Array.isArray(p.comments) ? p.comments.length : 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 text-center">* 최근 100개 게시물 기준</p>
         </div>
-      </div>
-      <div>
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">게임 데이터</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={<Gamepad2 className="w-5 h-5 text-indigo-600" />} label="전체 보유 게임" value={stats.totalOwnedGames.toLocaleString()} color="bg-indigo-50" />
-          <StatCard icon={<List className="w-5 h-5 text-pink-600" />} label="전체 위시리스트" value={stats.totalWishlistGames.toLocaleString()} color="bg-pink-50" />
+      )}
+
+      {/* ─── GA4 탭 ─── */}
+      {activeTab === 'ga4' && (
+        <div className="space-y-5">
+          {/* 연결 설정 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-bold text-blue-800">GA4 Data API 연결</span>
+              {ga4Data && <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">연결됨</span>}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-blue-700 block mb-1">GA4 속성 ID (숫자형)</label>
+                <input value={ga4PropInput} onChange={e => setGa4PropInput(e.target.value)} placeholder="예: 123456789"
+                  className="w-full px-3 py-2 rounded-lg border border-blue-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                <p className="text-xs text-blue-400 mt-1">GA4 → 관리 → 속성 설정 → 속성 ID (측정 ID G-XXXX 와 다름)</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-blue-700 block mb-1">OAuth 2.0 액세스 토큰</label>
+                <input type="password" value={ga4TokenInput} onChange={e => setGa4TokenInput(e.target.value)} placeholder="ya29.A0... (1시간 유효)"
+                  className="w-full px-3 py-2 rounded-lg border border-blue-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-500 hover:underline mt-1 inline-flex items-center gap-1">
+                  <Link className="w-3 h-3" /> OAuth Playground에서 토큰 발급 → Step 1: analytics.readonly 선택
+                </a>
+              </div>
+              <button onClick={connectGA4} disabled={!ga4PropInput || ga4Loading}
+                className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                {ga4Loading ? <><Loader2 className="w-4 h-4 animate-spin" /> 불러오는 중...</> : <><RefreshCw className="w-4 h-4" /> 데이터 불러오기</>}
+              </button>
+            </div>
+          </div>
+
+          {/* 에러 */}
+          {ga4Error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-700">{ga4Error}</p>
+                <p className="text-xs text-red-400 mt-1">토큰 만료 시 OAuth Playground에서 새 토큰을 발급하세요.</p>
+              </div>
+            </div>
+          )}
+
+          {/* GA4 데이터 */}
+          {ga4Data && (
+            <div className="space-y-4">
+              {/* 실시간 활성 사용자 */}
+              <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="relative"><div className="w-2.5 h-2.5 bg-orange-500 rounded-full" /><div className="absolute inset-0 bg-orange-500 rounded-full animate-ping opacity-60" /></div>
+                  <span className="text-sm font-bold text-orange-800">실시간 활성 사용자</span>
+                </div>
+                <div className="text-3xl font-black text-orange-700">{ga4Data.activeUsers}<span className="text-lg font-semibold text-orange-500 ml-1">명</span></div>
+              </div>
+
+              {/* 유입 경로 */}
+              {ga4SrcData.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                  <span className="text-sm font-semibold text-gray-700">유입 경로 (최근 7일)</span>
+                  <div className="mt-3"><HBarChart data={ga4SrcData} /></div>
+                </div>
+              )}
+
+              {/* 페이지뷰 추이 */}
+              {ga4PvChart.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                  <span className="text-sm font-semibold text-gray-700">페이지뷰 추이 (최근 30일)</span>
+                  <div className="mt-3"><MiniBarChart data={ga4PvChart} color="#4285F4" height={96} /></div>
+                </div>
+              )}
+
+              {/* 실시간 인기 페이지 */}
+              {ga4Data.topPages?.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                  <span className="text-sm font-semibold text-gray-700">실시간 인기 페이지</span>
+                  <div className="mt-3 space-y-2">
+                    {ga4Data.topPages.slice(0, 8).map((p: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 truncate flex-1">{p.page}</span>
+                        <span className="text-xs font-bold text-blue-600 ml-2 flex-shrink-0">{p.users}명</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => loadGA4(ga4Token, ga4PropId)} disabled={ga4Loading}
+                className="w-full py-2 text-sm text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-50 transition-all flex items-center justify-center gap-2">
+                <RefreshCw className={`w-3.5 h-3.5 ${ga4Loading ? 'animate-spin' : ''}`} /> 새로고침
+              </button>
+            </div>
+          )}
+
+          {!ga4Data && !ga4Loading && !ga4Error && (
+            <div className="text-center py-10 text-gray-400">
+              <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">위에서 GA4 속성 ID와 액세스 토큰을 입력하면<br />실시간 방문자·페이지뷰·유입경로를 확인할 수 있습니다.</p>
+            </div>
+          )}
+
+          {/* GA4 대시보드 바로가기 */}
+          <a href="https://analytics.google.com" target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-3 hover:bg-gray-100 transition-all">
+            <span className="text-sm text-gray-600">Google Analytics 전체 대시보드</span>
+            <span className="text-xs text-blue-500 font-medium flex items-center gap-1"><Link className="w-3 h-3" /> 열기</span>
+          </a>
         </div>
-      </div>
+      )}
     </div>
   );
 }
