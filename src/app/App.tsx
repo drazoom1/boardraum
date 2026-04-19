@@ -402,6 +402,11 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [notificationPost, setNotificationPost] = useState<FeedPost | null>(null); // 알림 클릭 시 모달로 보여줄 포스트
   const [notificationPostLoading, setNotificationPostLoading] = useState(false);
 
+  // 알림 포스트 모달 닫힐 때 SEO 기본값 복원
+  useEffect(() => {
+    if (!notificationPost) resetSEO();
+  }, [notificationPost]);
+
   // /post/:postId URL 진입 시 게시물 모달로 직접 열기
   useEffect(() => {
     if (!initialPostId) return;
@@ -415,6 +420,8 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       .then(d => {
         if (d.post) {
           setNotificationPost(d.post);
+          const gameName = d.post.linkedGame?.name || d.post.linkedGames?.[0]?.name;
+          updatePostSEO(d.post.id, d.post.content, gameName, d.post.images?.[0]);
         } else {
           setHighlightFeedPostId(initialPostId);
         }
