@@ -4075,10 +4075,17 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
         if (isEligible && activeEvents.some((e: any) => e.active)) {
           const resetEvents = activeEvents.map((e: any) => {
             if (!e.active) return e;
+            // ★ 카드로 이미 타이머가 0이 된 이벤트는 리셋 금지
+            // → 다른 기기의 stale 상태에서 글 써도 reductionSeconds 유지
+            const effectiveDurationMs = (e.durationMinutes || 60) * 60 * 1000 - (e.reductionSeconds || 0) * 1000;
+            if (effectiveDurationMs <= 0) {
+              console.log(`[이벤트] 타이머 만료 상태에서 글 작성 → 카드 리셋 SKIP (eventId=${e.id}, userId=${user.id})`);
+              return e; // reductionSeconds 그대로 유지
+            }
             return { ...e, reductionSeconds: 0, cardUsageLog: [], lastReductionAt: null, lastReductionBy: null };
           });
           await kv.set('last_post_events', resetEvents);
-          console.log(`[이벤트] 선두 교체 → 카드 감축 리셋 (userId=${user.id}, postId=${postId}, category=${category})`);
+          console.log(`[이벤트] 선두 교체 처리 (userId=${user.id}, postId=${postId}, category=${category})`);
         } else if (!isEligible) {
           console.log(`[이벤트] 실격/제외 유저 → 이벤트 참여 제외 (userId=${user.id})`);
         }
@@ -5268,6 +5275,10 @@ async function findEventWinner(event: any): Promise<{ winnerUserId: string | nul
   const startedAtMs = new Date(event.startedAt).getTime();
   const disqualified: string[] = event.disqualified || [];
   const excluded: string[] = event.excluded || [];
+  const reductionMs2   = (event.reductionSeconds || 0) * 1000;
+  const baseDurationMs2 = (event.durationMinutes || 60) * 60 * 1000;
+  const isExpiredByCards2 = reductionMs2 >= baseDurationMs2;
+  const cardCutoffMs2 = isExpiredByCards2 && event.lastReductionAt ? Number(event.lastReductionAt) : Infinity;
   const allPostsData = await getByPrefix('beta_post_');
   const eligiblePosts = allPostsData
     .map((d: any) => d.value)
@@ -5276,6 +5287,7 @@ async function findEventWinner(event: any): Promise<{ winnerUserId: string | nul
       !p.isDraft &&
       p.category === '이벤트' &&
       new Date(p.createdAt).getTime() >= startedAtMs &&
+      new Date(p.createdAt).getTime() <= cardCutoffMs2 &&
       !disqualified.includes(p.userId) &&
       !excluded.includes(p.userId)
     )
@@ -9335,6 +9347,11 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
     // 잘못된 winner(또는 null)를 보낼 수 있음 → 서버가 KV에서 직접 계산
     const disqualified: string[] = event.disqualified || [];
     const excluded: string[]     = event.excluded     || [];
+    // ★ 카드로 타이머가 0이 된 경우 lastReductionAt 이후 글은 당첨 대상 제외
+    const reductionMs      = (event.reductionSeconds || 0) * 1000;
+    const baseDurationMs   = (event.durationMinutes || 60) * 60 * 1000;
+    const isExpiredByCards = reductionMs >= baseDurationMs;
+    const cardCutoffMs     = isExpiredByCards && event.lastReductionAt ? Number(event.lastReductionAt) : Infinity;
     const allPostsData = await getByPrefix('beta_post_');
     const eligiblePosts = allPostsData
       .map((d: any) => d.value)
@@ -9343,6 +9360,7 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
         !p.isDraft &&
         p.category === '이벤트' &&
         new Date(p.createdAt).getTime() >= startedAtMs &&
+        new Date(p.createdAt).getTime() <= cardCutoffMs && // 카드 완전소진 후 글 제외
         !disqualified.includes(p.userId) &&
         !excluded.includes(p.userId)
       )

@@ -2266,7 +2266,7 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
   );
 }
 
-function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, accessToken, compact = false, onAutoClose }: { event: any; posts: any[]; bonusCards?: number; onUseCard?: () => void; userId?: string | null; accessToken?: string; compact?: boolean; onAutoClose?: (eventId: string, winner: any) => void }) {
+function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, accessToken, compact = false, onAutoClose, onLowTimer }: { event: any; posts: any[]; bonusCards?: number; onUseCard?: () => void; userId?: string | null; accessToken?: string; compact?: boolean; onAutoClose?: (eventId: string, winner: any) => void; onLowTimer?: () => void }) {
   const [remaining, setRemaining] = useState(-1); // 남은 초 (-1=초기화전)
   const [initialized, setInitialized] = useState(false);
   const [showNoCardModal, setShowNoCardModal] = useState(false);
@@ -2301,6 +2301,9 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const lastPostRef = useRef<any>(lastPost);
   eventRef.current = event;
   lastPostRef.current = lastPost;
+  const onLowTimerRef = useRef(onLowTimer);
+  onLowTimerRef.current = onLowTimer;
+  const lowTimerFiredRef = useRef(false); // 한 번만 발화
 
   // calc 함수를 ref로 보관 → 외부 useEffect에서도 즉시 호출 가능
   const calcRef = useRef<(() => void) | null>(null);
@@ -2342,6 +2345,8 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
         setRemaining(diff);
         setInitialized(true);
+        // 남은 시간 120초 미만 → 빠른 폴링 트리거 (한 번만)
+        if (diff > 0 && diff <= 120 && !lowTimerFiredRef.current) { lowTimerFiredRef.current = true; onLowTimerRef.current?.(); }
         // 선두 없이 타이머 종료
         if (diff === 0 && !autoCloseCalledRef.current) {
           autoCloseCalledRef.current = true;
@@ -2370,6 +2375,8 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
       setRemaining(diff);
       setInitialized(true);
+      // 남은 시간 120초 미만 → 빠른 폴링 트리거 (한 번만)
+      if (diff > 0 && diff <= 120 && !lowTimerFiredRef.current) { lowTimerFiredRef.current = true; onLowTimerRef.current?.(); }
       // 타이머 0 → 즉시 낙관적 업데이트 + 백그라운드 서버 확인
       if (diff === 0 && !autoCloseCalledRef.current) {
         autoCloseCalledRef.current = true;
@@ -3085,6 +3092,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
 export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
+  const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
   const [referralRankEvent, setReferralRankEvent] = useState<any>(null);
   const [eventWinners, setEventWinners] = useState<any[]>([]);
   const [bonusCards, setBonusCards] = useState(0);
@@ -3302,9 +3310,11 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       } catch {}
     };
     fetchEvent();
-    const t = setInterval(fetchEvent, 15000); // 15초마다 폴링 (종료된 이벤트 빠른 감지)
+    // 타이머 120초 미만이면 3초, 아니면 15초 폴링
+    const interval = eventFastPoll ? 3000 : 15000;
+    const t = setInterval(fetchEvent, interval);
     return () => clearInterval(t);
-  }, [accessToken]);
+  }, [accessToken, eventFastPoll]);
 
   // 추천인 랭킹 이벤트 폴링 (60초마다)
   useEffect(() => {
@@ -3431,7 +3441,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           {lastPostEvents
             .filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id))
             .map((evt: any) => (
-            <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} />
+            <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} onLowTimer={() => setEventFastPoll(true)} />
           ))}
         </div>
       )}
