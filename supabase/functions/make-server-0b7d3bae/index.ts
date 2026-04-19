@@ -1156,6 +1156,81 @@ app.get("/make-server-0b7d3bae/game/owner-count", async (c) => {
   } catch (e) { return c.json({ count: 0 }); }
 });
 
+// 임시 디버그: 특정 이메일 유저의 KV 컬렉션 키 + 게임 목록 확인
+// user_ 키 총 개수 + pagination 실제 반환 수 확인
+app.get("/make-server-0b7d3bae/debug/kv-count", async (c) => {
+  try {
+    const prefix = c.req.query('prefix') || 'user_';
+    const { createClient } = await import('jsr:@supabase/supabase-js@2');
+    const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const { count, error } = await sb.from('kv_store_0b7d3bae').select('*', { count: 'exact', head: true }).like('key', prefix + '%');
+    // getByPrefixWithKeys로 실제 반환 수도 확인
+    const actual = await kv.getByPrefixWithKeys(prefix);
+    return c.json({ prefix, dbCount: count, actualReturned: actual.length, error: error?.message });
+  } catch (e) { return c.json({ error: String(e) }); }
+});
+
+// 특정 게임 bggId로 보유자 userId 전체 검색
+app.get("/make-server-0b7d3bae/debug/game-owners", async (c) => {
+  try {
+    const bggId = c.req.query('bggId') || '';
+    const name = c.req.query('name') || '';
+    if (!bggId && !name) return c.json({ error: 'bggId or name required' });
+    const norm = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+    const tn = norm(name);
+    const allItems = await kv.getByPrefixWithKeys('user_');
+    const result: {key: string, userId: string, gameId: string, gameBggId: string, gameName: string}[] = [];
+    for (const { key, value } of allItems) {
+      if (key.includes('_backup') || key.includes('_profile_')) continue;
+      const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
+      for (const g of games) {
+        const match = (bggId && String(g?.bggId) === bggId) ||
+                      (tn && (norm(g?.koreanName || '') === tn || norm(g?.englishName || '') === tn));
+        if (match) {
+          const rest = key.slice(5);
+          const gi = rest.indexOf('_game_');
+          const userId = gi > 0 ? rest.slice(0, gi) : rest.endsWith('_owned') ? rest.slice(0, -6) : rest.endsWith('_wishlist') ? rest.slice(0, -9) : null;
+          if (userId) result.push({ key, userId, gameId: String(g.id), gameBggId: String(g.bggId), gameName: g.koreanName || g.englishName || '' });
+        }
+      }
+    }
+    return c.json(result);
+  } catch (e) { return c.json({ error: String(e) }); }
+});
+
+app.get("/make-server-0b7d3bae/debug/user-games", async (c) => {
+  try {
+    const email = c.req.query('email') || '';
+    if (!email) return c.json({ error: 'email required' });
+
+    // 1. beta_user_* 에서 userId 찾기
+    const betaUsers = await kv.getByPrefixWithKeys('beta_user_');
+    const matched = betaUsers.filter(({ value: u }) =>
+      (u?.email || '').toLowerCase() === email.toLowerCase()
+    );
+
+    if (!matched.length) return c.json({ error: '유저 없음', email });
+
+    const result: any[] = [];
+    for (const { key: bk, value: u } of matched) {
+      const userId = u?.userId || u?.id;
+      if (!userId) continue;
+
+      // 2. user_* 키 전체에서 이 userId 관련 키 수집
+      const allUserItems = await kv.getByPrefixWithKeys(`user_${userId}`);
+      const keys: any[] = [];
+      for (const { key, value } of allUserItems) {
+        const games = Array.isArray(value) ? value.map((g: any) => ({ id: g?.id, bggId: g?.bggId, koreanName: g?.koreanName, englishName: g?.englishName }))
+          : (value?.id ? [{ id: value.id, bggId: value.bggId, koreanName: value.koreanName, englishName: value.englishName }] : []);
+        keys.push({ key, gameCount: games.length, games });
+      }
+      result.push({ betaKey: bk, userId, email: u?.email, keys });
+    }
+
+    return c.json(result);
+  } catch (e) { return c.json({ error: String(e) }); }
+});
+
 
 app.get("/make-server-0b7d3bae/game/image-override", async (c) => {
   try {
@@ -10076,23 +10151,39 @@ app.get("/make-server-0b7d3bae/admin/site-games/:id/owners", async (c) => {
     };
 
     const allUserItems = await kv.getByPrefixWithKeys('user_');
+
+    // siteBggId/tn 미확정 시 user collections에서 id 매칭 게임 찾아 bggId/name 추출
+    if (!siteBggId || !tn) {
+      for (const { key, value } of allUserItems) {
+        if (key.includes('_backup') || key.includes('_profile_')) continue;
+        const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
+        const found = games.find((g: any) => g?.id && String(g.id) === sid);
+        if (found) {
+          if (!siteBggId && found.bggId) siteBggId = String(found.bggId);
+          if (!tn && found.koreanName) tn = normGame(found.koreanName);
+          if (!te && found.englishName) te = normGame(found.englishName);
+          if (siteBggId && tn) break;
+        }
+      }
+    }
+
     const userProfileMap: Record<string, any> = {};
 
     // beta_user_* → email, name, username
-    const betaUsers = await getByPrefix('beta_user_');
+    const betaUsers = await kv.getByPrefixWithKeys('beta_user_');
     for (const { value: u } of betaUsers) {
       const uid = u?.userId || u?.id;
       if (uid) userProfileMap[uid] = { ...userProfileMap[uid], ...u };
     }
     // user_profile_* → profileImage, 최신 닉네임 등
-    const profileItems = await getByPrefix('user_profile_');
+    const profileItems = await kv.getByPrefixWithKeys('user_profile_');
     for (const { value: p } of profileItems) {
       const uid = p?.userId || p?.id;
       if (uid) userProfileMap[uid] = { ...userProfileMap[uid], ...p };
     }
 
     for (const { key, value } of allUserItems) {
-      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp')) continue;
+      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp') || key.includes('_profile_')) continue;
       const userId = getUserId(key);
       if (!userId || seenUserIds.has(userId)) continue;
       const games = Array.isArray(value) ? value : (value?.id ? [value] : []);

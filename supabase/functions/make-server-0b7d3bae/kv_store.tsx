@@ -76,24 +76,29 @@ export const mdel = async (keys: string[]): Promise<void> => {
   }
 };
 
-// key와 value를 함께 반환하는 prefix 조회 (삭제용)
+// key와 value를 함께 반환하는 prefix 조회 (페이지네이션으로 max-rows 제한 우회)
 export const getByPrefixWithKeys = async (prefix: string): Promise<{key: string, value: any}[]> => {
-  const supabase = client()
-  // limit(10000): Supabase 기본 1000행 제한으로 신규 게시글 누락 방지
-  // order key desc: 최신 항목 우선 반환 (타임스탬프 키 기준)
-  const { data, error } = await supabase.from("kv_store_0b7d3bae").select("key, value").like("key", prefix + "%").order("key", { ascending: false }).limit(10000);
-  if (error) {
-    throw new Error(error.message);
+  const supabase = client();
+  // PostgREST max-rows = 1000이므로 pageSize를 999로 설정해 pagination이 작동하도록 함
+  const pageSize = 999;
+  const all: {key: string, value: any}[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from("kv_store_0b7d3bae")
+      .select("key, value").like("key", prefix + "%")
+      .order("key", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
-  return data ?? [];
+  return all;
 };
 
 // Search for key-value pairs by prefix.
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_0b7d3bae").select("key, value").like("key", prefix + "%").order("key", { ascending: false }).limit(10000);
-  if (error) {
-    throw new Error(error.message);
-  }
-  return data?.map((d) => d.value) ?? [];
+  const items = await getByPrefixWithKeys(prefix);
+  return items.map((d) => d.value);
 };
