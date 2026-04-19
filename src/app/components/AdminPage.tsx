@@ -5492,20 +5492,8 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
         {error && <div className="mt-3 p-3 bg-red-50 rounded-xl text-sm text-red-600">❌ {error}</div>}
 
-        {/* 중복 경고 */}
         {dupGroups.length > 0 && (
-          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <p className="text-sm font-bold text-amber-700 mb-2">⚠️ 동일 이름 중복 {dupGroups.length}건</p>
-            <div className="space-y-1.5">
-              {dupGroups.map((grp, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-amber-700">{grp.map((g: any) => g.koreanName || g.englishName || g.name).join(' / ')}</span>
-                  <button onClick={() => handleMerge(grp[0], grp[1])} disabled={saving}
-                    className="ml-2 px-2 py-0.5 bg-amber-200 hover:bg-amber-300 rounded text-amber-800 font-medium disabled:opacity-50">통합</button>
-                </div>
-              ))}
-            </div>
-          </div>
+          <p className="mt-2 text-xs text-amber-600">⚠️ 동일 이름 중복 {dupGroups.length}건 — 목록에서 🔀 통합 버튼으로 처리하세요</p>
         )}
 
         {/* 검색 + 필터 버튼 */}
