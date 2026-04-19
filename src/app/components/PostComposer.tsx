@@ -42,9 +42,20 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [allGames, setAllGames] = useState<any[]>([]);
   const searchTimerRef = useRef<any>(null);
   // 대기열: 모달 내부에서만 관리
   const [queue, setQueue] = useState<{ id: string; name: string; imageUrl: string; bggId?: string }[]>([]);
+
+  // AddGameDialog와 동일하게 전체 등록 게임 프리로드
+  useEffect(() => {
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/data/all-games`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then(r => r.ok ? r.json() : { games: [] })
+      .then(data => setAllGames(data.games || []))
+      .catch(() => {});
+  }, []);
 
   const getThumb = (g: any) => {
     const t = g.thumbnail || g.imageUrl || '';
@@ -59,6 +70,24 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
     setQ(val);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     if (!val.trim()) { setResults([]); return; }
+
+    // 등록 게임: allGames 로컬 필터 (AddGameDialog와 동일 방식 — 전체 데이터 즉시 표시)
+    const qLow = val.toLowerCase();
+    const localSite: any[] = [];
+    const seenKeys = new Set<string>();
+    for (const g of allGames) {
+      if (
+        (g.koreanName || '').toLowerCase().includes(qLow) ||
+        (g.englishName || '').toLowerCase().includes(qLow) ||
+        (g.name || '').toLowerCase().includes(qLow)
+      ) {
+        const dk = g.bggId ? `bgg_${g.bggId}` : `id_${g.id}`;
+        if (!seenKeys.has(dk)) { seenKeys.add(dk); localSite.push({ ...g, source: 'site' }); }
+      }
+    }
+    setResults(localSite.slice(0, 10)); // 즉시 표시
+
+    // BGG: 500ms 디바운스 후 비BGG 결과만 추가
     searchTimerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
@@ -66,9 +95,12 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
           `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`,
           { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` }, body: JSON.stringify({ query: val }) }
         );
-        if (res.ok) setResults(await res.json());
-        else setResults([]);
-      } catch { setResults([]); }
+        if (res.ok) {
+          const data = await res.json();
+          const bggOnly = data.filter((g: any) => g.source !== 'site');
+          setResults([...localSite.slice(0, 10), ...bggOnly]);
+        }
+      } catch {}
       finally { setLoading(false); }
     }, 500);
   };
@@ -172,7 +204,7 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
                   <p className="text-xs text-cyan-600 font-semibold mb-1 px-1 mt-1">📚 보드라움 회원 등록 게임</p>
                   {siteResults.map(g => {
                     const thumb = getThumb(g);
-                    return <GameRow key={g.id} g={g} id={String(g.id)} name={g.koreanName || g.name} imageUrl={thumb} />;
+                    return <GameRow key={g.id} g={g} id={g.bggId || String(g.id)} name={g.koreanName || g.name} imageUrl={thumb} />;
                   })}
                 </>
               )}

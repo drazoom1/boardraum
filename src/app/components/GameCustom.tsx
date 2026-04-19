@@ -1723,13 +1723,13 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
               </div>
             )}
 
-            {/* ── 보드라움 등록 게임 검색 (타이핑 즉시 표시 + 검색 버튼 결과) ── */}
-            {(searchQuery && filteredAllGames.length > 0) || filteredSiteSearchResults.length > 0 ? (
+            {/* ── 보드라움 등록 게임 검색 (allRegisteredGames 로컬 필터 — AddGameDialog와 동일) ── */}
+            {searchQuery && filteredAllGames.length > 0 ? (
               <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                 <div className="px-4 pt-4 pb-1">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">보드라움 등록 게임</p>
                 </div>
-                {[...filteredSiteSearchResults, ...filteredAllGames.filter(g => !filteredSiteSearchResults.some(s => s.id === g.id))].map(game => (
+                {filteredAllGames.map(game => (
                   <button key={game.id} onClick={() => {
                     setSelectedGame({ ...game, bggId: game.bggId || game.id });
                     setBggSearchQuery('');
