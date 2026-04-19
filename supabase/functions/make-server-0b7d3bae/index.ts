@@ -5263,13 +5263,46 @@ app.get("/make-server-0b7d3bae/bonus-cards/me", async (c) => {
   }
 });
 
-// 보너스카드 사용 (타이머 -30초)
+// Helper: 이벤트 당첨자(마지막 이벤트글 작성자) 계산
+async function findEventWinner(event: any): Promise<{ winnerUserId: string | null; winnerUserName: string | null; winnerPostId: string | null }> {
+  const startedAtMs = new Date(event.startedAt).getTime();
+  const disqualified: string[] = event.disqualified || [];
+  const excluded: string[] = event.excluded || [];
+  const allPostsData = await getByPrefix('beta_post_');
+  const eligiblePosts = allPostsData
+    .map((d: any) => d.value)
+    .filter((p: any) =>
+      p &&
+      !p.isDraft &&
+      p.category === '이벤트' &&
+      new Date(p.createdAt).getTime() >= startedAtMs &&
+      !disqualified.includes(p.userId) &&
+      !excluded.includes(p.userId)
+    )
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const leader = eligiblePosts[0] || null;
+  return {
+    winnerUserId: leader?.userId || null,
+    winnerUserName: leader?.userName || null,
+    winnerPostId: leader?.id || null,
+  };
+}
+
+// 보너스카드 사용 (타이머 감소)
 app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
   try {
     const accessToken = c.req.header('Authorization')?.split(' ')[1];
     if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
     const { data: { user } } = await supabase.auth.getUser(accessToken);
     if (!user?.id || !user.email) return c.json({ error: 'Unauthorized' }, 401);
+
+    // 연속 카드 사용 방지: 동일 유저 1초 이내 재사용 차단
+    const rateKey = `card_rate_${user.email.toLowerCase().trim()}`;
+    const lastUseTs: number | null = await kv.get(rateKey).catch(() => null);
+    if (lastUseTs && Date.now() - lastUseTs < 1000) {
+      return c.json({ error: '카드 사용 후 잠시 기다려 주세요.' }, 429);
+    }
+    await kv.set(rateKey, Date.now());
 
     // ★ 이메일 기반으로 현재 카드 수 조회
     const current = await readCardCountByEmail(user.email, user.id);
@@ -5298,16 +5331,18 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
     if (useEvents.length > 0) {
       const idx = useEvents.findIndex((e: any) => e.active);
       if (idx >= 0) {
+        const perCardSecs = useEvents[idx].cardReductionSeconds ?? 300;
         const usageEntry = {
           userId: user.id,
           userName: cardUserName,
           email: user.email,
           usedAt: new Date().toISOString(),
           cardsAfter: current - 1,
+          reductionSeconds: perCardSecs,
         };
         useEvents[idx] = {
           ...useEvents[idx],
-          reductionSeconds: (useEvents[idx].reductionSeconds || 0) + 300,
+          reductionSeconds: (useEvents[idx].reductionSeconds || 0) + perCardSecs,
           lastReductionAt: Date.now(),
           lastReductionBy: user.id,
           cardUsageLog: [...(useEvents[idx].cardUsageLog || []), usageEntry],
@@ -5318,17 +5353,19 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
     } else {
       const event = await kv.get('last_post_event');
       if (event?.active) {
+        const perCardSecs = event.cardReductionSeconds ?? 300;
         const usageEntry = {
           userId: user.id,
           userName: cardUserName,
           email: user.email,
           usedAt: new Date().toISOString(),
           cardsAfter: current - 1,
+          reductionSeconds: perCardSecs,
         };
         const currentReduction = event.reductionSeconds || 0;
         updatedEvent = {
           ...event,
-          reductionSeconds: currentReduction + 300,
+          reductionSeconds: currentReduction + perCardSecs,
           lastReductionAt: Date.now(),
           lastReductionBy: user.id,
           cardUsageLog: [...(event.cardUsageLog || []), usageEntry],
@@ -9343,6 +9380,19 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
     };
     await kv.set("last_event_winners", [...currentWinners, winnerEntry]);
 
+    // 히스토리에도 저장 (관리자 페이지에서 영구 조회 가능)
+    const autoCloseHistory: any[] = await kv.get("last_post_events_history") || [];
+    const autoCloseHistEntry = {
+      ...event,
+      active: false,
+      stoppedAt: new Date().toISOString(),
+      autoClose: true,
+      winnerUserName: winnerEntry.winnerUserName,
+      winnerUserId: winnerEntry.winnerUserId,
+      winnerPostId: winnerEntry.winnerPostId,
+    };
+    await kv.set("last_post_events_history", [autoCloseHistEntry, ...autoCloseHistory].slice(0, 100));
+
     console.log(`[auto-close] 이벤트 종료: eventId=${eventId}, winner=${winnerEntry.winnerUserName || '없음'}, post=${leaderPost?.id || 'none'}`);
     return c.json({ success: true, winner: winnerEntry });
   } catch (e) {
@@ -9450,29 +9500,41 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
 
     const body = await c.req.json();
-    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd } = body;
+    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds } = body;
 
     const events: any[] = await kv.get("last_post_events") || [];
 
     if (action === "stop") {
       const history: any[] = await kv.get("last_post_events_history") || [];
+      const winners: any[] = await kv.get("last_event_winners") || [];
 
       if (eventId) {
         const toStop = events.find((e: any) => e.id === eventId);
         if (toStop) {
-          const histEntry = { ...toStop, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id };
-          const newHistory = [histEntry, ...history].slice(0, 100);
-          await kv.set("last_post_events_history", newHistory);
+          // 당첨자 자동 계산 후 히스토리 + 배너 등록
+          const winnerInfo = await findEventWinner(toStop);
+          const histEntry = { ...toStop, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id, autoClose: false, winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId };
+          await kv.set("last_post_events_history", [histEntry, ...history].slice(0, 100));
+          const filteredWinners = winners.filter((w: any) => w.eventId !== eventId);
+          filteredWinners.push({ eventId, prize: toStop.prize, eventTitle: toStop.eventTitle || "", prizeImageUrl: toStop.prizeImageUrl || "", description: toStop.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString() });
+          await kv.set("last_event_winners", filteredWinners);
         }
         const updated = events.filter((e: any) => e.id !== eventId);
         await kv.set("last_post_events", updated);
       } else {
-        // 전체 종료: 진행중 이벤트 전부 히스토리에 저장
-        const newEntries = events.map((e: any) => ({
-          ...e, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id,
-        }));
-        const newHistory = [...newEntries, ...history].slice(0, 100);
-        await kv.set("last_post_events_history", newHistory);
+        // 전체 종료: 진행중 이벤트 전부 히스토리 + 배너 저장
+        const newWinners = [...winners];
+        const newEntries = [];
+        for (const e of events) {
+          const winnerInfo = await findEventWinner(e);
+          newEntries.push({ ...e, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id, autoClose: false, winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId });
+          const fw = newWinners.filter((w: any) => w.eventId !== e.id);
+          fw.push({ eventId: e.id, prize: e.prize, eventTitle: e.eventTitle || "", prizeImageUrl: e.prizeImageUrl || "", description: e.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString() });
+          newWinners.length = 0;
+          newWinners.push(...fw);
+        }
+        await kv.set("last_post_events_history", [...newEntries, ...history].slice(0, 100));
+        await kv.set("last_event_winners", newWinners);
         await kv.set("last_post_events", []);
         try { await kv.del("last_post_event"); } catch {}
       }
@@ -9508,6 +9570,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
         if (sleepStart !== undefined) patch.sleepStart = Number(sleepStart);
         if (sleepEnd !== undefined) patch.sleepEnd = Number(sleepEnd);
         if (durationMinutes !== undefined) patch.durationMinutes = Number(durationMinutes);
+        if (cardReductionSeconds !== undefined) patch.cardReductionSeconds = Number(cardReductionSeconds);
         return { ...e, ...patch };
       });
       await kv.set("last_post_events", updated);
@@ -9561,6 +9624,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
       description: description || "",
       prizeImageUrl: prizeImageUrl || "",
       reductionSeconds: 0,
+      cardReductionSeconds: cardReductionSeconds !== undefined ? Number(cardReductionSeconds) : 300,
       sleepStart: sleepStart !== undefined ? Number(sleepStart) : 0,
       sleepEnd: sleepEnd !== undefined ? Number(sleepEnd) : 8,
       startedAt: new Date().toISOString(),
@@ -9644,6 +9708,30 @@ app.get("/make-server-0b7d3bae/admin/last-post-events-history", async (c) => {
   } catch (e) {
     return c.json({ error: String(e) }, 500);
   }
+});
+
+// 이벤트 히스토리 당첨자 수동 수정 (관리자)
+app.patch("/make-server-0b7d3bae/admin/last-post-events-history/:eventId", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const eventId = c.req.param("eventId");
+    const { winnerUserName } = await c.req.json();
+    const history: any[] = await kv.get("last_post_events_history") || [];
+    const updated = history.map((h: any) =>
+      h.id === eventId
+        ? { ...h, winnerUserName: winnerUserName ?? null, winnerOverriddenAt: new Date().toISOString(), winnerOverriddenBy: user.id }
+        : h
+    );
+    await kv.set("last_post_events_history", updated);
+    // 활성 배너도 동기화
+    const winners: any[] = await kv.get("last_event_winners") || [];
+    const updatedWinners = winners.map((w: any) =>
+      w.eventId === eventId ? { ...w, winnerUserName: winnerUserName ?? null } : w
+    );
+    await kv.set("last_event_winners", updatedWinners);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
 // 이벤트 KV 원시값 디버그 (관리자)

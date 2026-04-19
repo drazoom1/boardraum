@@ -28,7 +28,14 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]\")",
       "Bash(netlify --version)",
       "Bash(git commit *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c ' *)",
+      "Bash(git show *)",
+      "Bash(ls .github/)",
+      "Bash(ls vercel.json netlify.toml)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(len\\(d\\)\\)\")",
+      "Bash(npx tsc *)"
     ]
   }
 }

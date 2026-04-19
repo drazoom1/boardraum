@@ -1761,6 +1761,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [showDurationEdit, setShowDurationEdit] = useState(false);
   const [editDuration, setEditDuration] = useState(event.durationMinutes ?? 60);
   const [durationSaving, setDurationSaving] = useState(false);
+  const [showCardReductionEdit, setShowCardReductionEdit] = useState(false);
+  const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
+  const [cardReductionSaving, setCardReductionSaving] = useState(false);
 
   const saveDuration = async () => {
     const mins = Number(editDuration);
@@ -1811,6 +1814,22 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       else toast.error('저장 실패');
     } catch { toast.error('오류'); }
     setSleepSaving(false);
+  };
+
+  const saveCardReduction = async () => {
+    const secs = Number(editCardReduction);
+    if (!secs || secs < 1) { toast.error('1초 이상 입력해주세요'); return; }
+    setCardReductionSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'update', eventId: event.id, cardReductionSeconds: secs }) }
+      );
+      if (res.ok) { toast.success(`보너스카드 감소 ${secs >= 60 ? `${secs / 60}분` : `${secs}초`}으로 변경!`); setShowCardReductionEdit(false); }
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setCardReductionSaving(false);
   };
 
   const disqualified: string[] = event?.disqualified || [];
@@ -2043,8 +2062,158 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
               </div>
             )}
           </div>
+
+          {/* 보너스카드 감소 시간 수정 */}
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            {!showCardReductionEdit ? (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  🃏 카드 1장: <span className="font-semibold text-gray-600">{(event.cardReductionSeconds ?? 300) >= 60 ? `${(event.cardReductionSeconds ?? 300) / 60}분` : `${event.cardReductionSeconds ?? 300}초`} 감소</span>
+                </p>
+                <button onClick={() => { setShowCardReductionEdit(true); setEditCardReduction(event.cardReductionSeconds ?? 300); }}
+                  className="text-xs px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-semibold">
+                  수정
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-700">🃏 보너스카드 감소 시간 수정</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[60, 120, 180, 300, 600].map(s => (
+                    <button key={s} onClick={() => setEditCardReduction(s)}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold border transition-colors ${editCardReduction === s ? 'text-white border-transparent bg-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                      {s >= 60 ? `${s / 60}분` : `${s}초`}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveCardReduction} disabled={cardReductionSaving}
+                    className="flex-1 py-1.5 rounded-lg text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1 bg-indigo-600">
+                    {cardReductionSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    저장
+                  </button>
+                  <button onClick={() => setShowCardReductionEdit(false)}
+                    className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── 이벤트 히스토리 섹션 (당첨자 수정 포함) ──
+function HistorySection({ history, saving, accessToken, onResume, onReload }: { history: any[]; saving: boolean; accessToken: string; onResume: (ev: any) => void; onReload: () => void }) {
+  const [showHistory, setShowHistory] = useState(false);
+  const [editingWinner, setEditingWinner] = useState<string | null>(null);
+  const [editWinnerName, setEditWinnerName] = useState('');
+  const [winnerSaving, setWinnerSaving] = useState(false);
+
+  const saveWinner = async (eventId: string) => {
+    setWinnerSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-events-history/${eventId}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ winnerUserName: editWinnerName.trim() || null }) }
+      );
+      if (res.ok) { toast.success('당첨자 저장 완료!'); setEditingWinner(null); onReload(); }
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setWinnerSaving(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      <button
+        onClick={() => setShowHistory(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+      >
+        <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+          <span className="text-base">📋</span>
+          과거 이벤트 기록
+          <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{history.length}건</span>
+        </h3>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+      </button>
+
+      {showHistory && (
+        <div className="border-t border-gray-100 divide-y divide-gray-50">
+          {history.map((ev: any, idx: number) => (
+            <div key={ev.id || idx} className="px-5 py-4">
+              <div className="flex items-start gap-3">
+                {ev.prizeImageUrl && (
+                  <img src={ev.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-gray-100" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold ${ev.autoClose ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {ev.autoClose ? '⏰ 자동종료' : '✅ 수동종료'}
+                    </span>
+                    {ev.eventTitle && (
+                      <span className="text-xs font-bold text-gray-700 truncate">{ev.eventTitle}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900">🏆 {ev.prize || '상품'}</p>
+
+                  {/* 당첨자 표시 + 수정 */}
+                  {editingWinner === (ev.id || String(idx)) ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <input
+                        value={editWinnerName}
+                        onChange={e => setEditWinnerName(e.target.value)}
+                        placeholder="당첨자 닉네임 입력"
+                        className="flex-1 h-7 px-2 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
+                      <button onClick={() => saveWinner(ev.id)} disabled={winnerSaving}
+                        className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-xs font-bold disabled:opacity-50">
+                        {winnerSaving ? '...' : '저장'}
+                      </button>
+                      <button onClick={() => setEditingWinner(null)} className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-xs">취소</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {ev.winnerUserName ? (
+                        <p className="text-[11px] font-medium text-gray-700">🥇 당첨자: {ev.winnerUserName}</p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400">당첨자 없음</p>
+                      )}
+                      <button onClick={() => { setEditingWinner(ev.id || String(idx)); setEditWinnerName(ev.winnerUserName || ''); }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 hover:bg-gray-200 font-semibold">
+                        수정
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                    <p className="text-[11px] text-gray-400">⏱ {ev.durationMinutes || 60}분 타이머</p>
+                    <p className="text-[11px] text-gray-400">🚀 시작: {ev.startedAt ? new Date(ev.startedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</p>
+                    {ev.stoppedAt && (
+                      <p className="text-[11px] text-gray-400">🏁 종료: {new Date(ev.stoppedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                    )}
+                    {(ev.reductionSeconds || 0) > 0 && (
+                      <p className="text-[11px] text-indigo-500">⏬ 보너스카드 -{Math.floor((ev.reductionSeconds||0)/60) > 0 ? `${Math.floor((ev.reductionSeconds||0)/60)}분 ` : ''}{(ev.reductionSeconds||0)%60 > 0 ? `${(ev.reductionSeconds||0)%60}초` : ''}</p>
+                    )}
+                  </div>
+                  {ev.description && <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">📋 {ev.description}</p>}
+                  {(ev.cardUsageLog?.length > 0) && (
+                    <div className="mt-2"><CardUsageLogBlock log={ev.cardUsageLog} compact /></div>
+                  )}
+                  <button onClick={() => onResume(ev)} disabled={saving}
+                    className="mt-2 text-xs px-3 py-1 rounded-lg font-bold text-white disabled:opacity-50 flex items-center gap-1"
+                    style={{ background: '#00BCD4' }}>
+                    ▶ 재개
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2066,6 +2235,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [sleepStart, setSleepStart] = useState(0);
   const [sleepEnd, setSleepEnd] = useState(8);
+  const [cardReductionSeconds, setCardReductionSeconds] = useState(300);
   const [noticeTitle, setNoticeTitle] = useState('규칙사항');
   const [noticeContent, setNoticeContent] = useState('');
   const [savingNotice, setSavingNotice] = useState(false);
@@ -2176,7 +2346,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd }) }
+          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds }) }
       );
       if (res.ok) {
         await loadData();
@@ -2358,6 +2528,22 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
           </div>
         </div>
 
+        {/* 보너스카드 감소 시간 */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1">
+            🃏 보너스카드 1장 감소 시간
+          </label>
+          <div className="flex gap-2 items-center">
+            {[60, 120, 180, 300, 600].map(s => (
+              <button key={s} onClick={() => setCardReductionSeconds(s)}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${cardReductionSeconds === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>
+                {s >= 60 ? `${s / 60}분` : `${s}초`}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">카드 1장 사용 시 타이머가 <span className="font-semibold text-indigo-600">{cardReductionSeconds >= 60 ? `${cardReductionSeconds / 60}분` : `${cardReductionSeconds}초`}</span> 줄어듭니다.</p>
+        </div>
+
         {/* 휴식 시간 */}
         <div>
           <label className="text-sm font-medium text-gray-700 block mb-1">
@@ -2451,100 +2637,30 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
 
       {/* 과거 이벤트 히스토리 */}
       {history.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setShowHistory(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-          >
-            <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-              <span className="text-base">📋</span>
-              과거 이벤트 기록
-              <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{history.length}건</span>
-            </h3>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
-          </button>
-
-          {showHistory && (
-            <div className="border-t border-gray-100 divide-y divide-gray-50">
-              {history.map((ev: any, idx: number) => (
-                <div key={ev.id || idx} className="px-5 py-4">
-                  <div className="flex items-start gap-3">
-                    {ev.prizeImageUrl && (
-                      <img src={ev.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-gray-100" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="inline-flex items-center gap-1 text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold">
-                          ✅ 종료
-                        </span>
-                        {ev.eventTitle && (
-                          <span className="text-xs font-bold text-gray-700 truncate">{ev.eventTitle}</span>
-                        )}
-                      </div>
-                      <p className="text-sm font-semibold text-gray-900">🏆 {ev.prize || '상품'}</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5">
-                        <p className="text-[11px] text-gray-400">
-                          ⏱ {ev.durationMinutes || 60}분 타이머
-                        </p>
-                        <p className="text-[11px] text-gray-400">
-                          🚀 시작: {ev.startedAt ? new Date(ev.startedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
-                        </p>
-                        {ev.stoppedAt && (
-                          <p className="text-[11px] text-gray-400">
-                            🏁 종료: {new Date(ev.stoppedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        )}
-                        {(ev.reductionSeconds || 0) > 0 && (
-                          <p className="text-[11px] text-indigo-500">⏬ 보너스카드 -{Math.floor((ev.reductionSeconds||0)/60) > 0 ? `${Math.floor((ev.reductionSeconds||0)/60)}분 ` : ''}{(ev.reductionSeconds||0)%60 > 0 ? `${(ev.reductionSeconds||0)%60}초` : (Math.floor((ev.reductionSeconds||0)/60) > 0 ? '' : '0초')}</p>
-                        )}
-                      </div>
-                      {ev.description && (
-                        <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">📋 {ev.description}</p>
-                      )}
-                      {/* 🃏 카드 사용 내역 (히스토리) */}
-                      {(ev.cardUsageLog?.length > 0) && (
-                        <div className="mt-2">
-                          <CardUsageLogBlock log={ev.cardUsageLog} compact />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => resumeEvent(ev)}
-                        disabled={saving}
-                        className="mt-2 text-xs px-3 py-1 rounded-lg font-bold text-white disabled:opacity-50 flex items-center gap-1"
-                        style={{ background: '#00BCD4' }}
-                      >
-                        ▶ 재개
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <HistorySection history={history} saving={saving} accessToken={accessToken} onResume={resumeEvent} onReload={() => loadData(true)} />
       )}
 
-      {/* 자동 종료된 이벤트 (버그 등으로 잘못 종료된 경우) */}
+      {/* 현재 활성 당첨 배너 (3시간 이내 자동 표시 중) */}
       {recentWinners.length > 0 && (
-        <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-green-200 overflow-hidden">
           <div className="px-5 py-4 flex items-center justify-between">
-            <h3 className="font-bold text-amber-700 text-sm flex items-center gap-2">
-              <span className="text-base">⚠️</span>
-              자동 종료된 이벤트
-              <span className="text-xs font-normal text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full">{recentWinners.length}건</span>
+            <h3 className="font-bold text-green-700 text-sm flex items-center gap-2">
+              <span className="text-base">🏆</span>
+              현재 당첨 배너 (홈피드 표시 중)
+              <span className="text-xs font-normal text-green-500 bg-green-50 px-2 py-0.5 rounded-full">{recentWinners.length}건</span>
             </h3>
           </div>
-          <div className="border-t border-amber-100 divide-y divide-amber-50">
+          <div className="border-t border-green-100 divide-y divide-green-50">
             {recentWinners.map((w: any, idx: number) => (
               <div key={w.eventId || idx} className="px-5 py-4">
                 <div className="flex items-start gap-3">
                   {w.prizeImageUrl && (
-                    <img src={w.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-amber-100" />
+                    <img src={w.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-green-100" />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="inline-flex items-center gap-1 text-[11px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-semibold">
-                        ⏰ 자동종료
+                      <span className="inline-flex items-center gap-1 text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                        📢 배너 표시 중
                       </span>
                       {w.eventTitle && (
                         <span className="text-xs font-bold text-gray-700 truncate">{w.eventTitle}</span>
@@ -2552,41 +2668,30 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
                     </div>
                     <p className="text-sm font-semibold text-gray-900">🏆 {w.prize || '상품'}</p>
                     {w.winnerUserName ? (
-                      <p className="text-[11px] text-gray-500 mt-0.5">당첨자: {w.winnerUserName}</p>
+                      <p className="text-[11px] text-gray-700 mt-0.5 font-medium">당첨자: {w.winnerUserName}</p>
                     ) : (
-                      <p className="text-[11px] text-amber-500 mt-0.5">당첨자 없이 종료됨</p>
+                      <p className="text-[11px] text-amber-500 mt-0.5">당첨자 없음</p>
                     )}
                     {w.closedAt && (
                       <p className="text-[11px] text-gray-400 mt-0.5">
                         종료: {new Date(w.closedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        <span className="ml-1 text-gray-300">(3시간 후 자동 사라짐)</span>
                       </p>
                     )}
                     <button
-                      onClick={() => resumeEvent({ ...w, id: w.eventId, prize: w.prize, eventTitle: w.eventTitle, prizeImageUrl: w.prizeImageUrl, description: w.description, durationMinutes: w.durationMinutes || 60, sleepStart: w.sleepStart ?? 0, sleepEnd: w.sleepEnd ?? 8 })}
-                      disabled={saving}
-                      className="mt-2 text-xs px-3 py-1 rounded-lg font-bold text-white disabled:opacity-50 flex items-center gap-1"
-                      style={{ background: '#00BCD4' }}
+                      onClick={async () => {
+                        if (!confirm('이 당첨 배너를 지금 내릴까요?')) return;
+                        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/event-winner/${w.eventId}`, {
+                          method: 'DELETE',
+                          headers: { Authorization: `Bearer ${accessToken}` },
+                        });
+                        if (res.ok) { await loadData(true); toast.success('배너를 내렸어요.'); }
+                        else toast.error('실패했어요.');
+                      }}
+                      className="mt-2 text-xs px-3 py-1 rounded-lg font-bold text-white flex items-center gap-1 bg-red-400 hover:bg-red-500"
                     >
-                      ▶ 재개
+                      배너 내리기
                     </button>
-                    {w.winnerUserName && (
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`"${w.winnerUserName}"님의 당첨 배너를 홈피드에 올릴까요?`)) return;
-                          const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/winner/manual`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                            body: JSON.stringify({ eventId: w.eventId, winnerUserName: w.winnerUserName, prize: w.prize, prizeImageUrl: w.prizeImageUrl, eventTitle: w.eventTitle }),
-                          });
-                          if (res.ok) alert('당첨 배너가 홈피드에 올라갔어요! 3시간 유지됩니다.');
-                          else alert('실패했어요.');
-                        }}
-                        className="mt-1 text-xs px-3 py-1 rounded-lg font-bold text-white flex items-center gap-1"
-                        style={{ background: '#FF9800' }}
-                      >
-                        🏆 배너 올리기
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
