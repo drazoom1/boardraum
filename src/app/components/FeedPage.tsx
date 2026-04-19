@@ -3086,6 +3086,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [category, setCategory] = useState<string>('전체');
   const [subCategory, setSubCategory] = useState<string | null>(null);
   const [showSubSheet, setShowSubSheet] = useState(false); // 모바일 바텀시트
+  const [showCategories, setShowCategories] = useState(false); // 카테고리 바 펼침
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3457,40 +3458,56 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         </div>
 
         {/* 상위 카테고리 탭바 */}
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
-          {BASE_CATEGORIES.map(c => {
-            const hasSub = !!SUBCATEGORIES[c];
-            const isActive = category === c;
-            return (
-              <button key={c}
-                onClick={() => {
-                  if (hasSub) {
-                    if (window.innerWidth < 768) {
-                      // 모바일: 바텀시트
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-1 px-1">
+          {/* 전체 버튼 (항상 표시) */}
+          <button
+            onClick={() => { setCategory('전체'); setSubCategory(null); setShowSubSheet(false); }}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
+              ${category === '전체' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            전체
+          </button>
+
+          {/* 펼치기/접기 화살표 */}
+          <button
+            onClick={() => setShowCategories(v => !v)}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 transition-all">
+            <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${showCategories ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* 나머지 카테고리들 (슬라이드 애니메이션) */}
+          <div className={`flex items-center gap-1.5 overflow-hidden transition-all duration-300 ${showCategories ? 'max-w-[800px] opacity-100' : 'max-w-0 opacity-0'}`}>
+            {BASE_CATEGORIES.filter(c => c !== '전체').map(c => {
+              const hasSub = !!SUBCATEGORIES[c];
+              const isActive = category === c;
+              return (
+                <button key={c}
+                  onClick={() => {
+                    if (hasSub) {
+                      if (window.innerWidth < 768) {
+                        setCategory(c);
+                        setSubCategory(null);
+                        setShowSubSheet(true);
+                      } else {
+                        if (isActive) { setCategory('전체'); setSubCategory(null); }
+                        else { setCategory(c); setSubCategory(null); }
+                      }
+                    } else {
                       setCategory(c);
                       setSubCategory(null);
-                      setShowSubSheet(true);
-                    } else {
-                      // PC: 인라인 서브탭 토글
-                      if (isActive) { setCategory('전체'); setSubCategory(null); }
-                      else { setCategory(c); setSubCategory(null); }
+                      setShowSubSheet(false);
                     }
-                  } else {
-                    setCategory(c);
-                    setSubCategory(null);
-                    setShowSubSheet(false);
-                  }
-                }}
-                className={`flex-shrink-0 flex items-center gap-0.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                  ${isActive
-                    ? c === '이벤트' ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white'
-                    : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}>
-                {c === '이벤트' ? '🎉 이벤트' : c}
-                {hasSub && <ChevronDown className={`w-3 h-3 transition-transform ${isActive && window.innerWidth >= 768 ? 'rotate-180' : ''}`} />}
-              </button>
-            );
-          })}
+                  }}
+                  className={`flex-shrink-0 flex items-center gap-0.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
+                    ${isActive
+                      ? c === '이벤트' ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white'
+                      : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}>
+                  {c === '이벤트' ? '🎉 이벤트' : c}
+                  {hasSub && <ChevronDown className={`w-3 h-3 transition-transform ${isActive && window.innerWidth >= 768 ? 'rotate-180' : ''}`} />}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* PC 전용: 하위 카테고리 탭바 (인라인) */}
