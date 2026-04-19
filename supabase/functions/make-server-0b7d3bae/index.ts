@@ -9885,34 +9885,42 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
   const { user, error } = await requireAdmin(c);
   if (error) return error;
   try {
-
     const gameMap: Record<string, any> = {};
 
-    // 1) site_game_* 수집 (영구 보존된 데이터)
+    const addGame = (g: any, source: string) => {
+      if (!g?.id || !(g.koreanName || g.englishName || g.name)) return;
+      const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      if (gameMap[key]) return; // 이미 있으면 스킵
+      gameMap[key] = {
+        id: g.id,
+        bggId: g.bggId,
+        koreanName: g.koreanName,
+        englishName: g.englishName,
+        name: g.koreanName || g.englishName || g.name,
+        imageUrl: g.imageUrl || g.thumbnail || '',
+        yearPublished: g.yearPublished,
+        _source: source,
+      };
+    };
+
+    // 1) site_game_* (직접등록 + BGG 영구 데이터) — 최우선
     const siteData = await getByPrefix('site_game_');
     for (const { value: g } of siteData) {
       if (!g?.id) continue;
-      gameMap[g.id] = { ...g, _source: 'site' };
+      const key = g.bggId && /^\d+$/.test(String(g.bggId)) ? `bgg_${g.bggId}` : `id_${g.id}`;
+      gameMap[key] = { ...g, _source: 'site' };
     }
 
-    // 2) beta_user_* 에서 userId 목록 추출 후 각 유저 게임만 스캔
-    const usersData = await getByPrefix('beta_user_');
-    const userIds = usersData.map((d: any) => d.value?.id).filter(Boolean);
-
-    for (const uid of userIds) {
-      const userGames = await getByPrefix(`user_${uid}_game_`);
-      for (const { value: g } of userGames) {
-        if (!g?.id || gameMap[g.id]) continue; // site_game_ 있으면 스킵
-        gameMap[g.id] = {
-          id: g.id,
-          bggId: g.bggId,
-          koreanName: g.koreanName,
-          englishName: g.englishName,
-          name: g.koreanName || g.englishName || g.name,
-          imageUrl: g.imageUrl || g.thumbnail || '',
-          yearPublished: g.yearPublished,
-          _source: 'user',
-        };
+    // 2) 유저 컬렉션 전체 스캔: 레거시 배열(owned/wishlist) + 개별 키(_game_) 모두 처리
+    const allUserItems = await kv.getByPrefixWithKeys('user_');
+    for (const { key, value } of allUserItems) {
+      if (key.includes('_backup') || key.includes('_metadata') || key.includes('_temp')) continue;
+      if (Array.isArray(value)) {
+        // 레거시 배열 방식 (owned, wishlist 등)
+        for (const g of value) addGame(g, 'user');
+      } else if (value && typeof value === 'object' && key.match(/_game_[^_]+$/)) {
+        // 개별 키 방식
+        addGame(value, 'user');
       }
     }
 
@@ -9960,13 +9968,24 @@ app.post("/make-server-0b7d3bae/admin/site-games/:id/migrate-to-bgg", async (c) 
     if (!bggId || !/^\d+$/.test(bggId)) return c.json({ error: '유효한 BGG ID가 필요해요' }, 400);
     if (fromId === bggId) return c.json({ error: '같은 게임이에요' }, 400);
 
-    const fromGame = await kv.get(`site_game_${fromId}`);
-    if (!fromGame) return c.json({ error: '원본 게임을 찾을 수 없어요' }, 404);
+    // site_game_* 없어도 진행 가능 (user 컬렉션에만 있는 게임 포함)
+    let fromGame = await kv.get(`site_game_${fromId}`);
+    // site_game_ 없으면 user 컬렉션에서 게임 정보 찾기
+    if (!fromGame) {
+      const allUserItems = await kv.getByPrefixWithKeys('user_');
+      outer: for (const { key, value } of allUserItems) {
+        if (key.includes('_backup') || key.includes('_metadata')) continue;
+        const games = Array.isArray(value) ? value : (value?.id ? [value] : []);
+        for (const g of games) {
+          if (g?.id === fromId || g?.bggId === fromId) { fromGame = g; break outer; }
+        }
+      }
+    }
 
     const bggDetails = await kv.get(`bgg_details_${bggId}`);
-    const toName = fromGame.koreanName || fromGame.name || bggDetails?.koreanName || bggDetails?.name || '';
-    const toEnglish = bggDetails?.name || fromGame.englishName || '';
-    const rawImg = bggDetails?.imageUrl || fromGame.imageUrl || '';
+    const toName = (fromGame?.koreanName || fromGame?.name) || bggDetails?.koreanName || bggDetails?.name || '';
+    const toEnglish = bggDetails?.name || fromGame?.englishName || '';
+    const rawImg = bggDetails?.imageUrl || fromGame?.imageUrl || '';
     const toImage = rawImg.startsWith('//') ? 'https:' + rawImg : rawImg;
 
     // 1. site_game_{bggId} 업서트 (한글명은 직접등록명 우선 유지)

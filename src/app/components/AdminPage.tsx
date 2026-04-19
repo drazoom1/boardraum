@@ -5462,7 +5462,11 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
       });
       if (res.ok) {
         const data = await res.json();
-        setMigrateBggResults(data.filter((g: any) => /^\d+$/.test(String(g.bggId || ''))).slice(0, 10));
+        // BGG API 결과는 bggId 없이 id만 있음, site 결과는 bggId 있음
+        setMigrateBggResults(data.filter((g: any) => {
+          if (g.source === 'bgg') return /^\d+$/.test(String(g.id || ''));
+          return /^\d+$/.test(String(g.bggId || ''));
+        }).slice(0, 10));
       }
     } catch {}
     setMigrateBggLoading(false);
