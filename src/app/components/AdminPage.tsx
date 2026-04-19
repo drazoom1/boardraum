@@ -5315,6 +5315,10 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
   const [editForm, setEditForm] = useState<{ koreanName: string; englishName: string; imageUrl: string; bggId: string; yearPublished: string }>({ koreanName: '', englishName: '', imageUrl: '', bggId: '', yearPublished: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // 소유자 모달
+  const [ownersGame, setOwnersGame] = useState<any | null>(null);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
   // 마이그레이션 상태
   const [migrateGame, setMigrateGame] = useState<any | null>(null);
   const [migrateBggQ, setMigrateBggQ] = useState('');
@@ -5403,6 +5407,19 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
       else toast.error('수정 실패');
     } catch { toast.error('오류'); }
     setSaving(false);
+  };
+
+  const loadOwners = async (g: any) => {
+    setOwnersGame(g);
+    setOwners([]);
+    setOwnersLoading(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/site-games/${g.id}/owners`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) { const data = await res.json(); setOwners(data.owners || []); }
+    } catch {}
+    setOwnersLoading(false);
   };
 
   const handleMerge = async (from: any, to: any) => {
@@ -5556,7 +5573,13 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
+                      {g.ownerCount > 0 && (
+                        <button onClick={() => loadOwners(g)}
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium flex-shrink-0">
+                          👤 {g.ownerCount}
+                        </button>
+                      )}
                       <button onClick={() => { setEditGame(g); setEditForm({ koreanName: g.koreanName || '', englishName: g.englishName || '', imageUrl: g.imageUrl || '', bggId: g.bggId || '', yearPublished: g.yearPublished || '' }); }}
                         className="px-2.5 py-1 text-xs bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100">게임정보</button>
                       <button onClick={() => handleDelete(g)}
@@ -5581,6 +5604,42 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
           </div>
         )}
       </div>
+
+      {/* 소유자 목록 모달 */}
+      {ownersGame && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[70vh]">
+            <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+              {ownersGame.imageUrl
+                ? <img src={ownersGame.imageUrl} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                : <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">🎲</div>}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 text-sm truncate">{ownersGame.koreanName || ownersGame.name}</p>
+                <p className="text-xs text-gray-400">보유 회원 {ownersLoading ? '...' : owners.length}명</p>
+              </div>
+              <button onClick={() => { setOwnersGame(null); setOwners([]); }} className="text-gray-400 hover:text-gray-600 flex-shrink-0">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-2">
+              {ownersLoading ? (
+                <p className="text-center text-gray-400 text-sm py-8">로딩 중...</p>
+              ) : owners.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-8">보유 회원이 없어요</p>
+              ) : (
+                <div className="space-y-1">
+                  {owners.map((o, i) => (
+                    <div key={o.userId || i} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50">
+                      {o.userAvatar
+                        ? <img src={o.userAvatar} className="w-8 h-8 rounded-full object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
+                        : <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm flex-shrink-0">👤</div>}
+                      <p className="text-sm text-gray-800 truncate">{o.userName}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 게임정보 수정 모달 */}
       {editGame && (
