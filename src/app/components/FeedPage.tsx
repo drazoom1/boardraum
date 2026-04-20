@@ -3826,21 +3826,24 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               toast('선정된 분이 아니시네요! 🙏', { duration: 2500 });
             }
           }}
-          className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 rounded-2xl shadow-sm px-5 py-4 text-left transition-all active:scale-[0.98]">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl flex-shrink-0">🏆</span>
+          className="w-full bg-white rounded-2xl shadow-sm overflow-hidden text-left transition-all active:scale-[0.99]">
+          <div className="bg-cyan-500 px-4 py-2 flex items-center gap-2">
+            <span className="text-white text-xs font-bold">📚 {hwWinner.category}</span>
+            <span className="ml-auto text-white/70 text-[10px] font-medium">당첨 발표</span>
+          </div>
+          <div className="px-4 py-3.5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0 text-xl">
+              🏆
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-yellow-900/70 mb-0.5">📚 {hwWinner.category} 당첨</p>
-              <p className="font-bold text-yellow-900 text-sm">
-                🎉 <span className="font-black">{hwWinner.userName}</span>님이 선정되셨어요!
-              </p>
+              <p className="font-black text-gray-900 text-sm">{hwWinner.userName}님이 선정됐어요!</p>
               {hwWinner.prizeReward && (
-                <p className="text-xs text-yellow-900/80 mt-0.5">🎁 {hwWinner.prizeReward}</p>
+                <p className="text-xs text-purple-500 font-medium mt-0.5">🎁 {hwWinner.prizeReward}</p>
               )}
-              <p className="text-[11px] text-yellow-900/60 mt-1.5 leading-relaxed">
+              <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
                 {hwWinner.emailClaimed
                   ? '📬 이메일 접수가 완료되었습니다.'
-                  : '선정되신 분은 해당 배너를 클릭해서 메일주소를 남겨주세요.'}
+                  : '선정되신 분은 배너를 눌러 이메일을 남겨주세요.'}
               </p>
             </div>
           </div>
@@ -3851,20 +3854,22 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {showWinnerEmailModal && (
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4"
           onClick={() => setShowWinnerEmailModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4"
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
             onClick={e => e.stopPropagation()}>
-            <div className="text-center">
-              <div className="text-3xl mb-2">🏆</div>
-              <h3 className="font-bold text-gray-900 text-base">축하드립니다!</h3>
-              <p className="text-sm text-gray-500 mt-1">상품 수령을 위해 이메일 주소를 남겨주세요.</p>
+            <div className="bg-cyan-500 px-6 py-4 text-center">
+              <div className="text-2xl mb-1">🏆</div>
+              <h3 className="font-black text-white text-base">축하드립니다!</h3>
+              <p className="text-xs text-white/80 mt-0.5">숙제 당첨자로 선정되셨어요</p>
             </div>
+            <div className="p-5 space-y-4">
+            <p className="text-sm text-gray-500 text-center">상품 수령을 위해 이메일 주소를 남겨주세요.</p>
             <input
               type="email"
               value={winnerEmail}
               onChange={e => setWinnerEmail(e.target.value)}
               placeholder="이메일 주소를 입력해주세요"
               style={{ fontSize: '16px' }}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300"
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
             />
             <div className="flex gap-2">
               <button onClick={() => setShowWinnerEmailModal(false)}
@@ -3892,9 +3897,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                   }
                   setWinnerEmailSubmitting(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-500 disabled:opacity-50 text-yellow-900 text-sm font-bold transition-colors">
+                className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white text-sm font-bold transition-colors">
                 {winnerEmailSubmitting ? '제출 중...' : '제출하기'}
               </button>
+            </div>
             </div>
           </div>
         </div>
