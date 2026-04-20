@@ -322,15 +322,17 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   // 이벤트 카테고리 규칙
   const [eventCategoryNotice, setEventCategoryNotice] = useState<{ title?: string; content?: string } | null>(null);
   const [showEventRulesModal, setShowEventRulesModal] = useState(false);
-  // localStorage 기반: 현재 이벤트 ID로 확인 여부 체크
+  // localStorage 기반: 24시간 이내 확인 여부 체크
   const [rulesConfirmedTick, setRulesConfirmedTick] = useState(0);
-  const eventRulesConfirmed = activeEventId
-    ? localStorage.getItem(`event_rules_confirmed_${activeEventId}`) === 'true'
-    : false;
+  const eventRulesConfirmed = (() => {
+    const ts = localStorage.getItem('event_rules_confirmed_at');
+    if (!ts) return false;
+    return Date.now() - Number(ts) < 24 * 60 * 60 * 1000;
+  })();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = rulesConfirmedTick; // tick 참조로 리렌더 보장
+  const _ = rulesConfirmedTick;
   const confirmEventRules = () => {
-    if (activeEventId) localStorage.setItem(`event_rules_confirmed_${activeEventId}`, 'true');
+    localStorage.setItem('event_rules_confirmed_at', String(Date.now()));
     setShowEventRulesModal(false);
     setRulesConfirmedTick(t => t + 1);
   };
