@@ -5103,7 +5103,12 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
               <button onClick={async () => {
                 try {
                   const res = await fetch(`${BASE}/homework/submissions/${selectingWinner.id}/select-winner`, { method: 'POST', headers });
-                  if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+                  if (!res.ok) {
+                    const text = await res.text();
+                    let msg = '선정 실패';
+                    try { msg = JSON.parse(text).error || msg; } catch {}
+                    throw new Error(msg);
+                  }
                   toast.success('당첨자가 선정됐어요 🎉');
                   setSelectingWinner(null);
                   await loadSubs();
