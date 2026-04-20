@@ -187,7 +187,11 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
     }).catch(() => {});
   }, [accessToken]);
 
-  // 게시물 탭 활성화 시 로드
+  // 마운트 시 게시물 로드 (숫자 표시용), 탭 전환 시 재로드
+  useEffect(() => {
+    loadMyPosts();
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'posts') {
       loadMyPosts();
