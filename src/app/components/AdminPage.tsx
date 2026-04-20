@@ -5495,6 +5495,9 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const [remaining, setRemaining] = useState<number | null>(null);
   const [planLimit, setPlanLimit] = useState(50000);
   const [sentThisMonth, setSentThisMonth] = useState<number | null>(null);
+  const [recipients, setRecipients] = useState<string[] | null>(null);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [showRecipients, setShowRecipients] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
 
@@ -5575,6 +5578,23 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
       toast.error(e.message);
     } finally {
       setSendingSample(false);
+    }
+  };
+
+  const handleLoadRecipients = async () => {
+    setLoadingRecipients(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/recipients`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '조회 실패');
+      setRecipients(data.emails || []);
+      setShowRecipients(true);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoadingRecipients(false);
     }
   };
 
@@ -5774,39 +5794,26 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
         </div>
       )}
 
-      {/* 발송 한도 설정 */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-semibold text-gray-700">이번 발송 한도</label>
-          {nextOffset > 0 && (
-            <span className="text-xs bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
-              {nextOffset}번째부터 이어서
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1}
-            max={500}
-            value={sendLimit}
-            onChange={e => setSendLimit(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300 text-center font-bold"
-          />
-          <span className="text-sm text-gray-500">명에게 발송</span>
-          {nextOffset > 0 && (
-            <button onClick={() => { setNextOffset(0); setRemaining(null); setResult(null); }}
-              className="ml-auto text-xs text-gray-400 underline">처음부터 다시</button>
-          )}
-        </div>
-        <p className="text-xs text-gray-400">Resend 무료 플랜: 하루 100통 한도. 초과 시 자동 중단됩니다.</p>
+      {/* 이메일 확인 + 발송 */}
+      <div className="space-y-2">
+        <button
+          onClick={handleLoadRecipients}
+          disabled={loadingRecipients}
+          className="w-full py-3 rounded-xl font-bold text-sm border-2 border-cyan-400 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 transition-colors flex items-center justify-center gap-2"
+        >
+          {loadingRecipients ? <><Loader2 className="w-4 h-4 animate-spin" /> 조회 중...</> : `🔍 수신자 이메일 확인 (${memberCount ?? '?'}명)`}
+        </button>
+        {nextOffset > 0 && (
+          <button onClick={() => { setNextOffset(0); setRemaining(null); setResult(null); }}
+            className="w-full text-xs text-gray-400 underline text-center">처음부터 다시 발송</button>
+        )}
       </div>
 
       {/* 결과 */}
-      {result && (
+      {result && !result.sample && (
         <div className={`rounded-xl p-4 text-sm space-y-2 ${result.quotaExceeded ? 'bg-orange-50 border border-orange-200 text-orange-900' : 'bg-green-50 border border-green-200 text-green-800'}`}>
           <div className="flex items-center gap-2 font-bold">
-            {result.quotaExceeded ? '⚠️ 쿼터 초과로 중단됨' : '✅ 발송 완료'}
+            {result.quotaExceeded ? '⚠️ 한도 초과로 중단됨' : '✅ 발송 완료'}
           </div>
           <div className="flex gap-4 text-sm">
             <span>성공 <strong>{result.success}건</strong></span>
@@ -5817,11 +5824,66 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
             <div className="pt-1 border-t border-current border-opacity-20">
               <p className="text-xs font-semibold">아직 {result.remaining}명에게 발송하지 못했어요.</p>
               {result.quotaExceeded
-                ? <p className="text-xs mt-0.5">내일 Resend 쿼터가 초기화되면 아래 「이어서 발송」을 눌러주세요.</p>
-                : <p className="text-xs mt-0.5">아래 「이어서 발송」을 눌러 나머지를 발송하세요.</p>
+                ? <p className="text-xs mt-0.5">Resend 한도가 초과됐어요. 잠시 후 「수신자 이메일 확인」에서 이어서 발송하세요.</p>
+                : <p className="text-xs mt-0.5">「수신자 이메일 확인」에서 이어서 발송하세요.</p>
               }
             </div>
           )}
+        </div>
+      )}
+
+      {/* 수신자 이메일 확인 모달 */}
+      {showRecipients && recipients && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4"
+          onClick={() => setShowRecipients(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col"
+            style={{ maxHeight: '80vh' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-900">수신자 목록</h3>
+                <p className="text-xs text-gray-400 mt-0.5">총 {recipients.length}명에게 발송됩니다</p>
+              </div>
+              <button onClick={() => setShowRecipients(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1">
+              {recipients.map((email, i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                  <span className="text-xs text-gray-400 w-6 text-right flex-shrink-0">{i + 1}</span>
+                  <span className="text-sm text-gray-700">{email}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 space-y-2">
+              {sentThisMonth !== null && planLimit - sentThisMonth < recipients.length && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-800">
+                  ⚠️ 이번 달 남은 한도({Math.max(0, planLimit - sentThisMonth).toLocaleString()}통)가 수신자 수({recipients.length}명)보다 적어요.
+                  발송 가능한 인원까지만 발송되고 자동 중단됩니다.
+                </div>
+              )}
+              {remaining !== null && remaining > 0 ? (
+                <button
+                  onClick={() => { setShowRecipients(false); handleSend(nextOffset); }}
+                  disabled={sending}
+                  className="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2"
+                  style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                >
+                  {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> 발송 중...</> : `▶️ 이어서 발송 (${remaining}명 남음)`}
+                </button>
+              ) : null}
+              <button
+                onClick={() => { setShowRecipients(false); handleSend(0); }}
+                disabled={sending}
+                className="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2"
+                style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #00BCD4, #0097A7)' }}
+              >
+                {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> 발송 중...</> : `📧 전체 발송 (${recipients.length}명)`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -5857,30 +5919,6 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
         )}
       </div>
 
-      {/* 발송 버튼 */}
-      <div className="space-y-2">
-        {/* 이어서 발송 (남은 인원 있을 때) */}
-        {remaining !== null && remaining > 0 && (
-          <button
-            onClick={() => handleSend(nextOffset)}
-            disabled={sending}
-            className="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2"
-            style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #f59e0b, #d97706)' }}
-          >
-            {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> 발송 중...</> : `▶️ 이어서 발송 (${remaining}명 남음, ${nextOffset}번째부터)`}
-          </button>
-        )}
-
-        {/* 처음부터 / 전체 발송 */}
-        <button
-          onClick={() => handleSend(0)}
-          disabled={sending}
-          className="w-full py-3 rounded-xl text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
-          style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #00BCD4, #0097A7)' }}
-        >
-          {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> 발송 중...</> : `📧 처음부터 발송 (${sendLimit}명 한도)`}
-        </button>
-      </div>
     </div>
   );
 }

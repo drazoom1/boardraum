@@ -10058,6 +10058,26 @@ app.get("/make-server-0b7d3bae/admin/bulk-mail/usage", async (c) => {
   }
 });
 
+// ===== 단체 메일 - 수신자 이메일 목록 조회 =====
+app.get("/make-server-0b7d3bae/admin/bulk-mail/recipients", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const allUsers = await getByPrefix('beta_user_');
+    const emails: string[] = allUsers
+      .map((item: any) => ({ email: item.value?.email, name: item.value?.name || item.value?.username || '' }))
+      .filter((u: any) => u.email && u.email.includes('@'))
+      .map((u: any) => u.email);
+    return c.json({ emails, count: emails.length });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
 // ===== 단체 메일 발송 API =====
 app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
   try {
