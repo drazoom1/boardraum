@@ -219,7 +219,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
     try {
       const [postsRes, savedRes] = await Promise.all([
         fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts`,
+          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/by-user/${userId}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         ),
         fetch(
@@ -229,10 +229,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
       ]);
       if (postsRes.ok) {
         const data = await postsRes.json();
-        const posts = (data.posts || []).filter((p: FeedPost) =>
-          p.userId === userId && (!readOnly || !p.isPrivate)
-        );
-        setMyPosts(posts);
+        setMyPosts(data.posts || []);
       }
       if (savedRes.ok) {
         const data = await savedRes.json();

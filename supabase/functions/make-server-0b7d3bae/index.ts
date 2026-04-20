@@ -3809,6 +3809,35 @@ app.get("/make-server-0b7d3bae/community/posts/by-game/:gameId", async (c) => {
   }
 });
 
+app.get("/make-server-0b7d3bae/community/posts/by-user/:userId", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+
+    const targetUserId = c.req.param('userId');
+    const isSelf = user.id === targetUserId;
+    const role = await getUserRole(user.id);
+    const isAdmin = role === 'admin';
+
+    const postsData = await getByPrefix('beta_post_');
+    const posts = postsData
+      .map((d: any) => d.value)
+      .filter((p: any) => {
+        if (!p || p.isDraft) return false;
+        if (p.userId !== targetUserId) return false;
+        if (p.isPrivate && !isSelf && !isAdmin) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return c.json({ posts });
+  } catch (error) {
+    return c.json({ posts: [], error: String(error) }, 500);
+  }
+});
+
 app.get("/make-server-0b7d3bae/community/posts/latest-ts", async (c) => {
   try {
     const accessToken = c.req.header('Authorization')?.split(' ')[1];
@@ -9374,7 +9403,6 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
     const sinceMs          = leaderPost ? new Date(leaderPost.createdAt).getTime() : startedAtMs;
     const elapsedMs        = Date.now() - sinceMs;
     const durationMs       = (event.durationMinutes || 60) * 60 * 1000;
-    const reductionMs      = (event.reductionSeconds || 0) * 1000;
     const effectiveDurMs   = Math.max(durationMs - reductionMs, 60 * 1000); // 최소 1분
     const minRequiredMs    = effectiveDurMs * 0.85;
     if (elapsedMs < minRequiredMs) {
