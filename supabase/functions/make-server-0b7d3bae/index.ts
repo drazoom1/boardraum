@@ -10089,7 +10089,7 @@ app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
     if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
 
     // offset: 이어서 보낼 시작 인덱스, limit: 이번에 최대 발송 수
-    const { subject, body, isAd, sampleOnly, sampleEmail, sampleEmails, offset = 0, limit = 100 } = await c.req.json();
+    const { subject, body, isAd, sampleOnly, sampleEmail, sampleEmails, offset = 0, limit = 99999 } = await c.req.json();
     if (!subject?.trim() || !body?.trim()) return c.json({ error: '제목과 내용을 입력해주세요' }, 400);
 
     const bulkResendKey = Deno.env.get('RESEND_API_KEY');

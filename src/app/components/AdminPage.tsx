@@ -5490,7 +5490,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const [uploadedImages, setUploadedImages] = useState<{ url: string; name: string }[]>([]);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [memberCount, setMemberCount] = useState<number | null>(null);
-  const [sendLimit, setSendLimit] = useState(100);
+  const [sendLimit, setSendLimit] = useState(99999);
   const [nextOffset, setNextOffset] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [planLimit, setPlanLimit] = useState(50000);
@@ -5603,7 +5603,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
     if (!body.trim()) { toast.error('내용을 입력해주세요'); return; }
     const currentOffset = offsetOverride ?? nextOffset;
     const isFirstSend = currentOffset === 0;
-    if (isFirstSend && !confirm(`전체 회원에게 메일을 발송할까요?\n제목: ${isAd ? '(광고) ' : ''}${subject}\n발송 한도: ${sendLimit}명`)) return;
+    if (isFirstSend && !confirm(`전체 회원에게 메일을 발송할까요?\n제목: ${isAd ? '(광고) ' : ''}${subject}`)) return;
     setSending(true);
     setResult(null);
     try {
