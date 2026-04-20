@@ -3458,6 +3458,68 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     setShowCategories(false);
   }, []);
 
+  // ── Pull-to-Refresh ──────────────────────────────────────────────────────
+  const [ptrDistance, setPtrDistance] = useState(0);
+  const [ptrRefreshing, setPtrRefreshing] = useState(false);
+  const ptrStartY = useRef(0);
+  const ptrActive = useRef(false);
+  const ptrDistRef = useRef(0);
+  const ptrRefreshingRef = useRef(false);
+  const loadPostsRef = useRef(loadPosts);
+  useEffect(() => { loadPostsRef.current = loadPosts; }, [loadPosts]);
+
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+    const THRESHOLD = 65;
+    const MAX = 72;
+
+    const onStart = (e: TouchEvent) => {
+      if (root.scrollTop > 2 || ptrRefreshingRef.current) return;
+      ptrStartY.current = e.touches[0].clientY;
+      ptrActive.current = true;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!ptrActive.current || ptrRefreshingRef.current) return;
+      const dy = e.touches[0].clientY - ptrStartY.current;
+      if (dy <= 0) { ptrActive.current = false; ptrDistRef.current = 0; setPtrDistance(0); return; }
+      const d = Math.min(dy * 0.45, MAX);
+      ptrDistRef.current = d;
+      setPtrDistance(d);
+    };
+    const onEnd = () => {
+      if (!ptrActive.current) return;
+      ptrActive.current = false;
+      if (ptrDistRef.current >= THRESHOLD) {
+        setPtrRefreshing(true);
+        ptrRefreshingRef.current = true;
+        setPtrDistance(MAX);
+        ptrDistRef.current = MAX;
+        loadPostsRef.current(true).finally(() => {
+          ptrRefreshingRef.current = false;
+          setPtrRefreshing(false);
+          setPtrDistance(0);
+          ptrDistRef.current = 0;
+        });
+      } else {
+        setPtrDistance(0);
+        ptrDistRef.current = 0;
+      }
+    };
+
+    root.addEventListener('touchstart', onStart, { passive: true });
+    root.addEventListener('touchmove', onMove, { passive: true });
+    root.addEventListener('touchend', onEnd);
+    root.addEventListener('touchcancel', onEnd);
+    return () => {
+      root.removeEventListener('touchstart', onStart);
+      root.removeEventListener('touchmove', onMove);
+      root.removeEventListener('touchend', onEnd);
+      root.removeEventListener('touchcancel', onEnd);
+    };
+  }, []); // 한 번만 등록 — 가변 값은 모두 ref로 접근
+  // ─────────────────────────────────────────────────────────────────────────
+
   const handleFollowToggle = async (targetId: string) => {
     try {
       const res = await fetch(
@@ -3474,6 +3536,21 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
 
   return (
     <div className="max-w-2xl mx-auto space-y-3">
+      {/* Pull-to-Refresh 인디케이터 */}
+      <div
+        className="flex justify-center items-center overflow-hidden transition-all duration-200"
+        style={{ height: ptrRefreshing ? 48 : ptrDistance > 4 ? ptrDistance : 0 }}>
+        {ptrRefreshing ? (
+          <Loader2 className="w-5 h-5 text-cyan-500 animate-spin" />
+        ) : (
+          <svg
+            className="w-5 h-5 text-gray-400 transition-transform duration-150"
+            style={{ transform: ptrDistance >= 65 ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12l7 7 7-7" />
+          </svg>
+        )}
+      </div>
       {/* 당첨 배너 (3시간 유지) */}
       {eventWinners.map((w: any) => (
         <WinnerBanner
