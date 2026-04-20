@@ -9133,6 +9133,19 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId/best", async (c) => {
     const updated = { ...post, isBest: !!isBest };
     await kv.set(`beta_post_${postId}`, updated);
 
+    // 새로 베스트 선정 시 기존 베스트글 자동 해제 (포인트는 유지)
+    if (isBest && !post.isBest) {
+      try {
+        const allPostsData = await getByPrefix('beta_post_');
+        const prevBests = allPostsData
+          .map((d: any) => d.value)
+          .filter((p: any) => p && p.isBest && p.id !== postId);
+        await Promise.all(prevBests.map((p: any) =>
+          kv.set(`beta_post_${p.id}`, { ...p, isBest: false })
+        ));
+      } catch {}
+    }
+
     // 베스트 선정 시 300포인트 지급 (최초 1회)
     if (isBest && !post.isBest) {
       try {
