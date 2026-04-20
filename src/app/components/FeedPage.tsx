@@ -2551,7 +2551,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                 <span className="text-base leading-none">🃏</span>
                 <span className="text-[10px] font-bold leading-none">카드얻기</span>
               </button>
-              {/* -5분 사용하기 버튼 (80%) */}
+              {/* 카드 사용하기 버튼 (80%) */}
               <button
                 onClick={() => {
                   if (bonusCards > 0) {
@@ -2572,7 +2572,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                   color: bonusCards > 0 ? 'white' : '#9ca3af',
                 }}
               >
-                <span>⏱ -5분 사용하기</span>
+                <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} 사용하기</span>
                 {bonusCards > 0
                   ? <span className="absolute right-3 bg-white text-cyan-600 text-[11px] font-black px-2 py-0.5 rounded-full">{bonusCards}장</span>
                   : <span className="absolute right-3 text-gray-400 text-[11px]">카드 없음</span>
@@ -2629,7 +2629,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3" style={{ background: 'linear-gradient(135deg, #E0F7FA, #B2EBF2)' }}>🃏</div>
             <h3 className="text-base font-bold text-gray-900">보너스카드가 없어요</h3>
             <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-              카드 1장으로 타이머를 <span className="font-bold" style={{ color: '#00BCD4' }}>5분</span> 줄일 수 있어요
+              카드 1장으로 타이머를 <span className="font-bold" style={{ color: '#00BCD4' }}>{(() => { const s = event?.cardReductionSeconds ?? 300; return s >= 60 ? `${Math.round(s/60)}분` : `${s}초`; })()}</span> 줄일 수 있어요
             </p>
           </div>
 
@@ -2738,7 +2738,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3" style={{ background: 'linear-gradient(135deg, #E0F7FA, #B2EBF2)' }}>🃏</div>
             <h3 className="text-base font-bold text-gray-900">보너스카드 얻는 방법</h3>
             <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-              카드 1장으로 타이머를 <span className="font-bold" style={{ color: '#00BCD4' }}>5분</span> 줄일 수 있어요
+              카드 1장으로 타이머를 <span className="font-bold" style={{ color: '#00BCD4' }}>{(() => { const s = event?.cardReductionSeconds ?? 300; return s >= 60 ? `${Math.round(s/60)}분` : `${s}초`; })()}</span> 줄일 수 있어요
             </p>
           </div>
           <div className="px-6 py-4 space-y-2.5">
