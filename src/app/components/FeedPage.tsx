@@ -3116,6 +3116,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
   const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string; pointReward: number; prizeReward?: string; startDate?: string; endDate?: string; active?: boolean }[]>([]);
   const [allHwCategories, setAllHwCategories] = useState<{ id: string; name: string; endDate?: string; active?: boolean }[]>([]);
+  const [hwWinner, setHwWinner] = useState<{ userName: string; category: string; prizeReward: string; isWinner: boolean; emailClaimed: boolean; selectedAt: string } | null>(null);
+  const [showWinnerEmailModal, setShowWinnerEmailModal] = useState(false);
+  const [winnerEmail, setWinnerEmail] = useState('');
+  const [winnerEmailSubmitting, setWinnerEmailSubmitting] = useState(false);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Set<string>>(new Set());
   const [hwSlideIndex, setHwSlideIndex] = useState(0);
   const [displayedPostsCount, setDisplayedPostsCount] = useState(20);
@@ -3147,6 +3151,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         setAllHwCategories(d.categories);
         setHwCategories(d.categories.filter((c: any) => c.active));
       }
+    // 당첨자 조회
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.winner) setHwWinner(d.winner);
+    }).catch(() => {});
     }).catch(() => {});
   }, [accessToken]);
 
@@ -3800,6 +3810,95 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           </button>
         </div>
       </div>
+
+      {/* 숙제 당첨 배너 */}
+      {hwWinner && (
+        <button
+          onClick={() => {
+            if (!userId) { onGuestAction?.(); return; }
+            if (hwWinner.isWinner) {
+              if (hwWinner.emailClaimed) {
+                toast.success('이미 이메일을 제출하셨어요 💌');
+              } else {
+                setShowWinnerEmailModal(true);
+              }
+            } else {
+              toast('선정된 분이 아니시네요! 🙏', { duration: 2500 });
+            }
+          }}
+          className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 rounded-2xl shadow-sm px-5 py-4 text-left transition-all active:scale-[0.98]">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl flex-shrink-0">🏆</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-yellow-900/70 mb-0.5">📚 {hwWinner.category} 당첨</p>
+              <p className="font-bold text-yellow-900 text-sm">
+                🎉 <span className="font-black">{hwWinner.userName}</span>님이 선정되셨어요!
+              </p>
+              {hwWinner.prizeReward && (
+                <p className="text-xs text-yellow-900/80 mt-0.5">🎁 {hwWinner.prizeReward}</p>
+              )}
+              <p className="text-[11px] text-yellow-900/60 mt-1.5 leading-relaxed">
+                {hwWinner.emailClaimed
+                  ? '📬 이메일 접수가 완료되었습니다.'
+                  : '선정되신 분은 해당 배너를 클릭해서 메일주소를 남겨주세요.'}
+              </p>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* 당첨자 이메일 제출 모달 */}
+      {showWinnerEmailModal && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4"
+          onClick={() => setShowWinnerEmailModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="text-3xl mb-2">🏆</div>
+              <h3 className="font-bold text-gray-900 text-base">축하드립니다!</h3>
+              <p className="text-sm text-gray-500 mt-1">상품 수령을 위해 이메일 주소를 남겨주세요.</p>
+            </div>
+            <input
+              type="email"
+              value={winnerEmail}
+              onChange={e => setWinnerEmail(e.target.value)}
+              placeholder="이메일 주소를 입력해주세요"
+              style={{ fontSize: '16px' }}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowWinnerEmailModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
+                취소
+              </button>
+              <button
+                disabled={winnerEmailSubmitting || !winnerEmail.trim()}
+                onClick={async () => {
+                  if (!winnerEmail.trim()) return;
+                  setWinnerEmailSubmitting(true);
+                  try {
+                    const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner/claim-email`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                      body: JSON.stringify({ email: winnerEmail.trim() }),
+                    });
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+                    toast.success('이메일이 제출됐어요 💌');
+                    setHwWinner(prev => prev ? { ...prev, emailClaimed: true } : prev);
+                    setShowWinnerEmailModal(false);
+                    setWinnerEmail('');
+                  } catch (e: any) {
+                    toast.error(e.message || '제출 실패');
+                  }
+                  setWinnerEmailSubmitting(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-500 disabled:opacity-50 text-yellow-900 text-sm font-bold transition-colors">
+                {winnerEmailSubmitting ? '제출 중...' : '제출하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 숙제 주제 버튼 - 슬라이드 */}
       {hwCategories.length > 0 && (

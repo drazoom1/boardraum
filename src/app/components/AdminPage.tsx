@@ -4903,6 +4903,8 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
   const [loading, setLoading] = useState(true);
   const [subLoading, setSubLoading] = useState(false);
   const [tab, setTab] = useState<'categories' | 'submissions'>('categories');
+  const [currentWinner, setCurrentWinner] = useState<any>(null);
+  const [selectingWinner, setSelectingWinner] = useState<any>(null);
   // 카테고리 폼
   const [showForm, setShowForm] = useState(false);
   const [editCat, setEditCat] = useState<any>(null);
@@ -4925,6 +4927,8 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
     const res = await fetch(`${BASE}/homework/submissions`, { headers });
     if (res.ok) { const d = await res.json(); setSubmissions(d.submissions || []); }
     setSubLoading(false);
+    const wr = await fetch(`${BASE}/homework/winner`, { headers });
+    if (wr.ok) { const d = await wr.json(); setCurrentWinner(d.winner || null); }
   };
 
   useEffect(() => { (async () => { await loadCats(); setLoading(false); })(); }, []);
@@ -5060,18 +5064,55 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
                       <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{sub.content}</p>
                       <p className="text-xs text-gray-400 mt-1">{new Date(sub.createdAt).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
-                    {!sub.rewardGranted && (
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      {!sub.rewardGranted && (
+                        <button
+                          onClick={() => { setRewardModal({ post: sub }); setRewardPt(String(sub.homeworkCategory?.pointReward || '')); }}
+                          className="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-colors">
+                          포인트 지급
+                        </button>
+                      )}
                       <button
-                        onClick={() => { setRewardModal({ post: sub }); setRewardPt(String(sub.homeworkCategory?.pointReward || '')); }}
-                        className="flex-shrink-0 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-colors">
-                        포인트 지급
+                        onClick={() => setSelectingWinner(sub)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${currentWinner?.postId === sub.id ? 'bg-yellow-400 text-yellow-900' : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200'}`}>
+                        {currentWinner?.postId === sub.id ? '🏆 당첨자' : '당첨 선정'}
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 당첨자 선정 확인 모달 */}
+      {selectingWinner && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+            <h3 className="font-bold text-gray-900">🏆 당첨자 선정</h3>
+            <p className="text-sm text-gray-600">
+              <span className="font-bold text-gray-900">{selectingWinner.userName}</span>님을 숙제 당첨자로 선정하시겠어요?<br />
+              <span className="text-xs text-gray-400 mt-1 block">기존 당첨자가 있으면 교체됩니다.</span>
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setSelectingWinner(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                취소
+              </button>
+              <button onClick={async () => {
+                try {
+                  const res = await fetch(`${BASE}/homework/submissions/${selectingWinner.id}/select-winner`, { method: 'POST', headers });
+                  if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+                  toast.success('당첨자가 선정됐어요 🎉');
+                  setSelectingWinner(null);
+                  await loadSubs();
+                } catch (e: any) { toast.error(e.message || '선정 실패'); }
+              }} className="flex-1 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-yellow-900 text-sm font-bold transition-colors">
+                선정하기
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

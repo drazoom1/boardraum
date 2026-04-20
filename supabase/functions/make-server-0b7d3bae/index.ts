@@ -9253,6 +9253,71 @@ app.post("/make-server-0b7d3bae/homework/submissions/:postId/reward", async (c) 
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 숙제 당첨자 선정 (관리자)
+app.post("/make-server-0b7d3bae/homework/submissions/:postId/select-winner", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const postId = c.req.param('postId');
+    const post = await kv.get(`beta_post_${postId}`) as any;
+    if (!post) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
+    const cats = (await kv.get('homework_categories') as any[] | null) || [];
+    const cat = cats.find((c: any) => c.name === post.category);
+    const winner = {
+      postId,
+      userId: post.userId,
+      userName: post.userName,
+      category: post.category,
+      prizeReward: cat?.prizeReward || '',
+      selectedAt: new Date().toISOString(),
+      selectedBy: user.id,
+      emailClaimed: false,
+      email: '',
+    };
+    await kv.set('homework_winner', winner);
+    await createNotification(post.userId, {
+      type: 'points',
+      fromUserId: user.id,
+      fromUserName: '관리자',
+      postId,
+      message: `🎉 숙제 당첨자로 선정되셨어요! 홈피드 배너를 확인해주세요.`,
+    }).catch(() => {});
+    return c.json({ success: true, winner });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 숙제 당첨자 조회 (인증 유저)
+app.get("/make-server-0b7d3bae/homework/winner", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ winner: null });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ winner: null });
+    const winner = await kv.get('homework_winner') as any;
+    if (!winner) return c.json({ winner: null });
+    // userId는 본인에게만 공개
+    const safe = { ...winner, userId: winner.userId === user.id ? winner.userId : undefined, isWinner: winner.userId === user.id };
+    return c.json({ winner: safe });
+  } catch (e) { return c.json({ winner: null }); }
+});
+
+// 당첨자 이메일 등록 (당첨자 본인만)
+app.post("/make-server-0b7d3bae/homework/winner/claim-email", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const winner = await kv.get('homework_winner') as any;
+    if (!winner) return c.json({ error: '당첨 정보가 없어요' }, 404);
+    if (winner.userId !== user.id) return c.json({ error: '선정된 분이 아니시네요!' }, 403);
+    const { email } = await c.req.json();
+    if (!email?.trim()) return c.json({ error: '이메일을 입력해주세요' }, 400);
+    await kv.set('homework_winner', { ...winner, email: email.trim(), emailClaimed: true, claimedAt: new Date().toISOString() });
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 내 숙제 현황 조회 (회원)
 app.get("/make-server-0b7d3bae/homework/my", async (c) => {
   try {
