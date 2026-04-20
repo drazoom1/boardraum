@@ -10028,6 +10028,23 @@ app.get("/make-server-0b7d3bae/admin/bulk-mail/count", async (c) => {
   }
 });
 
+// ===== 단체 메일 - 이번 달 발송량 조회 =====
+app.get("/make-server-0b7d3bae/admin/bulk-mail/usage", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const month = new Date().toISOString().slice(0, 7);
+    const data = (await kv.get(`bulk_mail_monthly_${month}`)) || { count: 0 };
+    return c.json({ month, sentThisMonth: data.count || 0 });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
 // ===== 단체 메일 발송 API =====
 app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
   try {
@@ -10039,33 +10056,46 @@ app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
     if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
 
     // offset: 이어서 보낼 시작 인덱스, limit: 이번에 최대 발송 수
-    const { subject, body, isAd, sampleOnly, sampleEmail, offset = 0, limit = 100 } = await c.req.json();
+    const { subject, body, isAd, sampleOnly, sampleEmail, sampleEmails, offset = 0, limit = 100 } = await c.req.json();
     if (!subject?.trim() || !body?.trim()) return c.json({ error: '제목과 내용을 입력해주세요' }, 400);
 
     const bulkResendKey = Deno.env.get('RESEND_API_KEY');
     if (!bulkResendKey) return c.json({ error: 'Resend API 키가 설정되지 않았어요' }, 500);
 
-    // 샘플 발송 모드: 지정한 이메일 1개에만 발송
+    // 샘플 발송 모드: 최대 10개 이메일에 개별 발송
     if (sampleOnly) {
-      if (!sampleEmail?.includes('@')) return c.json({ error: '샘플 수신 이메일이 올바르지 않아요' }, 400);
+      // sampleEmails 배열 우선, 없으면 sampleEmail 단일값 fallback
+      const rawList: string[] = Array.isArray(sampleEmails) && sampleEmails.length > 0
+        ? sampleEmails
+        : sampleEmail ? [sampleEmail] : [];
+      const validList = rawList.map((e: string) => e.trim()).filter((e: string) => e.includes('@')).slice(0, 10);
+      if (validList.length === 0) return c.json({ error: '유효한 이메일 주소를 1개 이상 입력해주세요' }, 400);
       const finalSubject = isAd ? `(광고) [샘플] ${subject}` : `[샘플] ${subject}`;
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bulkResendKey}` },
-        body: JSON.stringify({
-          from: '보드라움 <noreply@boardraum.site>',
-          to: [sampleEmail],
-          subject: finalSubject,
-          html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">
-            <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">
-              ⚠️ 이것은 샘플 메일입니다. 실제 발송 전 테스트용이에요.
-            </div>
-            ${body}
-          </div>`,
-        }),
-      });
+      const sampleHtml = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">
+        <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">
+          ⚠️ 이것은 샘플 메일입니다. 실제 발송 전 테스트용이에요.
+        </div>
+        ${body}
+      </div>`;
+      const batchPayload = validList.map((email: string) => ({
+        from: '보드라움 <noreply@boardraum.site>',
+        to: [email],
+        subject: finalSubject,
+        html: sampleHtml,
+      }));
+      const res = validList.length === 1
+        ? await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bulkResendKey}` },
+            body: JSON.stringify(batchPayload[0]),
+          })
+        : await fetch('https://api.resend.com/emails/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bulkResendKey}` },
+            body: JSON.stringify(batchPayload),
+          });
       if (!res.ok) throw new Error('샘플 발송 실패: ' + await res.text());
-      return c.json({ success: 1, fail: 0, total: 1, sample: true });
+      return c.json({ success: validList.length, fail: 0, total: validList.length, sample: true, sentTo: validList });
     }
 
     // 전체 가입 회원 이메일 수집
@@ -10129,6 +10159,13 @@ app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
         console.error('Resend 배치 예외:', e);
       }
       if (i + BATCH < targetEmails.length) await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 월간 발송량 KV 누적
+    if (success > 0) {
+      const monthKey = `bulk_mail_monthly_${new Date().toISOString().slice(0, 7)}`; // e.g. "2026-04"
+      const prev = (await kv.get(monthKey)) || { count: 0 };
+      await kv.set(monthKey, { count: (prev.count || 0) + success, updatedAt: new Date().toISOString() });
     }
 
     const nextOffset = offset + success + fail;

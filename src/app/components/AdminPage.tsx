@@ -5484,8 +5484,8 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const [isAd, setIsAd] = useState(true);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(false);
-  const [result, setResult] = useState<{ success: number; fail: number; total?: number; remaining?: number; quotaExceeded?: boolean; nextOffset?: number } | null>(null);
-  const [sampleEmail, setSampleEmail] = useState('');
+  const [result, setResult] = useState<{ success: number; fail: number; total?: number; remaining?: number; quotaExceeded?: boolean; nextOffset?: number; sentTo?: string[] } | null>(null);
+  const [sampleEmails, setSampleEmails] = useState('');
   const [sendingSample, setSendingSample] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{ url: string; name: string }[]>([]);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -5493,16 +5493,25 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const [sendLimit, setSendLimit] = useState(100);
   const [nextOffset, setNextOffset] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [planLimit, setPlanLimit] = useState(50000);
+  const [sentThisMonth, setSentThisMonth] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
 
-  // 회원 수 조회
+  // 회원 수 + 이번 달 발송량 조회
   useEffect(() => {
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/count`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then(r => r.json())
       .then(d => { if (d.count !== undefined) setMemberCount(d.count); })
+      .catch(() => {});
+
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/usage`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(r => r.json())
+      .then(d => { if (d.sentThisMonth !== undefined) setSentThisMonth(d.sentThisMonth); })
       .catch(() => {});
   }, [accessToken]);
 
@@ -5549,17 +5558,19 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const handleSampleSend = async () => {
     if (!subject.trim()) { toast.error('제목을 입력해주세요'); return; }
     if (!body.trim()) { toast.error('내용을 입력해주세요'); return; }
-    if (!sampleEmail.trim() || !sampleEmail.includes('@')) { toast.error('샘플 수신 이메일을 입력해주세요'); return; }
+    const emailList = sampleEmails.split(/[\n,，]/).map(e => e.trim()).filter(e => e.includes('@')).slice(0, 10);
+    if (emailList.length === 0) { toast.error('유효한 이메일 주소를 입력해주세요'); return; }
     setSendingSample(true);
     try {
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ subject, body, isAd, sampleOnly: true, sampleEmail: sampleEmail.trim() }),
+        body: JSON.stringify({ subject, body, isAd, sampleOnly: true, sampleEmails: emailList }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '샘플 발송 실패');
-      toast.success(`샘플 메일을 ${sampleEmail}로 발송했어요!`);
+      setResult(data);
+      toast.success(`샘플 메일을 ${emailList.length}명에게 발송했어요!`);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -5586,6 +5597,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
       setResult({ success: data.success, fail: data.fail, total: data.total, remaining: data.remaining, quotaExceeded: data.quotaExceeded, nextOffset: data.nextOffset });
       setNextOffset(data.nextOffset);
       setRemaining(data.remaining);
+      setSentThisMonth(prev => (prev ?? 0) + (data.success || 0));
       if (data.quotaExceeded) {
         toast.error(`⚠️ Resend 일일 한도 초과! 성공 ${data.success}건 발송 후 중단됨. 내일 이어서 발송하세요.`);
       } else {
@@ -5610,18 +5622,42 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
         </div>
         {memberCount !== null && (
           <div className="text-right">
-            <p className="text-sm font-bold text-gray-700">총 {memberCount}명</p>
-            <p className="text-xs text-gray-400">Resend 무료: 100통/일</p>
+            <p className="text-sm font-bold text-gray-700">수신 대상: {memberCount}명</p>
           </div>
         )}
       </div>
 
-      {/* 쿼터 경고 */}
-      {memberCount !== null && memberCount > 100 && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-800 space-y-1">
-          <p className="font-bold">⚠️ 회원 수({memberCount}명)가 Resend 무료 한도(100통/일)를 초과해요</p>
-          <p>아래 「발송 한도」를 100 이하로 설정하고, 남은 회원은 다음 날 「이어서 발송」하세요.</p>
-          <p className="text-orange-600">유료 플랜(월 $20~)으로 업그레이드하면 한 번에 전체 발송 가능해요.</p>
+      {/* Resend 이번 달 발송 현황 */}
+      {sentThisMonth !== null && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-gray-700">📊 이번 달 Resend 발송 현황</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">플랜 한도</span>
+              <input
+                type="number"
+                value={planLimit}
+                onChange={e => setPlanLimit(Math.max(1, parseInt(e.target.value) || 50000))}
+                className="w-24 text-xs border border-gray-300 rounded-lg px-2 py-1 text-right focus:outline-none focus:ring-1 focus:ring-cyan-300"
+              />
+              <span className="text-xs text-gray-500">통/월</span>
+            </div>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="h-2 rounded-full transition-all"
+              style={{
+                width: `${Math.min(100, (sentThisMonth / planLimit) * 100)}%`,
+                background: sentThisMonth / planLimit > 0.8 ? '#ef4444' : sentThisMonth / planLimit > 0.5 ? '#f59e0b' : '#06b6d4',
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-600">발송: <span className="font-bold text-gray-900">{sentThisMonth.toLocaleString()}통</span></span>
+            <span className={`font-bold ${planLimit - sentThisMonth < planLimit * 0.2 ? 'text-red-500' : 'text-cyan-600'}`}>
+              남은 한도: {Math.max(0, planLimit - sentThisMonth).toLocaleString()}통
+            </span>
+          </div>
         </div>
       )}
 
@@ -5790,26 +5826,35 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
       )}
 
       {/* 샘플 발송 */}
-      <div className="border border-dashed border-gray-300 rounded-xl p-4 space-y-2">
-        <p className="text-sm font-semibold text-gray-700">🧪 샘플 발송 (전체 발송 전 테스트)</p>
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={sampleEmail}
-            onChange={e => setSampleEmail(e.target.value)}
-            placeholder="수신할 이메일 주소"
-            className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
-          />
+      <div className="border border-dashed border-indigo-200 bg-indigo-50/40 rounded-xl p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-700">🧪 테스트 발송 (최대 10명)</p>
+          <span className="text-xs text-indigo-500 font-medium">
+            {sampleEmails.split(/[\n,，]/).filter(e => e.trim().includes('@')).length}/10명
+          </span>
+        </div>
+        <textarea
+          value={sampleEmails}
+          onChange={e => setSampleEmails(e.target.value)}
+          placeholder={"이메일 주소를 입력하세요 (줄바꿈 또는 쉼표로 구분)\nexample1@gmail.com\nexample2@naver.com"}
+          rows={3}
+          className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white"
+          style={{ fontSize: '14px' }}
+        />
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-400">실제 회원들에게 보내기 전 내용을 확인해보세요</p>
           <button
             onClick={handleSampleSend}
             disabled={sendingSample}
             className="px-4 py-2 rounded-xl text-sm font-bold text-white flex items-center gap-1 whitespace-nowrap"
             style={{ background: sendingSample ? '#9ca3af' : '#6366f1' }}
           >
-            {sendingSample ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '📨 샘플 발송'}
+            {sendingSample ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 발송 중...</> : '📨 테스트 발송'}
           </button>
         </div>
-        <p className="text-xs text-gray-400">입력한 이메일 주소 1명에게만 테스트 발송해요</p>
+        {result?.sample && result.sentTo && (
+          <p className="text-xs text-indigo-600 font-medium">✅ {result.sentTo.join(', ')} 에게 발송 완료</p>
+        )}
       </div>
 
       {/* 발송 버튼 */}
