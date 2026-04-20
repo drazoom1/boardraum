@@ -654,15 +654,23 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
 
         {/* 카테고리 선택 */}
         <div className="px-4 sm:px-5 py-2 sm:py-3 border-b border-gray-50 flex-shrink-0">
-          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className={`flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide ${hasActiveEvent ? 'pt-7' : ''}`}>
             {allCategories.map(c => {
               const isHw = hwCategories.some(h => h.name === c);
               const isSelected = currentMain === c || (isHw && category === c);
               const hasSub = SUB_CATEGORIES[c] && SUB_CATEGORIES[c].length > 0;
               return (
-                <button key={c} onClick={() => {
+                <div key={c} className="relative flex-shrink-0 flex flex-col items-center">
+                  {c === '이벤트' && hasActiveEvent && (
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                      <div className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                        이벤트가 진행중이에요!
+                      </div>
+                      <div className="w-0 h-0 mx-auto border-l-[4px] border-r-[4px] border-t-[4px] border-l-transparent border-r-transparent border-t-cyan-500" />
+                    </div>
+                  )}
+                <button onClick={() => {
                   if (c === '숙제') {
-                    // 숙제 클릭 → 숙제 카테고리 모달
                     setPendingMainCategory('숙제');
                     setShowSubCategoryModal(true);
                   } else if (hasSub) {
@@ -672,7 +680,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                     setCategory(c);
                   }
                 }}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                     isSelected || (c === '숙제' && hwCategories.some(h => h.name === category))
                       ? isHw ? 'bg-orange-500 text-white' : c === '이벤트' ? 'bg-cyan-500 text-white' : c === '숙제' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
                       : isHw ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
@@ -682,6 +690,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                   }`}>
                   {c === '이벤트' ? '🎉 ' : c === '숙제' ? '📚 ' : ''}{c}{hasSub || c === '숙제' ? ' ›' : ''}
                 </button>
+                </div>
               );
             })}
           </div>
