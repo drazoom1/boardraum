@@ -9275,6 +9275,11 @@ app.post("/make-server-0b7d3bae/homework/submissions/:postId/select-winner", asy
       email: '',
     };
     await kv.set('homework_winner', winner);
+    // 당첨된 숙제 카테고리 비활성화
+    if (cat) {
+      const updatedCats = cats.map((ct: any) => ct.id === cat.id ? { ...ct, active: false } : ct);
+      await kv.set('homework_categories', updatedCats);
+    }
     await createNotification(post.userId, {
       type: 'points',
       fromUserId: user.id,
@@ -9295,8 +9300,15 @@ app.get("/make-server-0b7d3bae/homework/winner", async (c) => {
     if (!user?.id) return c.json({ winner: null });
     const winner = await kv.get('homework_winner') as any;
     if (!winner) return c.json({ winner: null });
-    // userId는 본인에게만 공개
-    const safe = { ...winner, userId: winner.userId === user.id ? winner.userId : undefined, isWinner: winner.userId === user.id };
+    const role = await getUserRole(user.id);
+    const isAdminUser = role === 'admin' || user.email === 'sityplanner2@naver.com';
+    const safe = {
+      ...winner,
+      userId: winner.userId === user.id ? winner.userId : undefined,
+      isWinner: winner.userId === user.id,
+      isAdmin: isAdminUser,
+      email: isAdminUser ? (winner.email || '') : undefined,
+    };
     return c.json({ winner: safe });
   } catch (e) { return c.json({ winner: null }); }
 });
@@ -9310,7 +9322,9 @@ app.post("/make-server-0b7d3bae/homework/winner/claim-email", async (c) => {
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const winner = await kv.get('homework_winner') as any;
     if (!winner) return c.json({ error: '당첨 정보가 없어요' }, 404);
-    if (winner.userId !== user.id) return c.json({ error: '선정된 분이 아니시네요!' }, 403);
+    const role = await getUserRole(user.id);
+    const isAdminUser = role === 'admin' || user.email === 'sityplanner2@naver.com';
+    if (winner.userId !== user.id && !isAdminUser) return c.json({ error: '선정된 분이 아니시네요!' }, 403);
     const { email } = await c.req.json();
     if (!email?.trim()) return c.json({ error: '이메일을 입력해주세요' }, 400);
     await kv.set('homework_winner', { ...winner, email: email.trim(), emailClaimed: true, claimedAt: new Date().toISOString() });

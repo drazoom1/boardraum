@@ -3116,7 +3116,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
   const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string; pointReward: number; prizeReward?: string; startDate?: string; endDate?: string; active?: boolean }[]>([]);
   const [allHwCategories, setAllHwCategories] = useState<{ id: string; name: string; endDate?: string; active?: boolean }[]>([]);
-  const [hwWinner, setHwWinner] = useState<{ userName: string; category: string; prizeReward: string; isWinner: boolean; emailClaimed: boolean; selectedAt: string } | null>(null);
+  const [hwWinner, setHwWinner] = useState<{ userName: string; category: string; prizeReward: string; isWinner: boolean; isAdmin?: boolean; emailClaimed: boolean; email?: string; selectedAt: string } | null>(null);
   const [showWinnerEmailModal, setShowWinnerEmailModal] = useState(false);
   const [winnerEmail, setWinnerEmail] = useState('');
   const [winnerEmailSubmitting, setWinnerEmailSubmitting] = useState(false);
@@ -3816,12 +3816,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         <button
           onClick={() => {
             if (!userId) { onGuestAction?.(); return; }
-            if (hwWinner.isWinner) {
-              if (hwWinner.emailClaimed) {
-                toast.success('이미 이메일을 제출하셨어요 💌');
-              } else {
-                setShowWinnerEmailModal(true);
-              }
+            if (hwWinner.isWinner || hwWinner.isAdmin) {
+              setShowWinnerEmailModal(true);
             } else {
               toast('선정된 분이 아니시네요! 🙏', { duration: 2500 });
             }
@@ -3858,49 +3854,70 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             onClick={e => e.stopPropagation()}>
             <div className="bg-cyan-500 px-6 py-4 text-center">
               <div className="text-2xl mb-1">🏆</div>
-              <h3 className="font-black text-white text-base">축하드립니다!</h3>
-              <p className="text-xs text-white/80 mt-0.5">숙제 당첨자로 선정되셨어요</p>
+              <h3 className="font-black text-white text-base">
+                {hwWinner?.isAdmin ? '당첨자 이메일 확인' : '축하드립니다!'}
+              </h3>
+              <p className="text-xs text-white/80 mt-0.5">
+                {hwWinner?.isAdmin ? hwWinner.userName + '님 당첨' : '숙제 당첨자로 선정되셨어요'}
+              </p>
             </div>
             <div className="p-5 space-y-4">
-            <p className="text-sm text-gray-500 text-center">상품 수령을 위해 이메일 주소를 남겨주세요.</p>
-            <input
-              type="email"
-              value={winnerEmail}
-              onChange={e => setWinnerEmail(e.target.value)}
-              placeholder="이메일 주소를 입력해주세요"
-              style={{ fontSize: '16px' }}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setShowWinnerEmailModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
-                취소
-              </button>
-              <button
-                disabled={winnerEmailSubmitting || !winnerEmail.trim()}
-                onClick={async () => {
-                  if (!winnerEmail.trim()) return;
-                  setWinnerEmailSubmitting(true);
-                  try {
-                    const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner/claim-email`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                      body: JSON.stringify({ email: winnerEmail.trim() }),
-                    });
-                    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-                    toast.success('이메일이 제출됐어요 💌');
-                    setHwWinner(prev => prev ? { ...prev, emailClaimed: true } : prev);
-                    setShowWinnerEmailModal(false);
-                    setWinnerEmail('');
-                  } catch (e: any) {
-                    toast.error(e.message || '제출 실패');
-                  }
-                  setWinnerEmailSubmitting(false);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white text-sm font-bold transition-colors">
-                {winnerEmailSubmitting ? '제출 중...' : '제출하기'}
-              </button>
-            </div>
+            {hwWinner?.isAdmin && hwWinner.emailClaimed ? (
+              <>
+                <p className="text-xs text-gray-400 text-center">제출된 이메일 주소</p>
+                <div className="w-full h-11 px-4 rounded-xl border border-cyan-200 bg-cyan-50 flex items-center text-sm font-semibold text-cyan-700">
+                  {hwWinner.email || '—'}
+                </div>
+                <button onClick={() => setShowWinnerEmailModal(false)}
+                  className="w-full py-2.5 rounded-xl bg-gray-100 text-sm font-semibold text-gray-600">
+                  닫기
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 text-center">
+                  {hwWinner?.isAdmin ? '당첨자가 아직 이메일을 남기지 않았어요.\n직접 입력할 수도 있어요.' : '상품 수령을 위해 이메일 주소를 남겨주세요.'}
+                </p>
+                <input
+                  type="email"
+                  value={winnerEmail}
+                  onChange={e => setWinnerEmail(e.target.value)}
+                  placeholder="이메일 주소를 입력해주세요"
+                  style={{ fontSize: '16px' }}
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-300"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => setShowWinnerEmailModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
+                    취소
+                  </button>
+                  <button
+                    disabled={winnerEmailSubmitting || !winnerEmail.trim()}
+                    onClick={async () => {
+                      if (!winnerEmail.trim()) return;
+                      setWinnerEmailSubmitting(true);
+                      try {
+                        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner/claim-email`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                          body: JSON.stringify({ email: winnerEmail.trim() }),
+                        });
+                        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+                        toast.success('이메일이 제출됐어요 💌');
+                        setHwWinner(prev => prev ? { ...prev, emailClaimed: true, email: winnerEmail.trim() } : prev);
+                        setShowWinnerEmailModal(false);
+                        setWinnerEmail('');
+                      } catch (e: any) {
+                        toast.error(e.message || '제출 실패');
+                      }
+                      setWinnerEmailSubmitting(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white text-sm font-bold transition-colors">
+                    {winnerEmailSubmitting ? '제출 중...' : '제출하기'}
+                  </button>
+                </div>
+              </>
+            )}
             </div>
           </div>
         </div>
