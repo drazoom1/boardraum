@@ -302,8 +302,8 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     }).catch(() => {});
   }, [accessToken]);
 
-  // 카테고리 바뀌면 가이드 다시 표시
-  useEffect(() => { setGuideVisible(true); }, [category]);
+  // 카테고리 바뀌면 가이드 다시 표시, 이벤트 규칙 확인 초기화
+  useEffect(() => { setGuideVisible(true); setEventRulesConfirmed(false); }, [category]);
 
   // 진행중인 마지막글 이벤트 여부 확인
   const [hasActiveEvent, setHasActiveEvent] = useState(false);
@@ -320,6 +320,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   // 이벤트 카테고리 규칙
   const [eventCategoryNotice, setEventCategoryNotice] = useState<{ title?: string; content?: string } | null>(null);
   const [showEventRulesModal, setShowEventRulesModal] = useState(false);
+  const [eventRulesConfirmed, setEventRulesConfirmed] = useState(false);
   useEffect(() => {
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/event-category-notice`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -692,16 +693,6 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               <button onClick={() => setCategory(currentMain)} className="text-xs text-gray-400 hover:text-gray-600 ml-1">✕</button>
             </div>
           )}
-          {/* 이벤트 규칙 버튼 */}
-          {category === '이벤트' && eventCategoryNotice?.content && (
-            <div className="mt-1.5">
-              <button
-                onClick={() => setShowEventRulesModal(true)}
-                className="flex items-center gap-1 text-xs font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 px-2.5 py-1 rounded-lg transition-colors">
-                📋 이벤트 규칙
-              </button>
-            </div>
-          )}
         </div>
 
         {/* 이벤트 규칙 모달 */}
@@ -715,7 +706,12 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                 <button onClick={() => setShowEventRulesModal(false)}
                   className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 text-xs">✕</button>
               </div>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{eventCategoryNotice.content}</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line mb-4">{eventCategoryNotice.content}</p>
+              <button
+                onClick={() => { setEventRulesConfirmed(true); setShowEventRulesModal(false); }}
+                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-bold rounded-xl transition-colors">
+                규칙을 확인했습니다
+              </button>
             </div>
           </div>
         )}
@@ -1202,12 +1198,22 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                 </div>
               )}
 
-              <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
-                onFocus={() => activeHwCat && setGuideVisible(false)}
-                placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
-                className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
-                style={{ fontSize: '16px' }}
-                rows={category === '재능판매' ? 2 : 3} />
+              {/* 이벤트 규칙 미확인 시 안내 버튼 */}
+              {category === '이벤트' && eventCategoryNotice?.content && !eventRulesConfirmed ? (
+                <button
+                  onClick={() => setShowEventRulesModal(true)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-cyan-50 border border-cyan-200 rounded-xl text-left transition-colors hover:bg-cyan-100 min-h-[60px]">
+                  <span className="text-sm text-cyan-700 font-medium">📋 이벤트 규칙을 먼저 확인해주세요</span>
+                  <span className="text-xs text-cyan-500 font-semibold whitespace-nowrap">규칙 보기 →</span>
+                </button>
+              ) : (
+                <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
+                  onFocus={() => activeHwCat && setGuideVisible(false)}
+                  placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
+                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
+                  style={{ fontSize: '16px' }}
+                  rows={category === '재능판매' ? 2 : 3} />
+              )}
 
               {/* 연결된 게임 (살래말래 제외) - 여러개 */}
               {linkedGames.length > 0 && category !== '살래말래' && (
