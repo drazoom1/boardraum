@@ -3855,6 +3855,21 @@ app.get("/make-server-0b7d3bae/community/posts/latest-ts", async (c) => {
   }
 });
 
+// 현재 유저가 좋아요한 포스트 ID 목록 (캐시 우회, 라이브 KV 직접 조회)
+app.get("/make-server-0b7d3bae/community/posts/my-liked-ids", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ likedPostIds: [] });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ likedPostIds: [] });
+    const allPosts = await getByPrefix('beta_post_');
+    const likedPostIds = allPosts
+      .filter(({ value: p }) => p && Array.isArray(p.likes) && p.likes.includes(user.id))
+      .map(({ value: p }) => p.id as string);
+    return c.json({ likedPostIds });
+  } catch { return c.json({ likedPostIds: [] }); }
+});
+
 app.get("/make-server-0b7d3bae/community/posts", async (c) => {
   try {
     const accessToken = c.req.header('Authorization')?.split(' ')[1];

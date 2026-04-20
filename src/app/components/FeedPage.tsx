@@ -3103,6 +3103,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [loading, setLoading] = useState(true);
   // ★ posts가 최초 1회 이상 로드됐는지 추적 → 배너 초기화 타이밍 제어
   const [postsEverLoaded, setPostsEverLoaded] = useState(false);
+  const [postsFetchKey, setPostsFetchKey] = useState(0); // loadPosts 완료마다 +1
   const [category, setCategory] = useState<string>('전체');
   const [subCategory, setSubCategory] = useState<string | null>(null);
   const [showSubSheet, setShowSubSheet] = useState(false); // 모바일 바텀시트
@@ -3217,6 +3218,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     if (!silent) setLoading(false);
     // ★ posts 첫 로드 완료 마킹 (이후 배너 렌더 허용)
     setPostsEverLoaded(true);
+    setPostsFetchKey(k => k + 1);
   }, [category, subCategory, accessToken]);
 
   // ── 낙관적 업데이트 함수들 ──
@@ -3250,6 +3252,32 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   useEffect(() => {
     setLoading(true); loadPosts();
   }, [category, subCategory]);
+
+  // 피드 로드 후 현재 유저의 좋아요 초기 상태를 서버(캐시 우회)에서 재확인
+  // 기존 토글 로직은 변경하지 않음 — 초기 상태 보정 전용
+  useEffect(() => {
+    if (!userId || !accessToken || accessToken.split('.').length !== 3) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/my-liked-ids`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.likedPostIds) return;
+        const likedSet = new Set<string>(d.likedPostIds);
+        setPosts(prev => prev.map(p => {
+          const shouldBeLiked = likedSet.has(p.id);
+          const currentlyLiked = (p.likes || []).includes(userId);
+          if (shouldBeLiked === currentlyLiked) return p;
+          return {
+            ...p,
+            likes: shouldBeLiked
+              ? [...(p.likes || []), userId]
+              : (p.likes || []).filter(id => id !== userId),
+          };
+        }));
+      })
+      .catch(() => {});
+  }, [postsFetchKey, userId, accessToken]); // postsFetchKey: loadPosts 완료마다 재확인
 
   // 보너스카드 조회
   const loadBonusCards = async () => {
