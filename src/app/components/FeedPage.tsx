@@ -3520,12 +3520,11 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           </div>
         )}
 
-        {/* 드롭다운 리스트바 */}
+        {/* 데스크톱 드롭다운 */}
         {showCategories && (
           <>
-            {/* 외부 클릭 닫기 */}
             <div className="fixed inset-0 z-[9997]" onClick={() => { setShowCategories(false); setShowSubPicker(null); }} />
-            <div className="absolute left-4 top-full mt-1.5 z-[9998] bg-white rounded-2xl shadow-xl border border-gray-100 min-w-[160px] overflow-hidden py-1">
+            <div className="hidden lg:block absolute left-4 top-full mt-1.5 z-[9998] bg-white rounded-2xl shadow-xl border border-gray-100 min-w-[160px] overflow-hidden py-1">
               {BASE_CATEGORIES.map(c => {
                 const hasSub = !!SUBCATEGORIES[c];
                 const isActive = category === c && !subCategory;
@@ -3534,36 +3533,25 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                   <div key={c}>
                     <button
                       onClick={() => {
-                        if (hasSub) {
-                          setShowSubPicker(prev => prev === c ? null : c);
-                        } else {
-                          setCategory(c); setSubCategory(null);
-                          setShowCategories(false); setShowSubPicker(null);
-                        }
+                        if (hasSub) { setShowSubPicker(prev => prev === c ? null : c); }
+                        else { setCategory(c); setSubCategory(null); setShowCategories(false); setShowSubPicker(null); }
                       }}
                       className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition-colors
                         ${(isActive || hasActiveSub) ? 'font-bold text-gray-900 bg-gray-50' : 'font-medium text-gray-600 hover:bg-gray-50'}`}>
                       <span>{c === '이벤트' ? '🎉 이벤트' : c}</span>
                       {hasSub
                         ? <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${showSubPicker === c ? 'rotate-180' : ''}`} />
-                        : (isActive || hasActiveSub) && <span className="w-1.5 h-1.5 rounded-full bg-gray-900 flex-shrink-0" />
-                      }
+                        : (isActive || hasActiveSub) && <span className="w-1.5 h-1.5 rounded-full bg-gray-900 flex-shrink-0" />}
                     </button>
-
-                    {/* 하위 카테고리 인라인 확장 */}
                     {hasSub && showSubPicker === c && (
                       <div className="bg-gray-50 border-t border-b border-gray-100">
-                        <button
-                          onClick={() => { setCategory(c); setSubCategory(null); setShowSubPicker(null); setShowCategories(false); }}
-                          className={`w-full text-left pl-8 pr-4 py-2 text-sm transition-colors
-                            ${category === c && !subCategory ? 'font-semibold text-gray-900' : 'text-gray-500 hover:text-gray-800'}`}>
+                        <button onClick={() => { setCategory(c); setSubCategory(null); setShowSubPicker(null); setShowCategories(false); }}
+                          className={`w-full text-left pl-8 pr-4 py-2 text-sm transition-colors ${category === c && !subCategory ? 'font-semibold text-gray-900' : 'text-gray-500 hover:text-gray-800'}`}>
                           {c} 전체
                         </button>
                         {SUBCATEGORIES[c].map(s => (
-                          <button key={s}
-                            onClick={() => { setCategory(c); setSubCategory(s); setShowSubPicker(null); setShowCategories(false); }}
-                            className={`w-full text-left pl-8 pr-4 py-2 text-sm transition-colors
-                              ${subCategory === s ? 'font-semibold text-gray-900' : 'text-gray-500 hover:text-gray-800'}`}>
+                          <button key={s} onClick={() => { setCategory(c); setSubCategory(s); setShowSubPicker(null); setShowCategories(false); }}
+                            className={`w-full text-left pl-8 pr-4 py-2 text-sm transition-colors ${subCategory === s ? 'font-semibold text-gray-900' : 'text-gray-500 hover:text-gray-800'}`}>
                             {s}
                           </button>
                         ))}
@@ -3572,6 +3560,58 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                   </div>
                 );
               })}
+            </div>
+
+            {/* 모바일 중앙 모달 */}
+            <div className="lg:hidden fixed inset-0 bg-black/50 z-[9998] flex items-center justify-center p-6"
+              onClick={() => { setShowCategories(false); setShowSubPicker(null); }}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                  <h3 className="font-bold text-gray-900 text-base">카테고리</h3>
+                  <button onClick={() => { setShowCategories(false); setShowSubPicker(null); }}
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="pb-4">
+                  {BASE_CATEGORIES.map(c => {
+                    const hasSub = !!SUBCATEGORIES[c];
+                    const isActive = category === c && !subCategory;
+                    const hasActiveSub = category === c && !!subCategory;
+                    return (
+                      <div key={c}>
+                        <button
+                          onClick={() => {
+                            if (hasSub) { setShowSubPicker(prev => prev === c ? null : c); }
+                            else { setCategory(c); setSubCategory(null); setShowCategories(false); setShowSubPicker(null); }
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 px-5 py-3 text-sm transition-colors
+                            ${(isActive || hasActiveSub) ? 'font-bold text-gray-900 bg-gray-50' : 'font-medium text-gray-600 active:bg-gray-50'}`}>
+                          <span>{c === '이벤트' ? '🎉 이벤트' : c}</span>
+                          {hasSub
+                            ? <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-150 ${showSubPicker === c ? 'rotate-180' : ''}`} />
+                            : (isActive || hasActiveSub) && <span className="w-2 h-2 rounded-full bg-gray-900 flex-shrink-0" />}
+                        </button>
+                        {hasSub && showSubPicker === c && (
+                          <div className="bg-gray-50 border-t border-b border-gray-100">
+                            <button onClick={() => { setCategory(c); setSubCategory(null); setShowSubPicker(null); setShowCategories(false); }}
+                              className={`w-full text-left pl-10 pr-5 py-2.5 text-sm transition-colors ${category === c && !subCategory ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                              {c} 전체
+                            </button>
+                            {SUBCATEGORIES[c].map(s => (
+                              <button key={s} onClick={() => { setCategory(c); setSubCategory(s); setShowSubPicker(null); setShowCategories(false); }}
+                                className={`w-full text-left pl-10 pr-5 py-2.5 text-sm transition-colors ${subCategory === s ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </>
         )}
