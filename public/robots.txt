@@ -1,6 +1,4 @@
 User-agent: *
 Allow: /
-Allow: /game/
-Allow: /post/
 
 Sitemap: https://boardraum.site/sitemap.xml
