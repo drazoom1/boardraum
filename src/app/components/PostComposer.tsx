@@ -302,25 +302,38 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     }).catch(() => {});
   }, [accessToken]);
 
-  // 카테고리 바뀌면 가이드 다시 표시, 이벤트 규칙 확인 초기화
-  useEffect(() => { setGuideVisible(true); setEventRulesConfirmed(false); }, [category]);
+  // 카테고리 바뀌면 가이드 다시 표시
+  useEffect(() => { setGuideVisible(true); }, [category]);
 
   // 진행중인 마지막글 이벤트 여부 확인
   const [hasActiveEvent, setHasActiveEvent] = useState(false);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
   useEffect(() => {
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     ).then(r => r.ok ? r.json() : null).then(d => {
-      const events: any[] = d?.events || [];
-      const single = d?.event;
-      setHasActiveEvent(events.some((e: any) => e.active) || !!single?.active);
+      const events: any[] = Array.isArray(d) ? d : (d?.events || (d?.active ? [d] : []));
+      const activeEvent = events.find((e: any) => e.active);
+      setHasActiveEvent(!!activeEvent);
+      setActiveEventId(activeEvent?.id || null);
     }).catch(() => {});
   }, [accessToken]);
 
   // 이벤트 카테고리 규칙
   const [eventCategoryNotice, setEventCategoryNotice] = useState<{ title?: string; content?: string } | null>(null);
   const [showEventRulesModal, setShowEventRulesModal] = useState(false);
-  const [eventRulesConfirmed, setEventRulesConfirmed] = useState(false);
+  // localStorage 기반: 현재 이벤트 ID로 확인 여부 체크
+  const [rulesConfirmedTick, setRulesConfirmedTick] = useState(0);
+  const eventRulesConfirmed = activeEventId
+    ? localStorage.getItem(`event_rules_confirmed_${activeEventId}`) === 'true'
+    : false;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _ = rulesConfirmedTick; // tick 참조로 리렌더 보장
+  const confirmEventRules = () => {
+    if (activeEventId) localStorage.setItem(`event_rules_confirmed_${activeEventId}`, 'true');
+    setShowEventRulesModal(false);
+    setRulesConfirmedTick(t => t + 1);
+  };
   useEffect(() => {
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/event-category-notice`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -718,7 +731,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               </div>
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line mb-4">{eventCategoryNotice.content}</p>
               <button
-                onClick={() => { setEventRulesConfirmed(true); setShowEventRulesModal(false); }}
+                onClick={confirmEventRules}
                 className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-bold rounded-xl transition-colors">
                 규칙을 확인했습니다
               </button>
