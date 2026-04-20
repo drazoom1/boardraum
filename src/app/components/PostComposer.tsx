@@ -317,6 +317,17 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     }).catch(() => {});
   }, [accessToken]);
 
+  // 이벤트 카테고리 규칙
+  const [eventCategoryNotice, setEventCategoryNotice] = useState<{ title?: string; content?: string } | null>(null);
+  const [showEventRulesModal, setShowEventRulesModal] = useState(false);
+  useEffect(() => {
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/event-category-notice`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.content) setEventCategoryNotice(d);
+    }).catch(() => {});
+  }, [accessToken]);
+
   const activeHwCat = hwCategories.find(c => c.name === category);
 
   const userName = userProfile?.username || userEmail?.split('@')[0] || '회원';
@@ -681,7 +692,33 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               <button onClick={() => setCategory(currentMain)} className="text-xs text-gray-400 hover:text-gray-600 ml-1">✕</button>
             </div>
           )}
+          {/* 이벤트 규칙 버튼 */}
+          {category === '이벤트' && eventCategoryNotice?.content && (
+            <div className="mt-1.5">
+              <button
+                onClick={() => setShowEventRulesModal(true)}
+                className="flex items-center gap-1 text-xs font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 px-2.5 py-1 rounded-lg transition-colors">
+                📋 이벤트 규칙
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* 이벤트 규칙 모달 */}
+        {showEventRulesModal && eventCategoryNotice && (
+          <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+            onClick={() => setShowEventRulesModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl p-5 w-full max-w-sm"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-900 text-sm">📋 {eventCategoryNotice.title || '이벤트 규칙'}</h3>
+                <button onClick={() => setShowEventRulesModal(false)}
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 text-xs">✕</button>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{eventCategoryNotice.content}</p>
+            </div>
+          </div>
+        )}
 
         {/* 세부 카테고리 모달 */}
         {showSubCategoryModal && pendingMainCategory && (

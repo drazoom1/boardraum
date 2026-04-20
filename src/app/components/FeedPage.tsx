@@ -3907,7 +3907,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           userProfile={userProfile} ownedGames={ownedGames}
           onClose={() => { setShowComposer(false); setComposerCategory(undefined); }}
           onPosted={loadPosts}
-          initialCategory={composerCategory ?? (lastPostEvents.length > 0 ? '이벤트' : undefined)}
+          initialCategory={composerCategory}
         />
       )}
     </div>
