@@ -5498,6 +5498,10 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   const [recipients, setRecipients] = useState<string[] | null>(null);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [showRecipients, setShowRecipients] = useState(false);
+  const [streamProgress, setStreamProgress] = useState<{
+    items: { email: string; ok: boolean }[];
+    success: number; fail: number; total: number; sent: number; done: boolean; quotaExceeded?: boolean; remaining?: number;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
 
@@ -5578,6 +5582,57 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
       toast.error(e.message);
     } finally {
       setSendingSample(false);
+    }
+  };
+
+  const handleStreamSend = async (offset = 0) => {
+    if (!subject.trim()) { toast.error('제목을 입력해주세요'); return; }
+    if (!body.trim()) { toast.error('내용을 입력해주세요'); return; }
+    if (!confirm(`전체 회원에게 메일을 발송할까요?\n제목: ${isAd ? '(광고) ' : ''}${subject}`)) return;
+    setSending(true);
+    setShowRecipients(false);
+    setStreamProgress({ items: [], success: 0, fail: 0, total: 0, sent: 0, done: false });
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/stream`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ subject, body, isAd, offset }) }
+      );
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || '발송 실패'); }
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() || '';
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          try {
+            const d = JSON.parse(part.slice(6));
+            if (d.type === 'progress') {
+              setStreamProgress(prev => prev ? {
+                ...prev, success: d.success, fail: d.fail, sent: d.sent, total: d.total,
+                items: [...prev.items.slice(-49), { email: d.email, ok: d.ok }],
+              } : prev);
+            } else if (d.type === 'done') {
+              setStreamProgress(prev => prev ? { ...prev, ...d, done: true } : prev);
+              setSentThisMonth(p => (p ?? 0) + d.success);
+              setNextOffset(d.remaining > 0 ? offset + d.success + d.fail : 0);
+              setRemaining(d.remaining > 0 ? d.remaining : null);
+              if (d.quotaExceeded) toast.error(`⚠️ 한도 초과! ${d.success}건 발송 후 중단됐어요.`);
+              else toast.success(`발송 완료! 성공 ${d.success}건 / 실패 ${d.fail}건`);
+            }
+          } catch {}
+        }
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+      setStreamProgress(null);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -5809,6 +5864,58 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
         )}
       </div>
 
+      {/* 실시간 발송 진행 */}
+      {streamProgress && (
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
+          {/* 헤더 */}
+          <div className={`px-4 py-3 flex items-center justify-between ${streamProgress.done ? (streamProgress.quotaExceeded ? 'bg-orange-50' : 'bg-green-50') : 'bg-cyan-50'}`}>
+            <div className="flex items-center gap-2">
+              {!streamProgress.done
+                ? <Loader2 className="w-4 h-4 animate-spin text-cyan-600" />
+                : streamProgress.quotaExceeded
+                  ? <span className="text-base">⚠️</span>
+                  : <span className="text-base">✅</span>
+              }
+              <span className="text-sm font-bold text-gray-800">
+                {!streamProgress.done ? '발송 중...' : streamProgress.quotaExceeded ? '한도 초과로 중단됨' : '발송 완료!'}
+              </span>
+            </div>
+            <span className="text-sm font-bold text-gray-700">
+              {streamProgress.sent} / {streamProgress.total || '?'}명
+            </span>
+          </div>
+          {/* 진행 바 */}
+          {streamProgress.total > 0 && (
+            <div className="h-2 bg-gray-100">
+              <div
+                className="h-2 transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, (streamProgress.sent / streamProgress.total) * 100)}%`,
+                  background: streamProgress.done && !streamProgress.quotaExceeded ? '#10b981' : '#06b6d4',
+                }}
+              />
+            </div>
+          )}
+          {/* 통계 */}
+          <div className="flex gap-4 px-4 py-2 bg-white text-xs border-b border-gray-100">
+            <span className="text-green-600 font-semibold">✅ 성공 {streamProgress.success}건</span>
+            {streamProgress.fail > 0 && <span className="text-red-500 font-semibold">❌ 실패 {streamProgress.fail}건</span>}
+            {streamProgress.done && streamProgress.remaining != null && streamProgress.remaining > 0 && (
+              <span className="text-orange-500 font-semibold ml-auto">미발송 {streamProgress.remaining}명 남음</span>
+            )}
+          </div>
+          {/* 최근 발송 목록 */}
+          <div className="max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white">
+            {[...streamProgress.items].reverse().map((item, i) => (
+              <div key={i} className="flex items-center gap-2 px-4 py-1.5">
+                <span className="text-xs">{item.ok ? '✅' : '❌'}</span>
+                <span className="text-xs text-gray-600 truncate">{item.email}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 결과 */}
       {result && !result.sample && (
         <div className={`rounded-xl p-4 text-sm space-y-2 ${result.quotaExceeded ? 'bg-orange-50 border border-orange-200 text-orange-900' : 'bg-green-50 border border-green-200 text-green-800'}`}>
@@ -5866,7 +5973,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
               )}
               {remaining !== null && remaining > 0 ? (
                 <button
-                  onClick={() => { setShowRecipients(false); handleSend(nextOffset); }}
+                  onClick={() => handleStreamSend(nextOffset)}
                   disabled={sending}
                   className="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #f59e0b, #d97706)' }}
@@ -5875,7 +5982,7 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
                 </button>
               ) : null}
               <button
-                onClick={() => { setShowRecipients(false); handleSend(0); }}
+                onClick={() => handleStreamSend(0)}
                 disabled={sending}
                 className="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2"
                 style={{ background: sending ? '#9ca3af' : 'linear-gradient(135deg, #00BCD4, #0097A7)' }}

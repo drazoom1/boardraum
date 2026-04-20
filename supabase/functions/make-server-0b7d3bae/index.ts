@@ -10078,6 +10078,90 @@ app.get("/make-server-0b7d3bae/admin/bulk-mail/recipients", async (c) => {
   }
 });
 
+// ===== 단체 메일 실시간 스트리밍 발송 =====
+app.post("/make-server-0b7d3bae/admin/bulk-mail/stream", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+
+    const { subject, body: mailBody, isAd, offset = 0 } = await c.req.json();
+    if (!subject?.trim() || !mailBody?.trim()) return c.json({ error: '제목과 내용을 입력해주세요' }, 400);
+
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    if (!resendKey) return c.json({ error: 'Resend API 키가 설정되지 않았어요' }, 500);
+
+    const allUsers = await getByPrefix('beta_user_');
+    const allEmails: string[] = allUsers
+      .map((item: any) => item.value?.email)
+      .filter((e: string) => e && e.includes('@'));
+    const targetEmails = allEmails.slice(offset);
+    const total = allEmails.length;
+
+    const finalSubject = isAd ? `(광고) ${subject}` : subject;
+    const footer = isAd ? `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center"><p>본 메일은 보드라움 서비스 관련 광고성 정보입니다.</p><p>수신거부: <a href="mailto:sityplanner2@naver.com" style="color:#00BCD4">sityplanner2@naver.com</a></p><p>보드라움 · boardraum.site</p></div>` : '';
+    const htmlBody = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">${mailBody}${footer}</div>`;
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const emit = (data: object) => {
+          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); } catch {}
+        };
+
+        let success = 0, fail = 0;
+        let quotaExceeded = false;
+        const BATCH = 10;
+
+        for (let i = 0; i < targetEmails.length; i += BATCH) {
+          if (quotaExceeded) break;
+          const batch = targetEmails.slice(i, i + BATCH);
+          const payload = batch.map((email: string) => ({
+            from: '보드라움 <noreply@boardraum.site>',
+            to: [email], subject: finalSubject, html: htmlBody,
+          }));
+          try {
+            const res = await fetch('https://api.resend.com/emails/batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendKey}` },
+              body: JSON.stringify(payload),
+            });
+            if (res.ok) {
+              for (const email of batch) { success++; emit({ type: 'progress', email, ok: true, success, fail, sent: success + fail, total: targetEmails.length }); }
+            } else {
+              const errText = await res.text();
+              if (errText.includes('daily_quota_exceeded') || errText.includes('429')) { quotaExceeded = true; }
+              for (const email of batch) { fail++; emit({ type: 'progress', email, ok: false, success, fail, sent: success + fail, total: targetEmails.length }); }
+            }
+          } catch {
+            for (const email of batch) { fail++; emit({ type: 'progress', email, ok: false, success, fail, sent: success + fail, total: targetEmails.length }); }
+          }
+          if (i + BATCH < targetEmails.length) await new Promise(r => setTimeout(r, 200));
+        }
+
+        if (success > 0) {
+          const monthKey = `bulk_mail_monthly_${new Date().toISOString().slice(0, 7)}`;
+          const prev = (await kv.get(monthKey)) || { count: 0 };
+          await kv.set(monthKey, { count: (prev.count || 0) + success, updatedAt: new Date().toISOString() });
+        }
+
+        const remaining = Math.max(0, total - (offset + success + fail));
+        emit({ type: 'done', success, fail, total, remaining, quotaExceeded });
+        controller.close();
+      }
+    });
+
+    return new Response(stream, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
+    });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
 // ===== 단체 메일 발송 API =====
 app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
   try {
