@@ -1618,7 +1618,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             </button>
 
             {/* 홈 = 피드 */}
-            <button onClick={() => { if (activeTab === 'feed') { window.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }} className="w-12 h-12 flex items-center justify-center relative" title="피드">
+            <button onClick={() => { if (activeTab === 'feed') { document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }} className="w-12 h-12 flex items-center justify-center relative" title="피드">
               <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-8 h-8 object-contain" />
               {hasNewFeedPost && activeTab !== 'feed' && (
                 <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-bold">N</span>
@@ -1768,7 +1768,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
           <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 z-20 pb-safe shadow-lg">
             <div className="flex items-center justify-around px-4 pt-2 pb-6">
               {/* 홈(피드 준비중) */}
-              <button onClick={() => { if (activeTab === 'feed') { window.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }} className="flex flex-col items-center gap-1 relative">
+              <button onClick={() => { if (activeTab === 'feed') { document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }} className="flex flex-col items-center gap-1 relative">
                 <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-11 h-11 object-contain" />
                 {hasNewFeedPost && activeTab !== 'feed' && (
                   <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-bold">N</span>
