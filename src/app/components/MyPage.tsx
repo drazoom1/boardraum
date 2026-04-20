@@ -423,9 +423,8 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
         {/* 추천 링크 버튼 (상단) */}
         {!readOnly && (
           <button onClick={() => setShowReferralModal(true)}
-            className="w-full py-2.5 mb-2 rounded-xl text-sm font-bold text-white transition-colors flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, #00BCD4, #0097A7)' }}>
-            🃏 내 추천 링크 공유
+            className="w-full py-2.5 mb-2 rounded-xl text-sm font-bold text-white bg-cyan-500 hover:bg-cyan-600 transition-colors flex items-center justify-center gap-2">
+            <Share2 className="w-4 h-4" /> 내 추천 링크 공유
           </button>
         )}
 
