@@ -15,9 +15,10 @@ import { updatePostSEO } from '../utils/seo';
 
 const supabase = getSupabaseClient();
 
-const BASE_CATEGORIES = ['전체', '이벤트', '자유', '정보', '게임리뷰', '질문'] as const;
+const BASE_CATEGORIES = ['전체', '이벤트', '숙제', '자유', '정보', '게임리뷰', '질문'] as const;
 type BaseCategory = typeof BASE_CATEGORIES[number];
 const SUBCATEGORIES: Record<string, string[]> = {
+  '숙제': ['최근 숙제', '지난 숙제'],
   '정보': ['보드게임 소식', '보드게임 정보등록', '재능판매'],
   '질문': ['살래말래', '보드게임 QnA'],
 };
@@ -3112,7 +3113,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
-  const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string; pointReward: number; prizeReward?: string; startDate?: string; endDate?: string }[]>([]);
+  const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string; pointReward: number; prizeReward?: string; startDate?: string; endDate?: string; active?: boolean }[]>([]);
+  const [allHwCategories, setAllHwCategories] = useState<{ id: string; name: string; endDate?: string; active?: boolean }[]>([]);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Set<string>>(new Set());
   const [hwSlideIndex, setHwSlideIndex] = useState(0);
   const [displayedPostsCount, setDisplayedPostsCount] = useState(20);
@@ -3140,7 +3142,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/categories`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     ).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.categories) setHwCategories(d.categories.filter((c: any) => c.active));
+      if (d?.categories) {
+        setAllHwCategories(d.categories);
+        setHwCategories(d.categories.filter((c: any) => c.active));
+      }
     }).catch(() => {});
   }, [accessToken]);
 
@@ -3197,7 +3202,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       // 서브카테고리가 선택된 경우 해당 서브카테고리로 서버 필터링
       const parentCatsWithSubs = Object.keys(SUBCATEGORIES);
       const effectiveCat = subCategory || category;
-      const shouldFilter = effectiveCat !== '전체' && effectiveCat !== '이벤트' && !parentCatsWithSubs.includes(effectiveCat);
+      const shouldFilter = effectiveCat !== '전체' && effectiveCat !== '이벤트' && category !== '숙제' && !parentCatsWithSubs.includes(effectiveCat);
       const q = shouldFilter ? `?category=${encodeURIComponent(effectiveCat)}` : '';
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts${q}`,
@@ -3491,7 +3496,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           <button
             onClick={() => { setShowCategories(v => !v); setShowSubPicker(null); }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all">
-            {subCategory ?? (category === '이벤트' ? '🎉 이벤트' : category)}
+            {subCategory ?? (category === '이벤트' ? '🎉 이벤트' : category === '숙제' ? '📚 숙제' : category)}
             <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCategories ? 'rotate-180' : ''}`} />
           </button>
           {subCategory && (
@@ -3538,7 +3543,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                       }}
                       className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition-colors
                         ${(isActive || hasActiveSub) ? 'font-bold text-gray-900 bg-gray-50' : 'font-medium text-gray-600 hover:bg-gray-50'}`}>
-                      <span>{c === '이벤트' ? '🎉 이벤트' : c}</span>
+                      <span>{c === '이벤트' ? '🎉 이벤트' : c === '숙제' ? '📚 숙제' : c}</span>
                       {hasSub
                         ? <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${showSubPicker === c ? 'rotate-180' : ''}`} />
                         : (isActive || hasActiveSub) && <span className="w-1.5 h-1.5 rounded-full bg-gray-900 flex-shrink-0" />}
@@ -3588,7 +3593,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                           }}
                           className={`w-full flex items-center justify-between gap-3 px-5 py-3 text-sm transition-colors
                             ${(isActive || hasActiveSub) ? 'font-bold text-gray-900 bg-gray-50' : 'font-medium text-gray-600 active:bg-gray-50'}`}>
-                          <span>{c === '이벤트' ? '🎉 이벤트' : c}</span>
+                          <span>{c === '이벤트' ? '🎉 이벤트' : c === '숙제' ? '📚 숙제' : c}</span>
                           {hasSub
                             ? <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-150 ${showSubPicker === c ? 'rotate-180' : ''}`} />
                             : (isActive || hasActiveSub) && <span className="w-2 h-2 rounded-full bg-gray-900 flex-shrink-0" />}
@@ -3737,11 +3742,25 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       ) : (
         (() => {
           const q = searchQuery.trim().toLowerCase();
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          const allHwNames = new Set(allHwCategories.map((c: any) => c.name));
+          const recentHwNames = new Set(allHwCategories.filter((c: any) =>
+            !c.endDate || new Date(c.endDate + 'T23:59:59') >= sevenDaysAgo
+          ).map((c: any) => c.name));
+          const oldHwNames = new Set(allHwCategories.filter((c: any) =>
+            c.endDate && new Date(c.endDate + 'T23:59:59') < sevenDaysAgo
+          ).map((c: any) => c.name));
           const basePosts = q
             ? posts.filter(p =>
                 p.content?.toLowerCase().includes(q) ||
                 p.userName?.toLowerCase().includes(q)
               )
+            : category === '숙제' && subCategory === '최근 숙제'
+              ? posts.filter(p => recentHwNames.has(p.category))
+            : category === '숙제' && subCategory === '지난 숙제'
+              ? posts.filter(p => oldHwNames.has(p.category))
+            : category === '숙제'
+              ? posts.filter(p => allHwNames.has(p.category))
             : subCategory
               ? posts.filter(p => p.category === subCategory)
               : category === '이벤트'
