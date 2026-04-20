@@ -3909,7 +3909,6 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
       if (!a.pinned && b.pinned) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-    filtered = filtered.slice(0, 100);
 
     // userRankPoints 병렬 조회로 붙이기
     const postsWithRank = await Promise.all(filtered.map(async (post: any) => {
