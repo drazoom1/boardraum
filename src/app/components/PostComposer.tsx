@@ -324,7 +324,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/event-category-notice`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     ).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.content) setEventCategoryNotice(d);
+      if (d?.notice?.content) setEventCategoryNotice(d.notice);
     }).catch(() => {});
   }, [accessToken]);
 
