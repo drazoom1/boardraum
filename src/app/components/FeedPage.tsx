@@ -967,7 +967,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, isWinner = false, isLeading = false }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -996,6 +996,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   bookmarkedPostIds?: Set<string>;
   onBookmarkChange?: (postId: string, bookmarked: boolean) => void;
   onGuestAction?: () => void;
+  onCategoryClick?: (category: string) => void;
   isWinner?: boolean;
   isLeading?: boolean;
 }) {
@@ -1393,9 +1394,11 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                 return <ChessRankBadge rank={r} />;
               })()}
               {post.category && post.category !== '자유' && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[post.category] || 'bg-gray-100 text-gray-500'}`}>
+                <button
+                  onClick={() => onCategoryClick?.(post.category)}
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[post.category] || 'bg-gray-100 text-gray-500'} hover:opacity-75 transition-opacity`}>
                   {post.category}
-                </span>
+                </button>
               )}
               {post.isPrivate && (
                 <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">
@@ -3190,8 +3193,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
 
   const loadPosts = useCallback(async (silent = false, openCommentPostIds: Set<string> = new Set()) => {
     try {
-      // '이벤트' 카테고리는 프론트에서 필터링하므로 서버엔 전체 요청
-      const q = (category !== '전체' && category !== '이벤트') ? `?category=${encodeURIComponent(category)}` : '';
+      // 부모 카테고리(정보/질문)는 서버 필터 없이 전체 조회 후 클라이언트에서 필터링
+      // 서브카테고리가 선택된 경우 해당 서브카테고리로 서버 필터링
+      const parentCatsWithSubs = Object.keys(SUBCATEGORIES);
+      const effectiveCat = subCategory || category;
+      const shouldFilter = effectiveCat !== '전체' && effectiveCat !== '이벤트' && !parentCatsWithSubs.includes(effectiveCat);
+      const q = shouldFilter ? `?category=${encodeURIComponent(effectiveCat)}` : '';
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts${q}`,
         { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } }
@@ -3205,7 +3212,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     if (!silent) setLoading(false);
     // ★ posts 첫 로드 완료 마킹 (이후 배너 렌더 허용)
     setPostsEverLoaded(true);
-  }, [category, accessToken]);
+  }, [category, subCategory, accessToken]);
 
   // ── 낙관적 업데이트 함수들 ──
   const optimisticDeletePost = useCallback((postId: string) => {
@@ -3236,10 +3243,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   }, []);
 
   useEffect(() => {
-    // 이벤트 카테고리는 클라이언트 필터링이므로 서버 재조회 없이 전체 포스트로 처리
-    if (category === '이벤트') { loadPosts(); return; }
     setLoading(true); loadPosts();
-  }, [category]);
+  }, [category, subCategory]);
 
   // 보너스카드 조회
   const loadBonusCards = async () => {
@@ -3406,6 +3411,19 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       return [...filtered, winner];
     });
   };
+
+  const handleCategoryClick = useCallback((cat: string) => {
+    const parentEntry = Object.entries(SUBCATEGORIES).find(([, subs]) => subs.includes(cat));
+    if (parentEntry) {
+      setCategory(parentEntry[0]);
+      setSubCategory(cat);
+    } else {
+      setCategory(cat);
+      setSubCategory(null);
+    }
+    setShowSubPicker(null);
+    setShowCategories(false);
+  }, []);
 
   const handleFollowToggle = async (targetId: string) => {
     try {
@@ -3771,6 +3789,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                   });
                 }}
                 onGuestAction={onGuestAction}
+                onCategoryClick={handleCategoryClick}
               />
             </div>
           ));})()}

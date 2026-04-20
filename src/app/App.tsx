@@ -1823,9 +1823,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
           {showPlusMenu && (
             <>
               <div className="fixed inset-0 bg-black/60 z-[9990]" onClick={() => setShowPlusMenu(false)} />
-              <div className="fixed bottom-0 left-0 right-0 lg:left-[72px] bg-white rounded-t-3xl z-[9991] shadow-2xl">
+              <div className="fixed inset-0 z-[9991] flex items-center justify-center p-4 pointer-events-none">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm pointer-events-auto">
                 <div className="px-6 pt-5 pb-2">
-                  <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-bold text-gray-900">만들기</h3>
                     <button onClick={() => setShowPlusMenu(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">
@@ -1871,6 +1871,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                     </div>
                   </button>
                 </div>
+              </div>
               </div>
             </>
           )}
