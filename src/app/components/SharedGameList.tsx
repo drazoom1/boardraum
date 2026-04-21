@@ -24,6 +24,8 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
   const [tabMode, setTabMode] = useState<TabMode>(highlightPostId ? 'posts' : 'games');
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [playStats, setPlayStats] = useState<any>(null);
+  const [managementStats, setManagementStats] = useState<any>(null);
   
   useEffect(() => { loadSharedGames(); }, [userId]);
   
@@ -60,8 +62,9 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
       const data = await sharedRes.json();
       setUserName(data.userName);
       setGames(data.games || []);
-      // shared 엔드포인트에서 공개 게시물도 함께 받아옴
       if (data.posts) setPosts(data.posts);
+      if (data.playStats) setPlayStats(data.playStats);
+      if (data.managementStats) setManagementStats(data.managementStats);
 
       // 랭킹 정보 계산
       if (rankingRes.ok) {
@@ -478,6 +481,103 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
           )
         )}
       </div>
+
+      {/* 플레이 기록 섹션 */}
+      {playStats && (
+        <div className="max-w-6xl mx-auto px-4 pb-6">
+          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+            <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
+              <span className="text-lg">🎮</span>
+              <h2 className="text-base font-bold text-gray-900">플레이 기록</h2>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                {[
+                  { label: '총 플레이', value: `${playStats.totalPlays}회` },
+                  { label: '플레이한 게임', value: `${playStats.gamesWithPlays}개` },
+                  { label: '총 플레이 시간', value: playStats.totalMinutes >= 60 ? `${Math.round(playStats.totalMinutes / 60)}시간` : `${playStats.totalMinutes}분` },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-cyan-50 border border-cyan-100 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-cyan-500 font-semibold mb-1">{label}</p>
+                    <p className="text-lg font-bold text-gray-900">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {playStats.topGames?.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">많이 플레이한 게임</p>
+                  {playStats.topGames.map((g: any, i: number) => {
+                    const maxPlay = playStats.topGames[0]?.playCount || 1;
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-300 w-4 text-center">{i + 1}</span>
+                        {g.imageUrl
+                          ? <img src={g.imageUrl} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 shadow-sm" />
+                          : <div className="w-8 h-8 rounded-lg bg-gray-100 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{g.name}</p>
+                          <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-600"
+                              style={{ width: `${Math.round((g.playCount / maxPlay) * 100)}%` }} />
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold text-cyan-600 flex-shrink-0">{g.playCount}회</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {playStats.totalPlays === 0 && (
+                <p className="text-center text-gray-400 py-4">아직 플레이 기록이 없어요</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게임 관리 현황 섹션 */}
+      {managementStats && (
+        <div className="max-w-6xl mx-auto px-4 pb-6">
+          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+            <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
+              <span className="text-lg">🔧</span>
+              <h2 className="text-base font-bold text-gray-900">게임 관리 현황</h2>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: '슬리브 완료', done: managementStats.sleeved },
+                  { label: '박스 정리', done: managementStats.stored },
+                  { label: '컴포 업그레이드', done: managementStats.upgraded },
+                ].map(({ label, done }) => (
+                  <div key={label} className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-gray-400 font-semibold mb-1">{label}</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {done}<span className="text-xs font-normal text-gray-400"> / {managementStats.total}</span>
+                    </p>
+                    <div className="h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-600"
+                        style={{ width: managementStats.total > 0 ? `${Math.round((done / managementStats.total) * 100)}%` : '0%' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {Object.values(managementStats.condition as Record<string, number>).some((v: number) => v > 0) && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs font-bold text-gray-400 mb-2">박스 상태</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {(['S', 'A', 'B', 'C'] as const).map(grade => managementStats.condition[grade] > 0 && (
+                      <span key={grade} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-700 shadow-sm">
+                        {grade}등급 {managementStats.condition[grade]}개
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 푸터 */}
       <div className="bg-white border-t border-gray-200 mt-12">
