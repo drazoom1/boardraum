@@ -377,6 +377,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [bannerUrl, setBannerUrl] = useState('');
   const [activeTab, setActiveTab] = useState(initialGameId ? 'custom' : 'feed'); // 비로그인도 피드에서 시작
+  const [myPageScrollTrigger, setMyPageScrollTrigger] = useState(0);
   
   // /post/:postId URL 진입 시 처리 (notificationPost state 선언 후 아래에서 처리)
   const [customMountKey, setCustomMountKey] = useState(0);
@@ -1644,7 +1645,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             </button>
 
             {/* 사람 = 마이페이지 */}
-            <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('mypage'); })}
+            <button onClick={() => requireAuth(() => {
+              if (activeTab === 'mypage' && !viewingUserId) {
+                setMyPageScrollTrigger(t => t + 1);
+              } else {
+                setViewingUserId(null); setActiveTab('mypage');
+              }
+            })}
               className="w-12 h-12 flex items-center justify-center" title="마이페이지">
               <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-8 h-8 object-contain" />
             </button>
@@ -1787,7 +1794,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 사람=마이페이지 */}
-              <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('mypage'); })} className="flex flex-col items-center gap-1">
+              <button onClick={() => requireAuth(() => {
+                if (activeTab === 'mypage' && !viewingUserId) {
+                  setMyPageScrollTrigger(t => t + 1);
+                } else {
+                  setViewingUserId(null); setActiveTab('mypage');
+                }
+              })} className="flex flex-col items-center gap-1">
                 <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-11 h-11 object-contain" />
               </button>
             </div>
@@ -2074,6 +2087,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                     setWikiInitialTab('info');
                     setActiveTab('custom');
                   }}
+                  scrollToTopTrigger={myPageScrollTrigger}
                 />
               )
             )}

@@ -41,6 +41,7 @@ interface MyPageProps {
   onMoveToOwned?: (game: any) => void;
   onNavigateToWiki?: (category: string, game: any) => void;
   readOnly?: boolean;
+  scrollToTopTrigger?: number;
 }
 
 type MyPageTab = 'owned' | 'wishlist' | 'posts';
@@ -91,7 +92,7 @@ function ShareButton({ userId }: { userId: string }) {
   );
 }
 
-export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishlistGames = [], onOwnedGamesChange, onWishlistGamesChange, userId, userEmail, onNavigateToRanking, onMoveToOwned, onNavigateToWiki, readOnly = false }: MyPageProps) {
+export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishlistGames = [], onOwnedGamesChange, onWishlistGamesChange, userId, userEmail, onNavigateToRanking, onMoveToOwned, onNavigateToWiki, readOnly = false, scrollToTopTrigger }: MyPageProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,11 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
+
+  useEffect(() => {
+    if (scrollToTopTrigger === undefined) return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [scrollToTopTrigger]);
 
   const handleWithdraw = async () => {
     if (!confirm('정말 탈퇴하시겠어요? 모든 데이터가 삭제되며 복구할 수 없어요.')) return;
