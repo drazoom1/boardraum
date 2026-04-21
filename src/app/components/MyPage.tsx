@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Loader2, Camera, X, Lock, Eye, EyeOff, BarChart2, Share2, Trophy, Info, PenLine } from 'lucide-react';
+import { Loader2, Camera, X, Lock, Eye, EyeOff, BarChart2, Share2, Trophy, Info, PenLine, Settings } from 'lucide-react';
 import { ChessRankBadge, RankInfoModal } from './ChessRankBadge';
 import { getRankByStats } from './chessRank';
 import { toast } from 'sonner';
@@ -105,11 +105,41 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState({ showOwnedList: true, showOwnedTotal: false, showWishList: true, showWishTotal: false, showPlayRecords: false, showGameManagement: false });
+  const [privacyDraft, setPrivacyDraft] = useState({ showOwnedList: true, showOwnedTotal: false, showWishList: true, showWishTotal: false, showPlayRecords: false, showGameManagement: false });
+  const [privacySaving, setPrivacySaving] = useState(false);
 
   useEffect(() => {
     if (scrollToTopTrigger === undefined) return;
     document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [scrollToTopTrigger]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/privacy`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.settings) setPrivacySettings(d.settings);
+    }).catch(() => {});
+  }, [accessToken]);
+
+  const savePrivacySettings = async (next: typeof privacySettings) => {
+    setPrivacySaving(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/privacy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify(next),
+      });
+      if (!res.ok) throw new Error('저장 실패');
+      setPrivacySettings(next);
+      setShowPrivacyModal(false);
+    } catch (e: any) {
+      toast.error(e.message || '저장에 실패했어요');
+    }
+    setPrivacySaving(false);
+  };
 
   const handleWithdraw = async () => {
     if (!confirm('정말 탈퇴하시겠어요? 모든 데이터가 삭제되며 복구할 수 없어요.')) return;
@@ -434,12 +464,19 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
           </button>
         )}
 
-        {/* 프로필 편집 버튼 */}
+        {/* 프로필 편집 + 공개 설정 버튼 */}
         {!readOnly && (
-          <button onClick={() => setShowEditModal(true)}
-            className="w-full py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-            프로필 편집
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowEditModal(true)}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+              프로필 편집
+            </button>
+            <button onClick={() => { setPrivacyDraft(privacySettings); setShowPrivacyModal(true); }}
+              className="w-11 flex items-center justify-center border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+              title="공개 설정">
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -990,6 +1027,54 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
           accessToken={accessToken}
           onClose={() => setShowReferralModal(false)}
         />
+      )}
+
+      {/* 공개 설정 모달 */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowPrivacyModal(false)}>
+          <div className="bg-white w-full sm:w-[min(100vw-2rem,480px)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <h2 className="text-base font-bold text-gray-900">프로필 공개 설정</h2>
+              <button onClick={() => setShowPrivacyModal(false)} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-2">
+              <p className="text-xs text-gray-400 py-3">다른 사람이 내 프로필을 볼 때 표시되는 항목을 설정해요.</p>
+              {([
+                { key: 'showOwnedList', label: '보유 리스트 공개', sub: undefined, dep: undefined },
+                { key: 'showOwnedTotal', label: '보유 리스트 금액 공개', sub: '보유 게임의 구매 금액을 공개해요', dep: 'showOwnedList' },
+                { key: 'showWishList', label: '위시 리스트 공개', sub: undefined, dep: undefined },
+                { key: 'showWishTotal', label: '위시 리스트 금액 공개', sub: '위시 게임의 구매 금액을 공개해요', dep: 'showWishList' },
+                { key: 'showPlayRecords', label: '플레이 기록 공개', sub: undefined, dep: undefined },
+                { key: 'showGameManagement', label: '게임 관리 현황 공개', sub: undefined, dep: undefined },
+              ] as { key: keyof typeof privacyDraft; label: string; sub?: string; dep?: keyof typeof privacyDraft }[]).map(({ key, label, sub, dep }) => {
+                const disabled = dep ? !privacyDraft[dep] : false;
+                const checked = privacyDraft[key];
+                return (
+                  <div key={key} className={`flex items-center justify-between py-3.5 border-b border-gray-50 last:border-0 ${disabled ? 'opacity-40' : ''}`}>
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{label}</p>
+                      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+                    </div>
+                    <button
+                      onClick={() => { if (!disabled) setPrivacyDraft(prev => ({ ...prev, [key]: !prev[key] })); }}
+                      disabled={disabled}
+                      className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${checked ? 'bg-gray-900' : 'bg-gray-200'}`}>
+                      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
+              <button
+                onClick={() => savePrivacySettings(privacyDraft)}
+                disabled={privacySaving}
+                className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                {privacySaving ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

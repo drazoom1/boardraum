@@ -22,6 +22,7 @@ export function UserProfilePage({ targetUserId, accessToken, onBack }: UserProfi
     bio: string | null;
     posts: any[];
   } | null>(null);
+  const [privacy, setPrivacy] = useState<{ showOwnedList: boolean; showWishList: boolean } | null>(null);
   const [activeTab, setActiveTab] = useState<'owned' | 'wishlist' | 'posts'>('owned');
   const [points, setPoints] = useState({ points: 0, posts: 0, comments: 0, likesReceived: 0 });
   const [followStats, setFollowStats] = useState({ followerCount: 0, followingCount: 0 });
@@ -47,6 +48,7 @@ export function UserProfilePage({ targetUserId, accessToken, onBack }: UserProfi
             bio: data.bio || null,
             posts: data.posts || [],
           });
+          if (data.privacy) setPrivacy(data.privacy);
         }
 
         // 포인트
@@ -200,26 +202,30 @@ export function UserProfilePage({ targetUserId, accessToken, onBack }: UserProfi
 
         <div className="p-4">
           {activeTab === 'owned' && (
-            profile.games.length === 0
-              ? <p className="text-center text-gray-400 text-sm py-8">보유 게임이 없어요</p>
-              : <BoardGameList
-                  games={profile.games}
-                  onGamesChange={() => {}}
-                  listType="보유"
-                  accessToken={accessToken}
-                  readOnly={true}
-                />
+            privacy?.showOwnedList === false
+              ? <p className="text-center text-gray-400 text-sm py-8">🔒 비공개 설정된 리스트예요</p>
+              : profile.games.length === 0
+                ? <p className="text-center text-gray-400 text-sm py-8">보유 게임이 없어요</p>
+                : <BoardGameList
+                    games={profile.games}
+                    onGamesChange={() => {}}
+                    listType="보유"
+                    accessToken={accessToken}
+                    readOnly={true}
+                  />
           )}
           {activeTab === 'wishlist' && (
-            profile.wishlistGames.length === 0
-              ? <p className="text-center text-gray-400 text-sm py-8">위시리스트가 없어요</p>
-              : <BoardGameList
-                  games={profile.wishlistGames}
-                  onGamesChange={() => {}}
-                  listType="구매 예정"
-                  accessToken={accessToken}
-                  readOnly={true}
-                />
+            privacy?.showWishList === false
+              ? <p className="text-center text-gray-400 text-sm py-8">🔒 비공개 설정된 리스트예요</p>
+              : profile.wishlistGames.length === 0
+                ? <p className="text-center text-gray-400 text-sm py-8">위시리스트가 없어요</p>
+                : <BoardGameList
+                    games={profile.wishlistGames}
+                    onGamesChange={() => {}}
+                    listType="구매 예정"
+                    accessToken={accessToken}
+                    readOnly={true}
+                  />
           )}
           {activeTab === 'posts' && (
             (profile.posts || []).length === 0 ? (

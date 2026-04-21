@@ -6960,22 +6960,79 @@ app.get("/make-server-0b7d3bae/data/sync-status", async (c) => {
   }
 });
 
+// 🔒 Privacy settings: GET
+app.get("/make-server-0b7d3bae/user/privacy", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const settings = await kv.get(`user_privacy_${user.id}`);
+    const defaults = { showOwnedList: true, showOwnedTotal: false, showWishList: true, showWishTotal: false, showPlayRecords: false, showGameManagement: false };
+    return c.json({ settings: { ...defaults, ...(settings || {}) } });
+  } catch (e) {
+    return c.json({ error: 'Failed to load privacy settings' }, 500);
+  }
+});
+
+// 🔒 Privacy settings: POST
+app.post("/make-server-0b7d3bae/user/privacy", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json();
+    const allowed = ['showOwnedList','showOwnedTotal','showWishList','showWishTotal','showPlayRecords','showGameManagement'];
+    const settings: Record<string, boolean> = {};
+    for (const key of allowed) { if (typeof body[key] === 'boolean') settings[key] = body[key]; }
+    const existing = await kv.get(`user_privacy_${user.id}`) || {};
+    await kv.set(`user_privacy_${user.id}`, { ...existing, ...settings });
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: 'Failed to save privacy settings' }, 500);
+  }
+});
+
 // 📤 Public: Get shared game list (no auth required)
 app.get("/make-server-0b7d3bae/shared/:userId", async (c) => {
   try {
     const userId = c.req.param('userId');
-    
+
     if (!userId) {
       console.error('❌ [Shared API] No userId provided');
       return c.json({ error: 'User ID is required' }, 400);
     }
 
-    const ownedGames = await kv.get(`user_${userId}_owned`) || [];
-    const wishlistGames = await kv.get(`user_${userId}_wishlist`) || [];
-    const profile = await kv.get(`user_profile_${userId}`).catch(() => null);
-    const betaUser = await kv.get(`beta_user_${userId}`);
+    const [ownedGamesRaw, wishlistGamesRaw, profile, betaUser, privacyRaw] = await Promise.all([
+      kv.get(`user_${userId}_owned`),
+      kv.get(`user_${userId}_wishlist`),
+      kv.get(`user_profile_${userId}`).catch(() => null),
+      kv.get(`beta_user_${userId}`),
+      kv.get(`user_privacy_${userId}`).catch(() => null),
+    ]);
+
+    const privacyDefaults = { showOwnedList: true, showOwnedTotal: false, showWishList: true, showWishTotal: false, showPlayRecords: false, showGameManagement: false };
+    const privacy = { ...privacyDefaults, ...(privacyRaw || {}) };
+
     const userName = profile?.username || profile?.name || betaUser?.name || '게임 컬렉터';
     const profileImage = profile?.profileImage || null;
+
+    // 보유 리스트 공개 처리
+    let ownedGames: any[] = [];
+    if (privacy.showOwnedList && Array.isArray(ownedGamesRaw)) {
+      ownedGames = privacy.showOwnedTotal
+        ? ownedGamesRaw
+        : ownedGamesRaw.map(({ purchasePrice, ...rest }: any) => rest);
+    }
+
+    // 위시 리스트 공개 처리
+    let wishlistGames: any[] = [];
+    if (privacy.showWishList && Array.isArray(wishlistGamesRaw)) {
+      wishlistGames = privacy.showWishTotal
+        ? wishlistGamesRaw
+        : wishlistGamesRaw.map(({ purchasePrice, ...rest }: any) => rest);
+    }
 
     // 공개 게시물 조회 (비공개 제외)
     const allPostsData = await getByPrefix('beta_post_');
@@ -6988,15 +7045,16 @@ app.get("/make-server-0b7d3bae/shared/:userId", async (c) => {
       success: true,
       userName,
       profileImage,
-      games: Array.isArray(ownedGames) ? ownedGames : [],
-      wishlistGames: Array.isArray(wishlistGames) ? wishlistGames : [],
-      totalCount: Array.isArray(ownedGames) ? ownedGames.length : 0,
+      games: ownedGames,
+      wishlistGames,
+      totalCount: Array.isArray(ownedGamesRaw) ? ownedGamesRaw.length : 0,
       posts: publicPosts,
+      privacy,
     });
   } catch (error) {
     logError('❌ [Shared API] Error loading shared game list:', error);
-    return c.json({ 
-      error: `Failed to load shared game list: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    return c.json({
+      error: `Failed to load shared game list: ${error instanceof Error ? error.message : 'Unknown error'}`
     }, 500);
   }
 });
