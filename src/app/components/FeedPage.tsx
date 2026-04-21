@@ -3120,6 +3120,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [showWinnerEmailModal, setShowWinnerEmailModal] = useState(false);
   const [winnerEmail, setWinnerEmail] = useState('');
   const [winnerEmailSubmitting, setWinnerEmailSubmitting] = useState(false);
+  const [showHwSelectModal, setShowHwSelectModal] = useState(false);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Set<string>>(new Set());
   const [hwSlideIndex, setHwSlideIndex] = useState(0);
   const [displayedPostsCount, setDisplayedPostsCount] = useState(20);
@@ -3947,10 +3948,58 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             </div>
             {/* 오른쪽: 작성하기 버튼 */}
             <button
-              onClick={() => { setComposerCategory(hwCategories[hwSlideIndex].name); setShowComposer(true); }}
+              onClick={() => {
+                if (hwCategories.length === 1) {
+                  setComposerCategory(hwCategories[0].name);
+                  setShowComposer(true);
+                } else {
+                  setShowHwSelectModal(true);
+                }
+              }}
               className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 transition-colors">
               작성하기
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 숙제 선택 모달 */}
+      {showHwSelectModal && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowHwSelectModal(false)}>
+          <div className="bg-white w-full sm:w-[min(100vw-2rem,480px)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <h2 className="text-base font-bold text-gray-900">어떤 숙제에 참여할까요?</h2>
+              <button onClick={() => setShowHwSelectModal(false)} className="text-gray-400 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-2">
+              {hwCategories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => { setShowHwSelectModal(false); setComposerCategory(cat.name); setShowComposer(true); }}
+                  className="w-full text-left flex flex-col gap-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-orange-50 hover:border-orange-200 transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <PenLine className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="font-semibold text-sm text-gray-800">{cat.name}</span>
+                    {cat.pointReward > 0 && (
+                      <span className="text-xs text-amber-500 font-semibold">+{cat.pointReward}pt</span>
+                    )}
+                  </div>
+                  {cat.prizeReward && (
+                    <span className="text-xs text-purple-500 font-medium pl-5">🎁 {cat.prizeReward}</span>
+                  )}
+                  {(cat.startDate || cat.endDate) && (
+                    <span className="text-[10px] text-gray-400 pl-5">
+                      {cat.startDate?.replace(/-/g, '.') || '?'} ~ {cat.endDate?.replace(/-/g, '.') || '?'}
+                    </span>
+                  )}
+                  {cat.guideline && (
+                    <p className="text-xs text-gray-500 pl-5 mt-0.5 line-clamp-2">{cat.guideline}</p>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
