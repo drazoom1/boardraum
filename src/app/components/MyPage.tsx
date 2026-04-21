@@ -108,7 +108,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
 
   useEffect(() => {
     if (scrollToTopTrigger === undefined) return;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [scrollToTopTrigger]);
 
   const handleWithdraw = async () => {
