@@ -312,6 +312,13 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     const loadTrending = async () => {
       setTrendingLoading(true);
       try {
+        const CACHE_KEY = 'cache_trending_games';
+        const CACHE_TTL = 5 * 60 * 1000;
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { ts, data } = JSON.parse(cached);
+          if (Date.now() - ts < CACHE_TTL) { setTrendingGames(data); setTrendingLoading(false); return; }
+        }
         const res = await fetch(
           `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/trending-games`,
           { headers: { Authorization: `Bearer ${publicAnonKey}` } }
@@ -319,6 +326,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         if (res.ok) {
           const raw: any[] = await res.json();
           setTrendingGames(raw);
+          try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: raw })); } catch {}
         }
       } catch {}
       setTrendingLoading(false);
@@ -331,6 +339,13 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     const loadHotGames = async () => {
       setHotLoading(true);
       try {
+        const CACHE_KEY = 'cache_bgg_hot';
+        const CACHE_TTL = 10 * 60 * 1000;
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { ts, data } = JSON.parse(cached);
+          if (Date.now() - ts < CACHE_TTL) { setHotGames(data); setHotLoading(false); return; }
+        }
         const res = await fetch(
           `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-hot`,
           { headers: { Authorization: `Bearer ${publicAnonKey}` } }
@@ -338,6 +353,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         if (res.ok) {
           const data = await res.json();
           setHotGames(data || []);
+          try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data || [] })); } catch {}
         }
       } catch (e) {
         console.error('Hot games load error:', e);
@@ -383,16 +399,30 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   }, [allRegisteredGames]);
 
   const loadAllRegisteredGames = async () => {
+    const CACHE_KEY = 'cache_all_games';
+    const CACHE_TTL = 5 * 60 * 1000;
     try {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🎲 [Client] Loading all registered games...');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       // Get current user's session
       const { data: { session } } = await supabase.auth.getSession();
       const currentUserId = session?.user?.id;
       console.log('👤 [Client] Current user ID:', currentUserId);
-      
+
+      // 캐시 확인
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { ts, games: cachedGames } = JSON.parse(cached);
+        if (Date.now() - ts < CACHE_TTL) {
+          console.log('⚡ [Client] Using cached all-games:', cachedGames.length);
+          const uniqueGames = deduplicateAndMergeGames(cachedGames as GameWithUserId[], currentUserId);
+          setAllRegisteredGames(uniqueGames);
+          return;
+        }
+      }
+
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/data/all-games`,
         {
@@ -406,20 +436,21 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
       if (response.ok) {
         const data = await response.json();
-        
+
         console.log('✅ [Client] Response received!');
         console.log('   - games length:', data.games?.length || 0);
         console.log('   - count:', data.count);
         console.log('   - processedKeys:', data.processedKeys);
         console.log('   - totalKeys:', data.totalKeys);
-        
+
         if (data.games && data.games.length > 0) {
+          try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), games: data.games })); } catch {}
           // 🔥 중복 제거 및 정보 병합: 현재 사용자 우선
           const uniqueGames = deduplicateAndMergeGames(
             data.games as GameWithUserId[],
             currentUserId
           );
-          
+
           setAllRegisteredGames(uniqueGames);
         } else {
           console.warn('⚠️ [Client] No games in response!');
