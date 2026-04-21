@@ -4399,15 +4399,13 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/like", async (c) => {
       // 좋아요 취소 → 포인트 회수 + 알림
       const { loss } = await removePoints(post.userId, 'LIKE_RECEIVED').catch(() => ({ loss: 0 }));
       if (loss > 0 && post.userId !== user.id) {
-        const likerProfile = await kv.get(`user_profile_${user.id}`).catch(() => null);
-        const likerName = likerProfile?.username || likerProfile?.name || user.email?.split('@')[0] || '누군가';
         await createNotification(post.userId, {
           type: 'points',
           fromUserId: user.id,
-          fromUserName: likerName,
+          fromUserName: '',
           postId,
           postContent: (post.content || '').slice(0, 30),
-          message: `${likerName}님이 하트를 취소했어요 (-${loss}pt)`,
+          message: `하트가 취소됐어요 (-${loss}pt)`,
         }).catch(() => {});
       }
     }
