@@ -7034,6 +7034,35 @@ app.get("/make-server-0b7d3bae/shared/:userId", async (c) => {
         : wishlistGamesRaw.map(({ purchasePrice, ...rest }: any) => rest);
     }
 
+    // 플레이 기록 통계
+    let playStats: any = null;
+    if (privacy.showPlayRecords && Array.isArray(ownedGamesRaw) && ownedGamesRaw.length > 0) {
+      const raw = ownedGamesRaw as any[];
+      const totalPlays = raw.reduce((s, g) => s + (g.playCount || 0), 0);
+      const gamesWithPlays = raw.filter(g => (g.playCount || 0) > 0).length;
+      const totalMinutes = raw.reduce((s, g) =>
+        s + ((g.playRecords || []) as any[]).reduce((t: number, r: any) => t + (r.totalTime || 0), 0), 0);
+      const topGames = [...raw]
+        .filter(g => (g.playCount || 0) > 0)
+        .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+        .slice(0, 5)
+        .map(g => ({ name: g.koreanName || g.englishName || '이름 없음', playCount: g.playCount || 0, imageUrl: g.imageUrl || null }));
+      playStats = { totalPlays, gamesWithPlays, totalMinutes, topGames, totalGames: raw.length };
+    }
+
+    // 게임 관리 현황 통계
+    let managementStats: any = null;
+    if (privacy.showGameManagement && Array.isArray(ownedGamesRaw) && ownedGamesRaw.length > 0) {
+      const raw = ownedGamesRaw as any[];
+      const total = raw.length;
+      const sleeved = raw.filter(g => g.hasSleeve).length;
+      const stored = raw.filter(g => g.hasStorage).length;
+      const upgraded = raw.filter(g => g.hasComponentUpgrade).length;
+      const condition: Record<string, number> = { S: 0, A: 0, B: 0, C: 0 };
+      raw.forEach(g => { if (g.boxCondition && condition[g.boxCondition] !== undefined) condition[g.boxCondition]++; });
+      managementStats = { total, sleeved, stored, upgraded, condition };
+    }
+
     // 공개 게시물 조회 (비공개 제외)
     const allPostsData = await getByPrefix('beta_post_');
     const publicPosts = allPostsData
@@ -7050,6 +7079,8 @@ app.get("/make-server-0b7d3bae/shared/:userId", async (c) => {
       totalCount: Array.isArray(ownedGamesRaw) ? ownedGamesRaw.length : 0,
       posts: publicPosts,
       privacy,
+      playStats,
+      managementStats,
     });
   } catch (error) {
     logError('❌ [Shared API] Error loading shared game list:', error);
