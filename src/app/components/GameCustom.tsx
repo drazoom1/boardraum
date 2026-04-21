@@ -244,6 +244,9 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   const [showComments, setShowComments] = useState<string | null>(null);
   const [comments, setComments] = useState<{ [key: string]: Comment[] }>({});
   const [newComment, setNewComment] = useState('');
+  const [feedShowComments, setFeedShowComments] = useState<string | null>(null);
+  const [feedLocalComments, setFeedLocalComments] = useState<{ [key: string]: any[] }>({});
+  const [feedNewComment, setFeedNewComment] = useState('');
   const [editingPost, setEditingPost] = useState<CustomPost | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [allRegisteredGames, setAllRegisteredGames] = useState<BoardGame[]>([]);
@@ -837,6 +840,36 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       if (!comments[postId]) {
         loadComments(postId);
       }
+    }
+  };
+
+  const toggleFeedComments = (postId: string) => {
+    setFeedShowComments(prev => prev === postId ? null : postId);
+    setFeedNewComment('');
+  };
+
+  const addFeedComment = async (postId: string) => {
+    if (!feedNewComment.trim() || !accessToken) return;
+    const text = feedNewComment.trim();
+    setFeedNewComment('');
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${postId}/comments`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ content: text }) }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '댓글 등록 실패');
+      const newC = data.comment || { id: Date.now().toString(), content: text, createdAt: new Date().toISOString() };
+      setFeedLocalComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), newC] }));
+      setGameFeedPosts(prev => prev.map(p => p.id === postId
+        ? { ...p, comments: [...(p.comments || []), newC] }
+        : p
+      ));
+      toast.success('댓글을 등록했어요');
+    } catch (e: any) {
+      toast.error(e.message || '댓글 등록 실패');
+      setFeedNewComment(text);
     }
   };
 
@@ -2085,11 +2118,45 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                         <Heart className="w-3.5 h-3.5" />
                         {Array.isArray(post.likes) ? post.likes.length : (post.likes || 0)}
                       </span>
-                      <span className="flex items-center gap-1">
+                      <button
+                        onClick={() => toggleFeedComments(post.id)}
+                        className={`flex items-center gap-1 transition-colors ${feedShowComments === post.id ? 'text-cyan-500' : 'hover:text-gray-600'}`}>
                         <MessageCircle className="w-3.5 h-3.5" />
                         {Array.isArray(post.comments) ? post.comments.length : (post.comments || 0)}
-                      </span>
+                      </button>
                     </div>
+                    {/* 댓글 섹션 */}
+                    {feedShowComments === post.id && (
+                      <div className="mt-3 space-y-2">
+                        {(post.comments || []).map((c: any) => (
+                          <div key={c.id} className="bg-gray-50 rounded-xl px-3 py-2">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="text-xs font-semibold text-gray-700">{c.userName || c.userEmail || '익명'}</span>
+                              <span className="text-[10px] text-gray-400">{new Date(c.createdAt || c.created_at).toLocaleDateString('ko-KR')}</span>
+                            </div>
+                            <p className="text-xs text-gray-700 whitespace-pre-wrap">{c.content}</p>
+                          </div>
+                        ))}
+                        {accessToken && (
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={feedNewComment}
+                              onChange={e => setFeedNewComment(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addFeedComment(post.id); } }}
+                              placeholder="댓글을 입력하세요..."
+                              className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-cyan-400 bg-white"
+                            />
+                            <button
+                              onClick={() => addFeedComment(post.id)}
+                              disabled={!feedNewComment.trim()}
+                              className="text-xs font-semibold px-3 py-2 bg-gray-900 text-white rounded-xl hover:bg-gray-700 disabled:opacity-40 transition-colors">
+                              등록
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
