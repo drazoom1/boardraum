@@ -113,17 +113,17 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
     .reduce((sum, g) => sum + (g.purchasePrice || 0), 0);
 
   if (isLoading) return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-purple-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="w-12 h-12 animate-spin text-cyan-600 mx-auto mb-4" />
-        <p className="text-gray-600">게임 목록을 불러오는 중...</p>
+        <Loader2 className="w-12 h-12 animate-spin text-cyan-500 mx-auto mb-4" />
+        <p className="text-gray-500">게임 목록을 불러오는 중...</p>
       </div>
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-purple-50 flex items-center justify-center">
-      <div className="text-center bg-white p-8 rounded-lg shadow-lg">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center bg-white p-8 rounded-2xl shadow-sm">
         <p className="text-2xl mb-4">😢</p>
         <p className="text-gray-600">{error}</p>
       </div>
@@ -131,22 +131,20 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-purple-50">
-      {/* 홍보 배너 */}
-      <div className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-center gap-2 text-sm sm:text-base">
-            <span className="font-medium">보드게임 리스트 관리는 보드라움에서!</span>
-            <a href={window.location.origin}
-              className="bg-white text-cyan-600 px-4 py-1 rounded-full font-bold hover:bg-cyan-50 transition-colors">
-              BOARDRAUM 접속하기 →
-            </a>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* 상단 가입 유도 바 */}
+      <div className="bg-gray-900 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-gray-300 truncate">나도 내 보드게임 컬렉션을 공유하고 싶다면?</p>
+          <a href={window.location.origin}
+            className="flex-shrink-0 bg-cyan-500 hover:bg-cyan-400 text-white text-sm font-bold px-4 py-1.5 rounded-lg transition-colors">
+            무료로 시작하기
+          </a>
         </div>
       </div>
 
       {/* 헤더 */}
-      <div className="bg-white shadow-md border-b-4 border-cyan-500">
+      <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -202,13 +200,13 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
       {/* 랭커 배너 */}
       {rankingInfo.length > 0 && (
         <div className="max-w-6xl mx-auto px-4 pt-6">
-          <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3">
-            <Trophy className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3">
+            <Trophy className="w-6 h-6 text-amber-500 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-sm">{userName}님은 보드라움 랭커예요! 🏆</p>
               <div className="flex flex-wrap gap-2 mt-1.5">
                 {rankingInfo.map(({ type, rank }) => (
-                  <span key={type} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-yellow-400 text-yellow-900">
+                  <span key={type} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-400 text-amber-900">
                     {rank === 1 ? '🥇 ' : rank === 2 ? '🥈 ' : rank === 3 ? '🥉 ' : ''}{type} {rank}위
                   </span>
                 ))}
@@ -517,7 +515,7 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-800 truncate">{g.name}</p>
                           <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-600"
+                            <div className="h-full rounded-full bg-cyan-500"
                               style={{ width: `${Math.round((g.playCount / maxPlay) * 100)}%` }} />
                           </div>
                         </div>
@@ -556,7 +554,7 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
                       {done}<span className="text-xs font-normal text-gray-400"> / {managementStats.total}</span>
                     </p>
                     <div className="h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-600"
+                      <div className="h-full rounded-full bg-cyan-500"
                         style={{ width: managementStats.total > 0 ? `${Math.round((done / managementStats.total) * 100)}%` : '0%' }} />
                     </div>
                   </div>
@@ -579,11 +577,19 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
         </div>
       )}
 
-      {/* 푸터 */}
-      <div className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-6xl mx-auto px-4 py-6 text-center">
-          <p className="text-gray-600 text-sm mb-1">이 컬렉션은 <span className="font-bold text-cyan-600">BOARDRAUM</span>에서 관리됩니다</p>
-          <p className="text-gray-400 text-xs">나만의 보드게임 컬렉션을 만들고 싶다면 BOARDRAUM에 가입하세요!</p>
+      {/* 푸터 CTA */}
+      <div className="bg-gray-900 mt-12">
+        <div className="max-w-2xl mx-auto px-6 py-12 text-center">
+          <p className="text-gray-400 text-sm mb-2 tracking-wide uppercase">BOARDRAUM</p>
+          <h3 className="text-white text-2xl font-bold mb-3">나도 내 보드게임 컬렉션을<br />공유하고 싶다면?</h3>
+          <p className="text-gray-400 text-sm mb-8">소유 게임 관리, 위시리스트, 플레이 기록까지<br />모두 무료로 관리하고 친구들과 공유하세요.</p>
+          <a
+            href="/"
+            className="inline-block bg-cyan-500 hover:bg-cyan-400 text-white font-bold px-8 py-3 rounded-xl text-base transition-colors"
+          >
+            무료로 시작하기
+          </a>
+          <p className="text-gray-600 text-xs mt-6">이 페이지는 BOARDRAUM 사용자의 컬렉션 공유 링크입니다</p>
         </div>
       </div>
     </div>
