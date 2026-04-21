@@ -9330,6 +9330,31 @@ app.post("/make-server-0b7d3bae/homework/winner/claim-email", async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 숙제 마감 (관리자) - 현재 당첨자를 마감 목록으로 이동, 배너 제거
+app.post("/make-server-0b7d3bae/homework/winner/close", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const winner = await kv.get('homework_winner') as any;
+    if (!winner) return c.json({ error: '현재 당첨자가 없어요' }, 404);
+    const closed = (await kv.get('homework_closed_winners') as any[] | null) || [];
+    closed.unshift({ ...winner, closedAt: new Date().toISOString(), closedBy: user.id });
+    await kv.set('homework_closed_winners', closed);
+    await kv.del('homework_winner');
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 마감된 숙제 당첨 목록 조회 (관리자)
+app.get("/make-server-0b7d3bae/homework/closed-winners", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const closed = (await kv.get('homework_closed_winners') as any[] | null) || [];
+    return c.json({ closedWinners: closed });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 내 숙제 현황 조회 (회원)
 app.get("/make-server-0b7d3bae/homework/my", async (c) => {
   try {

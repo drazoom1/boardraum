@@ -4902,9 +4902,11 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [subLoading, setSubLoading] = useState(false);
-  const [tab, setTab] = useState<'categories' | 'submissions'>('categories');
+  const [tab, setTab] = useState<'categories' | 'submissions' | 'closed'>('categories');
   const [currentWinner, setCurrentWinner] = useState<any>(null);
   const [selectingWinner, setSelectingWinner] = useState<any>(null);
+  const [closedWinners, setClosedWinners] = useState<any[]>([]);
+  const [closingWinner, setClosingWinner] = useState(false);
   // 카테고리 폼
   const [showForm, setShowForm] = useState(false);
   const [editCat, setEditCat] = useState<any>(null);
@@ -4930,9 +4932,27 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
     const wr = await fetch(`${BASE}/homework/winner`, { headers });
     if (wr.ok) { const d = await wr.json(); setCurrentWinner(d.winner || null); }
   };
+  const loadClosed = async () => {
+    const res = await fetch(`${BASE}/homework/closed-winners`, { headers });
+    if (res.ok) { const d = await res.json(); setClosedWinners(d.closedWinners || []); }
+  };
+  const closeWinner = async () => {
+    if (!window.confirm('숙제를 마감하면 당첨 배너가 내려가요. 마감하시겠어요?')) return;
+    setClosingWinner(true);
+    try {
+      const res = await fetch(`${BASE}/homework/winner/close`, { method: 'POST', headers });
+      if (!res.ok) throw new Error('마감 실패');
+      toast.success('숙제가 마감됐어요');
+      setCurrentWinner(null);
+    } catch (e: any) { toast.error(e.message || '마감 실패'); }
+    setClosingWinner(false);
+  };
 
   useEffect(() => { (async () => { await loadCats(); setLoading(false); })(); }, []);
-  useEffect(() => { if (tab === 'submissions') loadSubs(); }, [tab]);
+  useEffect(() => {
+    if (tab === 'submissions') loadSubs();
+    if (tab === 'closed') loadClosed();
+  }, [tab]);
 
   const openCreate = () => { setEditCat(null); setForm({ name: '', guideline: '', pointReward: 0, prizeReward: '', startDate: '', endDate: '' }); setShowForm(true); };
   const openEdit = (cat: any) => { setEditCat(cat); setForm({ name: cat.name, guideline: cat.guideline || '', pointReward: cat.pointReward || 0, prizeReward: cat.prizeReward || '', startDate: cat.startDate || '', endDate: cat.endDate || '' }); setShowForm(true); };
@@ -4986,11 +5006,11 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-2">
-        {(['categories', 'submissions'] as const).map(t => (
+      <div className="flex gap-2 flex-wrap">
+        {(['categories', 'submissions', 'closed'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === t ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {t === 'categories' ? '숙제 카테고리' : '제출 검사'}
+            {t === 'categories' ? '숙제 카테고리' : t === 'submissions' ? '제출 검사' : '마감 목록'}
           </button>
         ))}
       </div>
@@ -5046,6 +5066,21 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
             <p className="text-sm text-gray-500">숙제 카테고리에 제출된 게시물 목록이에요</p>
             <button onClick={loadSubs} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><RefreshCw className="w-4 h-4" /></button>
           </div>
+          {currentWinner && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs text-yellow-700 font-semibold mb-0.5">🏆 현재 당첨 배너 활성</p>
+                <p className="text-sm font-bold text-gray-900">{currentWinner.userName} · {currentWinner.category}</p>
+                {currentWinner.emailClaimed && <p className="text-xs text-green-600 mt-0.5">📬 이메일 접수 완료: {currentWinner.email}</p>}
+              </div>
+              <button
+                onClick={closeWinner}
+                disabled={closingWinner}
+                className="flex-shrink-0 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors">
+                {closingWinner ? '마감 중...' : '숙제 마감'}
+              </button>
+            </div>
+          )}
           {subLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-300" /></div>
           ) : submissions.length === 0 ? (
@@ -5079,6 +5114,33 @@ function HomeworkSection({ accessToken }: { accessToken: string }) {
                       </button>
                     </div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'closed' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">마감된 숙제 당첨 목록이에요</p>
+            <button onClick={loadClosed} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><RefreshCw className="w-4 h-4" /></button>
+          </div>
+          {closedWinners.length === 0 ? (
+            <div className="text-center py-12 text-sm text-gray-400">마감된 숙제가 없어요</div>
+          ) : (
+            <div className="space-y-3">
+              {closedWinners.map((w, i) => (
+                <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">📚 {w.category}</span>
+                    {w.emailClaimed && <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">📬 이메일 접수</span>}
+                  </div>
+                  <p className="font-bold text-gray-900 text-sm">🏆 {w.userName}</p>
+                  {w.prizeReward && <p className="text-xs text-purple-600 font-medium">🎁 {w.prizeReward}</p>}
+                  {w.emailClaimed && w.email && <p className="text-xs text-gray-600 font-medium">✉️ {w.email}</p>}
+                  <p className="text-xs text-gray-400">{new Date(w.closedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
               ))}
             </div>
