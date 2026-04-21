@@ -6986,8 +6986,8 @@ app.post("/make-server-0b7d3bae/user/privacy", async (c) => {
     const allowed = ['showOwnedList','showOwnedTotal','showWishList','showWishTotal','showPlayRecords','showGameManagement'];
     const settings: Record<string, boolean> = {};
     for (const key of allowed) { if (typeof body[key] === 'boolean') settings[key] = body[key]; }
-    const existing = await kv.get(`user_privacy_${user.id}`) || {};
-    await kv.set(`user_privacy_${user.id}`, { ...existing, ...settings });
+    const existing = await kvGetWithRetry(`user_privacy_${user.id}`) || {};
+    await kvSetWithRetry(`user_privacy_${user.id}`, { ...existing, ...settings });
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Failed to save privacy settings' }, 500);

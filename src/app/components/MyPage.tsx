@@ -1058,8 +1058,10 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
                     <button
                       onClick={() => { if (!disabled) setPrivacyDraft(prev => ({ ...prev, [key]: !prev[key] })); }}
                       disabled={disabled}
-                      className={`relative flex-shrink-0 w-11 h-6 rounded-full overflow-hidden transition-colors ${checked ? 'bg-gray-900' : 'bg-gray-200'}`}>
-                      <span className={`absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0'}`} />
+                      style={{ backgroundColor: checked ? '#00C4CC' : '#D1D5DB' }}
+                      className="relative flex-shrink-0 w-12 h-7 rounded-full transition-colors duration-200">
+                      <span style={{ transform: checked ? 'translateX(22px)' : 'translateX(2px)' }}
+                        className="absolute top-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-md transition-transform duration-200 block" />
                     </button>
                   </div>
                 );
