@@ -625,13 +625,16 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   return (
     <>
     <div
-      className="fixed inset-0 bg-black/60 z-[9990] flex flex-col justify-end items-center p-2"
+      className="fixed inset-0 bg-black/60 z-[9990] flex flex-col items-center justify-end sm:justify-center p-2 sm:p-4"
       style={{
-        paddingBottom: keyboardHeight,
+        paddingBottom: keyboardHeight > 0 ? keyboardHeight : undefined,
         transition: 'padding-bottom 0.25s ease',
       }}
     >
-      <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col" style={{ maxHeight: vvHeight - 16, transition: 'max-height 0.25s ease' }}>
+      <div
+        className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col sm:max-h-[95vh]"
+        style={{ maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined, transition: 'max-height 0.25s ease' }}
+      >
         {/* 헤더 */}
         <div className="flex items-center justify-between px-4 sm:px-5 pt-3 sm:pt-5 pb-2.5 sm:pb-4 border-b border-gray-100 flex-shrink-0">
           <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-900 font-medium">취소</button>
