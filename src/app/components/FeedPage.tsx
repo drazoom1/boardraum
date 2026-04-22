@@ -2673,24 +2673,28 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       </div>
     </div>
     {showDescModal && (
-      <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4" onClick={() => setShowDescModal(false)}>
-        <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
-          <div className="text-center">
+      <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end justify-center sm:items-center sm:p-4" onClick={() => setShowDescModal(false)}>
+        <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm flex flex-col" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+          <div className="flex-shrink-0 px-6 pt-6 pb-4 text-center border-b border-gray-100">
             <div className="text-3xl mb-2">🏆</div>
             <h3 className="text-lg font-bold text-gray-900">{event.prize}</h3>
           </div>
-          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-            <p className="text-xs font-bold text-gray-700 mb-2">📋 이벤트 규칙</p>
-            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{event.description}</p>
+          <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-bold text-gray-700 mb-2">📋 이벤트 규칙</p>
+              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{event.description}</p>
+            </div>
+            <div className="text-xs text-gray-400 space-y-1">
+              <p>⏱ 타이머: {event.durationMinutes}분</p>
+              <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
+            </div>
           </div>
-          <div className="text-xs text-gray-400 space-y-1">
-            <p>⏱ 타이머: {event.durationMinutes}분</p>
-            <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
+          <div className="flex-shrink-0 px-6 pb-6 pt-2">
+            <button onClick={() => setShowDescModal(false)}
+              className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
+              확인
+            </button>
           </div>
-          <button onClick={() => setShowDescModal(false)}
-            className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
-            확인
-          </button>
         </div>
       </div>
     )}
