@@ -2163,6 +2163,7 @@ function useKSTHour() {
 function ReferralRankEventBanner({ event, accessToken }: { event: any; accessToken?: string }) {
   const [showModal, setShowModal] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const ranking: any[] = event.ranking || [];
   const leader = ranking[0] || null;
 
@@ -2198,8 +2199,8 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
         style={{ border: `2px solid ${periodColor}` }}
       >
         <div className="px-5 py-4">
-          {/* 상단 행: 타이틀 + D-day */}
-          <div className="flex items-center justify-between mb-3">
+          {/* 상단 행: 타이틀 + D-day + 접기/펼치기 */}
+          <div className="flex items-center justify-between" style={{ marginBottom: collapsed ? 0 : 12 }}>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-2xl leading-none font-black select-none" style={{ color: periodColor, lineHeight: 1 }}>🏅</span>
               <span className="text-gray-900 font-bold text-sm">추천인 랭킹 이벤트</span>
@@ -2211,22 +2212,30 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
                   title="이벤트 설명">!</button>
               )}
             </div>
-            {/* D-day / 기간 표시 */}
-            <div className="text-right ml-2 flex-shrink-0">
-              {periodLabel ? (
-                <>
-                  <p className="text-gray-400 text-[10px]">
-                    {event.eventEndDate && !event.expired ? '마감까지' : ''}
-                  </p>
-                  <div className="font-black text-2xl tracking-tight leading-none" style={{ color: periodColor }}>
-                    {periodLabel}
-                  </div>
-                </>
-              ) : (
-                <div className="font-black text-sm" style={{ color: periodColor }}>진행중</div>
-              )}
+            <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+              {/* D-day / 기간 표시 */}
+              <div className="text-right">
+                {periodLabel ? (
+                  <>
+                    <p className="text-gray-400 text-[10px]">
+                      {event.eventEndDate && !event.expired ? '마감까지' : ''}
+                    </p>
+                    <div className="font-black text-2xl tracking-tight leading-none" style={{ color: periodColor }}>
+                      {periodLabel}
+                    </div>
+                  </>
+                ) : (
+                  <div className="font-black text-sm" style={{ color: periodColor }}>진행중</div>
+                )}
+              </div>
+              <button onClick={() => setCollapsed(c => !c)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
             </div>
           </div>
+
+          {/* 접히는 콘텐츠 */}
+          <div style={{ overflow: 'hidden', maxHeight: collapsed ? 0 : '500px', transition: 'max-height 0.3s ease' }}>
 
           {/* 정보 박스: 선두 + 상품 */}
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
@@ -2262,6 +2271,7 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
             <Trophy className="w-4 h-4" />
             랭킹 보기
           </button>
+          </div>{/* end collapsible */}
         </div>
       </div>
 
@@ -2380,6 +2390,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [showHowToGetModal, setShowHowToGetModal] = useState(false);
   const [showDescModal, setShowDescModal] = useState(false);
   const [showNotLeaderModal, setShowNotLeaderModal] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -2598,37 +2609,44 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
     return (
       <div className="rounded-2xl bg-white border border-gray-200 mb-3 overflow-hidden shadow-sm">
         <div className="px-5 py-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between" style={{ marginBottom: collapsed ? 0 : 12 }}>
             <div className="flex items-center gap-2">
               <Gift className="w-5 h-5" style={{ color: '#00BCD4' }} />
               <span className="text-gray-900 font-bold text-sm">{event.eventTitle || '마지막글 이벤트'}</span>
               <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">😴 휴식중</span>
             </div>
-            <div className="text-right ml-2">
-              <p className="text-gray-400 text-[10px]">재개까지</p>
-              <p className="font-mono font-bold text-lg" style={{ color: '#00BCD4' }}>{fmt(sleepSecs)}</p>
-            </div>
-          </div>
-          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
-            <div>
-              <p className="text-gray-400 text-[10px] mb-0.5">🏆 현재 선두</p>
-              <p className="text-gray-800 font-bold text-sm">
-                {lastPost ? lastPost.userName : '아직 없음'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-2 flex-shrink-0">
               <div className="text-right">
-                <p className="text-gray-400 text-[10px] mb-0.5">상품</p>
-                <p className="font-bold text-xs" style={{ color: '#00BCD4' }}>{event.prize}</p>
+                <p className="text-gray-400 text-[10px]">재개까지</p>
+                <p className="font-mono font-bold text-lg" style={{ color: '#00BCD4' }}>{fmt(sleepSecs)}</p>
               </div>
-              {event.prizeImageUrl && (
-                <img src={event.prizeImageUrl} alt="상품" className="w-14 h-14 object-contain rounded-xl bg-white border border-gray-100 flex-shrink-0" />
-              )}
+              <button onClick={() => setCollapsed(c => !c)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
             </div>
           </div>
-          <p className="text-gray-400 text-[10px] mt-2 text-center">
-            오전 {event.sleepEnd ?? 8}시 재개 후 타이머 시작 · 현재 선두 유지 시 당첨!
-          </p>
+          <div style={{ overflow: 'hidden', maxHeight: collapsed ? 0 : '500px', transition: 'max-height 0.3s ease' }}>
+            <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-gray-400 text-[10px] mb-0.5">🏆 현재 선두</p>
+                <p className="text-gray-800 font-bold text-sm">
+                  {lastPost ? lastPost.userName : '아직 없음'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <p className="text-gray-400 text-[10px] mb-0.5">상품</p>
+                  <p className="font-bold text-xs" style={{ color: '#00BCD4' }}>{event.prize}</p>
+                </div>
+                {event.prizeImageUrl && (
+                  <img src={event.prizeImageUrl} alt="상품" className="w-14 h-14 object-contain rounded-xl bg-white border border-gray-100 flex-shrink-0" />
+                )}
+              </div>
+            </div>
+            <p className="text-gray-400 text-[10px] mt-2 text-center">
+              오전 {event.sleepEnd ?? 8}시 재개 후 타이머 시작 · 현재 선두 유지 시 당첨!
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -2647,7 +2665,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       ${veryUrgent ? 'animate-pulse' : ''}`}
       style={{ border: `2px solid ${borderColor}` }}>
       <div className="px-5 py-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between" style={{ marginBottom: collapsed ? 0 : 12 }}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-2xl leading-none font-black select-none" style={{ color: '#00BCD4', fontFamily: 'Georgia, serif', lineHeight: 1 }}>❝</span>
             <span className="text-gray-900 font-bold text-sm">{event.eventTitle || '마지막글 이벤트'}</span>
@@ -2658,12 +2676,16 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                 title="이벤트 설명">!</button>
             )}
           </div>
-          <div className="text-right ml-2 flex-shrink-0">
+          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
             <div className="font-mono font-black text-3xl tracking-tight" style={{ color: timerColor }}>
               {fmt(remaining)}
             </div>
+            <button onClick={() => setCollapsed(c => !c)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+              {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </button>
           </div>
         </div>
+        <div style={{ overflow: 'hidden', maxHeight: collapsed ? 0 : '800px', transition: 'max-height 0.3s ease' }}>
         <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
           <div>
             <p className="text-gray-400 text-[10px] mb-0.5">🏆 현재 선두</p>
@@ -2773,6 +2795,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨! · 자정~오전8시 휴식
           </p>
         )}
+        </div>{/* end collapsible */}
       </div>
     </div>
     {showDescModal && (
@@ -3376,6 +3399,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [winnerEmail, setWinnerEmail] = useState('');
   const [winnerEmailSubmitting, setWinnerEmailSubmitting] = useState(false);
   const [showHwSelectModal, setShowHwSelectModal] = useState(false);
+  const [hwIsNew, setHwIsNew] = useState(false);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Set<string>>(new Set());
   const [hwSlideIndex, setHwSlideIndex] = useState(0);
   const [displayedPostsCount, setDisplayedPostsCount] = useState(20);
@@ -3425,7 +3449,15 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     ).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.categories) {
         setAllHwCategories(d.categories);
-        setHwCategories(d.categories.filter((c: any) => c.active));
+        const active = d.categories.filter((c: any) => c.active);
+        setHwCategories(active);
+        // N 뱃지: localStorage에 저장된 seen ids와 비교
+        if (active.length > 0 && userId) {
+          const key = `hw_seen_${userId}`;
+          const seen: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+          const hasNew = active.some((c: any) => !seen.includes(c.id));
+          setHwIsNew(hasNew);
+        }
       }
     // 당첨자 조회
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner`,
@@ -4080,10 +4112,35 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             className="flex-1 text-left text-sm text-gray-400 px-4 py-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
             자유롭게 소통하세요.
           </button>
-          <button onClick={() => { if (!userId) { onGuestAction?.(); return; } setShowComposer(true); }}
-            className="h-9 px-4 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition-colors">
-            게시
-          </button>
+          <div className="flex gap-1 flex-shrink-0">
+            <button onClick={() => { if (!userId) { onGuestAction?.(); return; } setShowComposer(true); }}
+              className="h-9 px-4 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition-colors">
+              게시
+            </button>
+            {hwCategories.length > 0 && (
+              <button
+                onClick={() => {
+                  if (!userId) { onGuestAction?.(); return; }
+                  // seen 처리
+                  const key = `hw_seen_${userId}`;
+                  const ids = hwCategories.map(c => c.id);
+                  localStorage.setItem(key, JSON.stringify(ids));
+                  setHwIsNew(false);
+                  if (hwCategories.length === 1) {
+                    setComposerCategory(hwCategories[0].name);
+                    setShowComposer(true);
+                  } else {
+                    setShowHwSelectModal(true);
+                  }
+                }}
+                className="relative h-9 px-4 bg-amber-400 text-white text-sm font-semibold rounded-xl hover:bg-amber-500 transition-colors">
+                숙제
+                {hwIsNew && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5">N</span>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -4199,44 +4256,6 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         </div>
       )}
 
-      {/* 숙제 주제 버튼 - 슬라이드 */}
-      {hwCategories.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm px-4 py-3 space-y-2">
-          <p className="text-xs text-gray-400 font-medium">이런 주제 어때요?</p>
-          <div className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl"
-            style={{ minHeight: '76px' }}>
-            {/* 왼쪽: 숙제 정보 */}
-            <div className="flex-1 flex flex-col justify-center min-w-0">
-              <div className="flex items-center gap-1.5">
-                <PenLine className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-gray-700 truncate">{hwCategories[hwSlideIndex].name}</span>
-                {hwCategories[hwSlideIndex].pointReward > 0 && (
-                  <span className="text-xs text-amber-500 font-semibold flex-shrink-0">+{hwCategories[hwSlideIndex].pointReward}pt</span>
-                )}
-              </div>
-              <span className={`text-xs text-purple-500 font-medium mt-0.5 pl-5 ${hwCategories[hwSlideIndex].prizeReward ? 'visible' : 'invisible'}`}>
-                🎁 {hwCategories[hwSlideIndex].prizeReward || '없음'}
-              </span>
-              <span className={`text-[10px] text-gray-400 mt-0.5 pl-5 ${(hwCategories[hwSlideIndex].startDate || hwCategories[hwSlideIndex].endDate) ? 'visible' : 'invisible'}`}>
-                {hwCategories[hwSlideIndex].startDate?.replace(/-/g, '.') || '?'} ~ {hwCategories[hwSlideIndex].endDate?.replace(/-/g, '.') || '?'}
-              </span>
-            </div>
-            {/* 오른쪽: 작성하기 버튼 */}
-            <button
-              onClick={() => {
-                if (hwCategories.length === 1) {
-                  setComposerCategory(hwCategories[0].name);
-                  setShowComposer(true);
-                } else {
-                  setShowHwSelectModal(true);
-                }
-              }}
-              className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 transition-colors">
-              작성하기
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* 숙제 선택 모달 */}
       {showHwSelectModal && (
