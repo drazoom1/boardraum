@@ -4109,7 +4109,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             }
           </button>
           <button onClick={() => { if (!userId) { onGuestAction?.(); return; } setShowComposer(true); }}
-            className="flex-1 text-left text-sm text-gray-400 px-4 py-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+            className="flex-1 min-w-0 text-left text-sm text-gray-400 px-4 py-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors truncate">
             자유롭게 소통하세요.
           </button>
           <div className="flex gap-1 flex-shrink-0">
