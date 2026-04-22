@@ -402,13 +402,12 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   // 탭 / 다른 유저 프로필 변경 시 history에 push
   useEffect(() => {
     if (isRestoringNavRef.current) { isRestoringNavRef.current = false; return; }
-    if (wikiGame) return; // 게임 위키는 자체 history 관리
-    const newEntry: NavEntry = { tab: activeTab, viewingUserId: viewingUserId || null };
+    const newEntry = { tab: activeTab, viewingUserId: viewingUserId || null };
     const current = navStackRef.current[navStackRef.current.length - 1];
     if (current?.tab === newEntry.tab && current?.viewingUserId === newEntry.viewingUserId) return;
     navStackRef.current.push(newEntry);
     window.history.pushState({ boardraumNav: true, tab: activeTab }, '', window.location.pathname);
-  }, [activeTab, viewingUserId, wikiGame]);
+  }, [activeTab, viewingUserId]);
 
   // MyPage 온보딩 카드에서 게임 추가 다이얼로그 열기
   useEffect(() => {
