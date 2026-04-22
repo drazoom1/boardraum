@@ -9779,7 +9779,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
 
     const body = await c.req.json();
-    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, prizeImageUrl } = body;
+    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, prizeImageUrl, manualCardUser } = body;
 
     const events: any[] = await kv.get("last_post_events") || [];
 
@@ -9854,6 +9854,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
         if (prize !== undefined) patch.prize = prize;
         if (eventTitle !== undefined) patch.eventTitle = eventTitle;
         if (prizeImageUrl !== undefined) patch.prizeImageUrl = prizeImageUrl;
+        if (manualCardUser !== undefined) patch.manualCardUser = manualCardUser; // null = clear
         return { ...e, ...patch };
       });
       await kv.set("last_post_events", updated);
