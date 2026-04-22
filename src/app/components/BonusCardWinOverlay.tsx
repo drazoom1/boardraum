@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface BonusCardWinOverlayProps {
   onClose: () => void;
@@ -6,13 +6,15 @@ interface BonusCardWinOverlayProps {
 
 export function BonusCardWinOverlay({ onClose }: BonusCardWinOverlayProps) {
   const [phase, setPhase] = useState<'enter' | 'show' | 'exit'>('enter');
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('show'), 50);
     const t2 = setTimeout(() => setPhase('exit'), 2600);
-    const t3 = setTimeout(() => onClose(), 3100);
+    const t3 = setTimeout(() => onCloseRef.current(), 3100);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onClose]);
+  }, []);
 
   const sparkles = [
     { top: '20%', left: '15%', delay: '0.1s', size: 18 },
