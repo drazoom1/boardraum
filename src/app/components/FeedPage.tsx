@@ -4098,12 +4098,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
 
       {/* 글쓰기 입력창 */}
       <div className="bg-white rounded-2xl shadow-sm px-5 py-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onViewProfile?.(userId, true)}
-            className="w-10 h-10 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-sm font-bold text-gray-500 overflow-hidden hover:opacity-75 transition-opacity"
+            className="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500 overflow-hidden hover:opacity-75 transition-opacity"
           >
-            {avatarUrl 
+            {avatarUrl
               ? <img src={avatarUrl} className="w-full h-full object-cover" alt="profile" />
               : userName[0]?.toUpperCase()
             }
