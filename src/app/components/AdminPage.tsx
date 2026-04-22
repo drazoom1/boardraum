@@ -2194,6 +2194,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [showCardReductionEdit, setShowCardReductionEdit] = useState(false);
   const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
   const [cardReductionSaving, setCardReductionSaving] = useState(false);
+  const [showDescEdit, setShowDescEdit] = useState(false);
+  const [editDesc, setEditDesc] = useState(event.description ?? '');
+  const [descSaving, setDescSaving] = useState(false);
   const [cardGift, setCardGift] = useState('');
   const [cardGiftImageUrl, setCardGiftImageUrl] = useState('');
   const [cardGiftSaving, setCardGiftSaving] = useState(false);
@@ -2309,6 +2312,20 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       else toast.error('저장 실패');
     } catch { toast.error('오류'); }
     setCardReductionSaving(false);
+  };
+
+  const saveDesc = async () => {
+    setDescSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'update', eventId: event.id, description: editDesc }) }
+      );
+      if (res.ok) { toast.success('규칙 저장됨!'); setShowDescEdit(false); }
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setDescSaving(false);
   };
 
   const disqualified: string[] = event?.disqualified || [];
@@ -2630,6 +2647,43 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
                     저장
                   </button>
                   <button onClick={() => setShowCardReductionEdit(false)}
+                    className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 이벤트 규칙 수정 */}
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            {!showDescEdit ? (
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-gray-400 flex-1 line-clamp-2">
+                  📋 규칙: <span className="text-gray-500">{event.description ? event.description.slice(0, 60) + (event.description.length > 60 ? '…' : '') : '없음'}</span>
+                </p>
+                <button onClick={() => { setShowDescEdit(true); setEditDesc(event.description ?? ''); }}
+                  className="flex-shrink-0 text-xs px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-semibold">
+                  수정
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-700">📋 이벤트 규칙 수정</p>
+                <textarea
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  rows={8}
+                  placeholder="이벤트 규칙을 입력하세요"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed"
+                />
+                <div className="flex gap-2">
+                  <button onClick={saveDesc} disabled={descSaving}
+                    className="flex-1 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1">
+                    {descSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    저장
+                  </button>
+                  <button onClick={() => { setShowDescEdit(false); setEditDesc(event.description ?? ''); }}
                     className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
                     취소
                   </button>
