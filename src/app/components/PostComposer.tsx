@@ -290,6 +290,24 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const [showCardWon, setShowCardWon] = useState(false);
   const [showSpamWarning, setShowSpamWarning] = useState(false);
 
+  // 모바일 키보드 대응: 키보드가 올라오면 paddingBottom으로 모달을 밀어올림
+  const [vvHeight, setVvHeight] = useState<number>(() =>
+    typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 800
+  );
+  useEffect(() => {
+    const update = () => {
+      const vv = window.visualViewport;
+      setVvHeight(vv ? vv.height : window.innerHeight);
+    };
+    window.visualViewport?.addEventListener('resize', update);
+    window.addEventListener('resize', update);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  const keyboardHeight = typeof window !== 'undefined' ? Math.max(0, window.innerHeight - vvHeight) : 0;
+
   // 숙제 카테고리
   const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string }[]>([]);
   const [guideVisible, setGuideVisible] = useState(true);
@@ -606,8 +624,14 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
 
   return (
     <>
-    <div className="fixed inset-0 bg-black/60 z-[9990] flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[95vh]">
+    <div
+      className="fixed inset-0 bg-black/60 z-[9990] flex items-center justify-center p-2 sm:p-4"
+      style={{
+        paddingBottom: keyboardHeight > 0 ? keyboardHeight + 8 : undefined,
+        transition: 'padding-bottom 0.2s ease',
+      }}
+    >
+      <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col" style={{ maxHeight: vvHeight - 16, transition: 'max-height 0.2s ease' }}>
         {/* 헤더 */}
         <div className="flex items-center justify-between px-4 sm:px-5 pt-3 sm:pt-5 pb-2.5 sm:pb-4 border-b border-gray-100 flex-shrink-0">
           <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-900 font-medium">취소</button>
