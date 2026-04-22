@@ -232,6 +232,20 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
   }, [selectedGame?.id, selectedGame?.recommendedPlayers, selectedGame?.playTime]);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory || CATEGORIES[0].id);
   const [mainTab, setMainTab] = useState<'info' | 'feed'>(initialTab);
+
+  const clearFeedBadge = (game: BoardGame | null) => {
+    if (!accessToken || !game) return;
+    const bggId = game.bggId || game.id;
+    if (!bggId) return;
+    fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game-feed-badge/mark-read`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ gameId: bggId }),
+      }
+    ).catch(() => {});
+  };
   const [gameFeedPosts, setGameFeedPosts] = useState<any[]>([]);
   const [gameFeedLoading, setGameFeedLoading] = useState(false);
   const [posts, setPosts] = useState<CustomPost[]>([]);
@@ -477,10 +491,11 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     if (selectedGame) {
       loadPosts();
       if (isFirstMount.current) {
-        // 최초 마운트: initialTab이 'feed'면 게임피드 자동 로드
+        // 최초 마운트: initialTab이 'feed'면 게임피드 자동 로드 + 뱃지 소멸
         isFirstMount.current = false;
         if (initialTab === 'feed') {
           loadGameFeedPosts();
+          clearFeedBadge(selectedGame);
         }
       } else {
         // 게임 전환 시: 피드 초기화 + info 탭으로 리셋
@@ -2072,6 +2087,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                 <button onClick={() => {
                     setMainTab('feed');
                     if (!gameFeedLoading) loadGameFeedPosts();
+                    clearFeedBadge(selectedGame);
                   }}
                   className={`flex-1 py-3 text-sm font-bold transition-colors ${mainTab === 'feed' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
                   🔥 게임피드

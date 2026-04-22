@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { BoardGame } from '../App';
 import { BoardGameCard } from './BoardGameCard';
@@ -220,6 +220,7 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
   const [rankingBannerOpen, setRankingBannerOpen] = useState(true);
   const [displayedGamesCount, setDisplayedGamesCount] = useState(20);
   const [showSortModal, setShowSortModal] = useState(false);
+  const [feedBadgeIds, setFeedBadgeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (listType !== '보유' || !userId || readOnly) return;
@@ -238,6 +239,25 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
       setRankingBadges(badges);
     }).catch(() => {});
   }, [userId, listType, readOnly]);
+
+  // 게임피드 새 글 뱃지 로드
+  const fetchFeedBadges = useCallback(async () => {
+    if (readOnly || !userId || !accessToken) return;
+    const bggIds = games.map(g => g.bggId || g.id).filter(Boolean);
+    if (bggIds.length === 0) return;
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game-feed-badges?gameIds=${bggIds.join(',')}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setFeedBadgeIds(new Set(data.badgeGameIds || []));
+      }
+    } catch {}
+  }, [userId, accessToken, readOnly, games]);
+
+  useEffect(() => { fetchFeedBadges(); }, [userId, accessToken, readOnly]);
 
   const toggleExpanded = (gameId: string) => {
     const newExpanded = new Set(expandedGames);
@@ -481,6 +501,32 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
           </button>
         </div>
 
+        {/* 새 글 모두 읽음 버튼 */}
+        {!readOnly && feedBadgeIds.size > 0 && (
+          <div className="flex justify-end">
+            <button
+              onClick={async () => {
+                const bggIds = [...feedBadgeIds];
+                setFeedBadgeIds(new Set());
+                try {
+                  await fetch(
+                    `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/game-feed-badge/mark-read`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                      body: JSON.stringify({ gameIds: bggIds }),
+                    }
+                  );
+                } catch {}
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-1"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+              새 글 모두 읽음 ({feedBadgeIds.size})
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* ── 정렬/뷰 설정 모달 ── */}
@@ -605,6 +651,9 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
                   {game.isReleasing && (
                     <div className="absolute top-1.5 right-1.5 bg-orange-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">방출</div>
                   )}
+                  {!game.isReleasing && !readOnly && feedBadgeIds.has(game.bggId || game.id) && (
+                    <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
+                  )}
                   {(game.rating ?? 0) > 0 && (
                     <div className="absolute bottom-1.5 left-1.5 bg-black/60 text-yellow-400 text-xs font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                       ★ {game.rating}
@@ -662,6 +711,7 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
                     onMoveToOwned={onMoveToOwned}
                     onRelease={listType === '보유' ? onRelease : undefined}
                     readOnly={readOnly}
+                    hasFeedBadge={!readOnly && feedBadgeIds.has(shelfModalGame.bggId || shelfModalGame.id)}
                   />
                 </div>
               </div>
@@ -704,6 +754,7 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
                     onMoveToOwned={onMoveToOwned}
                     onRelease={listType === '보유' ? onRelease : undefined}
                     readOnly={readOnly}
+                    hasFeedBadge={!readOnly && feedBadgeIds.has(game.bggId || game.id)}
                   />
                 </div>
               );

@@ -67,6 +67,7 @@ interface FeedPageProps {
   onAddToWishlist?: (game: { id: string; name: string; imageUrl: string }) => void;
   onRemoveFromWishlist?: (gameId: string) => void;
   onGuestAction?: () => void;
+  noticeRefreshKey?: number;
 }
 
 // ─── 시간 포맷 ──��
@@ -987,7 +988,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -1019,6 +1020,8 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   onCategoryClick?: (category: string) => void;
   isWinner?: boolean;
   isLeading?: boolean;
+  noticeInfo?: { showInFeed: boolean } | null;
+  onNoticeChange?: () => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -1029,6 +1032,8 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const [pinnedExpanded, setPinnedExpanded] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showNoticePinInput, setShowNoticePinInput] = useState(false);
+  const [noticePinTitle, setNoticePinTitle] = useState('');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showEditComposer, setShowEditComposer] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -1341,6 +1346,44 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('처리 실패'); }
   };
 
+  const handleNoticePin = async (title?: string) => {
+    setShowNoticePinInput(false);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ postId: post.id, title: title?.trim() || undefined }) }
+      );
+      if (res.ok) { toast.success('📢 공지로 등록했어요'); onNoticeChange?.(); }
+      else toast.error('공지 등록 실패');
+    } catch { toast.error('공지 등록 실패'); }
+  };
+
+  const handleNoticeUnpin = async () => {
+    setShowMenu(false);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices/${post.id}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (res.ok) { toast.success('공지 해제했어요'); onNoticeChange?.(); }
+      else toast.error('공지 해제 실패');
+    } catch { toast.error('공지 해제 실패'); }
+  };
+
+  const handleNoticeToggleFeed = async (showInFeed: boolean) => {
+    setShowMenu(false);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices/${post.id}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ showInFeed }) }
+      );
+      if (res.ok) { toast.success(showInFeed ? '게시판에 보이게 설정했어요' : '게시판에서 숨겼어요'); onNoticeChange?.(); }
+      else toast.error('설정 실패');
+    } catch { toast.error('설정 실패'); }
+  };
+
   const CATEGORY_COLORS: Record<string, string> = {
     '정보': 'bg-blue-50 text-blue-600', '소식': 'bg-green-50 text-green-600',
     '게임리뷰': 'bg-amber-50 text-amber-600', '자유': 'bg-gray-100 text-gray-500',
@@ -1463,6 +1506,23 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                           className="w-full px-4 py-2 text-left text-sm text-cyan-600 hover:bg-cyan-50 transition-colors">
                           🎲 게임태그 추가/수정
                         </button>
+                        {noticeInfo ? (
+                          <>
+                            <button onClick={handleNoticeUnpin}
+                              className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors">
+                              📢 공지 해제
+                            </button>
+                            <button onClick={() => handleNoticeToggleFeed(!noticeInfo.showInFeed)}
+                              className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
+                              {noticeInfo.showInFeed ? '👁 게시판에서 숨기기' : '👁 게시판에 보이게 하기'}
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setShowNoticePinInput(true); }}
+                            className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
+                            📢 공지 등록
+                          </button>
+                        )}
                         <div className="border-t border-gray-100 my-1" />
                       </>
                     )}
@@ -2014,6 +2074,30 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
           }}
           editPost={post}
         />
+      )}
+
+      {/* 공지 등록 제목 입력 모달 */}
+      {showNoticePinInput && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+            <h3 className="font-bold text-gray-900 mb-3">📢 공지 등록</h3>
+            <input
+              autoFocus
+              type="text"
+              value={noticePinTitle}
+              onChange={e => setNoticePinTitle(e.target.value)}
+              placeholder="공지 제목을 입력하세요"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400 mb-4"
+              onKeyDown={e => { if (e.key === 'Enter') handleNoticePin(noticePinTitle); if (e.key === 'Escape') setShowNoticePinInput(false); }}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowNoticePinInput(false)}
+                className="flex-1 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">취소</button>
+              <button onClick={() => handleNoticePin(noticePinTitle)}
+                className="flex-1 py-2 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-700">등록</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 관리자 게임태그 추가 모달 */}
@@ -3264,7 +3348,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
   );
 }
 
-export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist }: FeedPageProps) {
+export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
   const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
@@ -3299,6 +3383,26 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [showEventRulesModal, setShowEventRulesModal] = useState(false);
   // 댓글창 열린 포스트 ID 추적 (폴링 중 state 보호용)
   const openCommentPostIdsRef = useRef<Set<string>>(new Set());
+
+  // 공지 목록 (postId → {showInFeed})
+  const [noticeMap, setNoticeMap] = useState<Record<string, { showInFeed: boolean }>>({});
+  const loadNotices = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices`,
+        { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, { showInFeed: boolean }> = {};
+        for (const n of (data.notices || [])) map[n.postId] = { showInFeed: n.showInFeed };
+        setNoticeMap(map);
+      }
+    } catch {}
+  }, [accessToken]);
+
+  useEffect(() => { loadNotices(); }, [loadNotices]);
+  useEffect(() => { if (noticeRefreshKey !== undefined) loadNotices(); }, [noticeRefreshKey]);
 
   useEffect(() => {
     if (openComposer) { setShowComposer(true); onComposerClose?.(); }
@@ -4234,8 +4338,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               : category !== '전체'
               ? posts.filter(p => p.category === category)
               : posts;
-          // 공지 → 베스트글 → 일반글 순서 정렬
-          const filteredPosts = [...basePosts].sort((a, b) => {
+          // 공지 → 베스트글 → 일반글 순서 정렬 (홈피드 숨김 공지 제외)
+          const filteredPosts = [...basePosts]
+            .filter(p => !(noticeMap[p.id] && noticeMap[p.id].showInFeed === false))
+            .sort((a, b) => {
             const aScore = a.pinned ? 2 : a.isBest ? 1 : 0;
             const bScore = b.pinned ? 2 : b.isBest ? 1 : 0;
             if (aScore !== bScore) return bScore - aScore;
@@ -4311,6 +4417,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                 }}
                 onGuestAction={onGuestAction}
                 onCategoryClick={handleCategoryClick}
+                noticeInfo={noticeMap[post.id] ?? null}
+                onNoticeChange={loadNotices}
               />
             </div>
           ));})()}

@@ -75,6 +75,11 @@ interface BGGSearchResult {
   id: string;
   name: string;
   yearPublished: string;
+  thumbnail?: string;
+  bggId?: string | null;
+  koreanName?: string | null;
+  englishName?: string | null;
+  source?: string;
 }
 
 interface BGGGameDetails {
@@ -485,57 +490,40 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       }
 
       const results: BGGSearchResult[] = await response.json();
-      console.log('BGG search results:', results);
 
-      // 🔥 이미 등록된 게임 필터링
-      console.log('🔍 [BGG Filter] Filtering already registered games...');
-      console.log('  - Total BGG results:', results.length);
-      console.log('  - Registered games count:', allRegisteredGames.length);
-      
+      // site 게임(source==='site')은 filteredRegisteredGames 섹션에서 이미 표시되므로 제외
+      // bggId 또는 이름으로 allRegisteredGames와 겹치는 것도 제외
       const filteredResults = results.filter(bggGame => {
-        const bggName = bggGame.name.toLowerCase().trim();
-        
-        // 등록된 게임과 비교
-        const isAlreadyRegistered = allRegisteredGames.some(registered => {
-          const registeredKorean = (registered.koreanName || '').toLowerCase().trim();
-          const registeredEnglish = (registered.englishName || '').toLowerCase().trim();
-          
-          // 한국어명 또는 영문명이 일치하면 이미 등록된 게임
-          const matches = 
-            (registeredKorean && bggName === registeredKorean) ||
-            (registeredEnglish && bggName === registeredEnglish) ||
-            // BGG ID로도 비교 (더 정확함)
-            (registered.bggId && registered.bggId === bggGame.id);
-          
-          if (matches) {
-            console.log(`  ❌ Filtered out: "${bggGame.name}" (already registered as "${registered.koreanName || registered.englishName}")`);
-          }
-          
-          return matches;
+        if (bggGame.source === 'site') return false;
+        const bggName = (bggGame.koreanName || bggGame.name || '').toLowerCase().trim();
+        const bggEn = (bggGame.englishName || bggGame.name || '').toLowerCase().trim();
+        return !allRegisteredGames.some(registered => {
+          const rKo = (registered.koreanName || '').toLowerCase().trim();
+          const rEn = (registered.englishName || '').toLowerCase().trim();
+          return (
+            (registered.bggId && (registered.bggId === bggGame.id || registered.bggId === bggGame.bggId)) ||
+            (rKo && (bggName === rKo || bggEn === rKo)) ||
+            (rEn && (bggName === rEn || bggEn === rEn))
+          );
         });
-        
-        return !isAlreadyRegistered;
-      });
-      
-      console.log(`  ✅ After filtering: ${filteredResults.length} unique BGG games`);
-
-      // 검색어로 시작하는 게임을 우선순위로 정렬
-      const sortedResults = filteredResults.sort((a, b) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        const searchLower = query.toLowerCase();
-        
-        const aStartsWith = aName.startsWith(searchLower);
-        const bStartsWith = bName.startsWith(searchLower);
-        
-        // 둘 다 검색어로 시작하거나 둘 다 시작하지 않으면 원래 순서 유지
-        if (aStartsWith && !bStartsWith) return -1;
-        if (!aStartsWith && bStartsWith) return 1;
-        return 0;
       });
 
-      setSearchResults(sortedResults.slice(0, 15));
-      setShowResults(sortedResults.length > 0);
+      const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+      const seenIds = new Set<string>(), seenNames = new Set<string>();
+      const dedupedResults = filteredResults.filter(g => {
+        if (seenIds.has(g.id)) return false;
+        const nKo = norm(g.koreanName || (g.source !== 'bgg' ? g.name : '') || '');
+        const nEn = norm(g.englishName || (g.source === 'bgg' ? g.name : '') || '');
+        const nameKey = nKo || nEn;
+        if (nameKey && seenNames.has(nameKey)) { seenIds.add(g.id); return false; }
+        seenIds.add(g.id);
+        if (nKo) seenNames.add(nKo);
+        if (nEn) seenNames.add(nEn);
+        return true;
+      });
+
+      setSearchResults(dedupedResults.slice(0, 20));
+      setShowResults(dedupedResults.length > 0);
     } catch (error) {
       console.error('BGG search error:', error);
       toast.error(`BGG 검색 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
@@ -578,7 +566,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       }
     }
 
-    return Array.from(uniqueGamesMap.values()).slice(0, 10);
+    return Array.from(uniqueGamesMap.values()).slice(0, 15);
   };
 
   const filteredRegisteredGames = getFilteredRegisteredGames();

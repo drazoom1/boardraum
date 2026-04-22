@@ -63,6 +63,7 @@ interface BoardGameCardProps {
   onRelease?: (game: BoardGame) => void; // 방출하기
   userId?: string;
   readOnly?: boolean; // 읽기 전용 모드 (타인 프로필)
+  hasFeedBadge?: boolean; // 이 게임에 새 글 있음
 }
 
 export function BoardGameCard({ 
@@ -85,6 +86,7 @@ export function BoardGameCard({
   onRelease,
   userId,
   readOnly = false,
+  hasFeedBadge = false,
 }: BoardGameCardProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -316,6 +318,9 @@ export function BoardGameCard({
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-base sm:text-lg text-gray-900 break-words">{game.koreanName}</h3>
+                  {hasFeedBadge && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white leading-none">NEW</span>
+                  )}
                   {game.isExpansion && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                       {game.expansionType === 'series' ? '시리즈' : game.expansionType === 'legacy' ? '레거시' : '확장'}
@@ -375,11 +380,16 @@ export function BoardGameCard({
                       <Play className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button variant="outline" size="sm"
-                    className="hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs"
-                    onClick={() => setIsWikiModalOpen(true)}>
-                    <Book className="w-4 h-4 mr-1" />보드위키
-                  </Button>
+                  <div className="relative">
+                    <Button variant="outline" size="sm"
+                      className="hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs"
+                      onClick={() => setIsWikiModalOpen(true)}>
+                      <Book className="w-4 h-4 mr-1" />보드위키
+                    </Button>
+                    {hasFeedBadge && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white pointer-events-none" />
+                    )}
+                  </div>
                   <Button variant="ghost" size="sm" className="hover:bg-gray-100 h-8 w-8 p-0"
                     onClick={() => setIsEditDialogOpen(true)}>
                     <Pencil className="w-4 h-4" />
@@ -1229,15 +1239,20 @@ export function BoardGameCard({
                     설명 영상
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs sm:text-sm"
-                  onClick={() => setIsWikiModalOpen(true)}
-                >
-                  <Book className="w-4 h-4 mr-1.5" />
-                  보드위키
-                </Button>
+                <div className="relative flex-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs sm:text-sm"
+                    onClick={() => setIsWikiModalOpen(true)}
+                  >
+                    <Book className="w-4 h-4 mr-1.5" />
+                    보드위키
+                  </Button>
+                  {hasFeedBadge && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white pointer-events-none" />
+                  )}
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"

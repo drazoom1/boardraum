@@ -8607,6 +8607,127 @@ app.post("/make-server-0b7d3bae/admin/notices", async (c) => {
 });
 
 
+// ===== 게시물 공지 시스템 =====
+
+// 공지 목록 + 읽음 여부 조회
+app.get("/make-server-0b7d3bae/post-notices", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ notices: [], readIds: [], unreadCount: 0 });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ notices: [], readIds: [], unreadCount: 0 });
+    const noticeItems = await getByPrefix('notice_');
+    const notices = noticeItems
+      .map(item => item.value)
+      .filter((n: any) => n?.postId)
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const readData = await kv.get(`user_notice_read_${user.id}`) as any;
+    const readIds: string[] = readData?.readIds || [];
+    const readSet = new Set(readIds);
+    const unreadCount = notices.filter((n: any) => !readSet.has(n.postId)).length;
+    const announced = await kv.get('site_notice_announced_at') as any;
+    const announcementActive = announced?.active === true;
+    return c.json({ notices, readIds, unreadCount, announcementActive });
+  } catch { return c.json({ notices: [], readIds: [], unreadCount: 0, announcementActive: false }); }
+});
+
+// 읽지 않은 공지 수만 빠르게 조회
+app.get("/make-server-0b7d3bae/post-notices/unread-count", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ count: 0, isNew: false });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ count: 0, isNew: false });
+    const noticeItems = await getByPrefix('notice_');
+    const allIds = noticeItems.map(item => item.value?.postId).filter(Boolean);
+    const readData = await kv.get(`user_notice_read_${user.id}`) as any;
+    const readSet = new Set<string>(readData?.readIds || []);
+    const count = allIds.filter((id: string) => !readSet.has(id)).length;
+    const announced = await kv.get('site_notice_announced_at') as any;
+    const isNew = !!(announced?.active === true && announced?.at && (!readData?.updatedAt || new Date(announced.at) > new Date(readData.updatedAt)));
+    return c.json({ count, isNew });
+  } catch { return c.json({ count: 0, isNew: false }); }
+});
+
+// 읽음 처리
+app.post("/make-server-0b7d3bae/post-notices/read", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const { readIds } = await c.req.json();
+    await kv.set(`user_notice_read_${user.id}`, { readIds, updatedAt: new Date().toISOString() });
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 공지 등록 (admin only)
+app.post("/make-server-0b7d3bae/post-notices", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const { postId, title: customTitle } = await c.req.json();
+    const post = await kv.get(`beta_post_${postId}`) as any;
+    if (!post) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
+    const notice = {
+      postId,
+      title: (customTitle && customTitle.trim()) ? customTitle.trim() : (post.content || '').slice(0, 60),
+      content: post.content || '',
+      showInFeed: true,
+      createdAt: new Date().toISOString(),
+      pinnedBy: user.id,
+    };
+    await kv.set(`notice_${postId}`, notice);
+    return c.json({ success: true, notice });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// showInFeed 토글 / 제목 수정 (admin only)
+app.patch("/make-server-0b7d3bae/post-notices/:postId", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const postId = c.req.param('postId');
+    const body = await c.req.json();
+    const notice = await kv.get(`notice_${postId}`) as any;
+    if (!notice) return c.json({ error: '공지가 없어요' }, 404);
+    const updated: any = { ...notice };
+    if (body.showInFeed !== undefined) updated.showInFeed = !!body.showInFeed;
+    if (body.title !== undefined) updated.title = body.title;
+    await kv.set(`notice_${postId}`, updated);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 최신글 알림 토글 (admin only) - N 뱃지 켜기/끄기
+app.post("/make-server-0b7d3bae/post-notices/announce", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const current = await kv.get('site_notice_announced_at') as any;
+    const isCurrentlyActive = current?.active === true;
+    if (isCurrentlyActive) {
+      await kv.set('site_notice_announced_at', { ...current, active: false });
+    } else {
+      await kv.set('site_notice_announced_at', { at: new Date().toISOString(), active: true });
+    }
+    return c.json({ success: true, active: !isCurrentlyActive });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 공지 해제 (admin only)
+app.delete("/make-server-0b7d3bae/post-notices/:postId", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const postId = c.req.param('postId');
+    await kv.del(`notice_${postId}`);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+
 // ===== 추천 게임 엔드포인트 =====
 
 // 공개 조회

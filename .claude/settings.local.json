@@ -38,7 +38,17 @@
       "Bash(npx tsc *)",
       "Bash(cat .github/workflows/*.yml)",
       "Bash(ls .github/workflows/)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(npx -y deno check supabase/functions/make-server-0b7d3bae/index.ts)",
+      "Bash(cp \"/Users/drazoom/Desktop/보드라움 컬렉션 사이트 \\(29\\)/supabase/functions/make-server-0b7d3bae/index.ts\" /tmp/func_test/index.ts)",
+      "Read(//private/tmp/func_test/**)",
+      "Bash(/Users/drazoom/.deno/bin/deno check *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); e=d[0]; print\\('cardUsageLog:', len\\(e.get\\('cardUsageLog', []\\)\\), 'entries'\\); print\\('reductionSeconds:', e.get\\('reductionSeconds'\\)\\); print\\('reductionCount:', e.get\\('reductionCount'\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); e=d[0]; print\\('cardReductionSeconds:', e.get\\('cardReductionSeconds'\\)\\); print\\('id:', e.get\\('id'\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); e=d[0]; print\\('cardUsageLog entries:', len\\(e.get\\('cardUsageLog', []\\)\\)\\); print\\('reductionSeconds:', e.get\\('reductionSeconds'\\)\\)\")",
+      "Bash(cat vercel.json)",
+      "Bash(ls -la vercel.json)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

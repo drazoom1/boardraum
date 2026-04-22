@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabaseClient, normalizeEmail, isAdminEmail, restoreSession } from './lib/supabase';
 import { toast, Toaster } from 'sonner';
-import { LogOut, Shield, Users, Menu, X, Coffee, MessageCircle, BarChart3, Heart, Library, Trophy, ShoppingBag, Compass, Home, Package, Settings } from 'lucide-react'; // Settings 아이콘 추가, User와 Star 제거
+import { LogOut, Shield, Users, Menu, X, MessageCircle, BarChart3, Heart, Library, Trophy, ShoppingBag, Compass, Home, Package, Settings, Coffee } from 'lucide-react'; // Settings 아이콘 추가, User와 Star 제거
+
 import { Button } from './components/ui/button';
 import iconImage from 'figma:asset/1d2da99221780c018fbc2b913241cabdb54e5b9f.png';
 import { updateGameSEO, resetSEO, updatePostSEO } from './utils/seo';
@@ -12,6 +13,7 @@ import { Auth } from './components/Auth';
 import { GuestAuthModal } from './components/GuestAuthModal';
 import { Banner } from './components/Banner';
 import { NoticeBanner } from './components/NoticeBanner';
+import { NoticeModal } from './components/NoticeModal';
 import { RankingPage } from './components/RankingPage';
 import { CalculatorHub } from './components/CalculatorHub';
 import { MarketPage, ReleaseConfirmModal, ListingModal } from './components/MarketPage';
@@ -405,6 +407,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   }, []);
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [noticeUnreadCount, setNoticeUnreadCount] = useState(0);
+  const [noticeIsNew, setNoticeIsNew] = useState(false);
+  const [noticeRefreshKey, setNoticeRefreshKey] = useState(0);
   const [highlightFeedPostId, setHighlightFeedPostId] = useState<string | null>(null);
   const [notificationPost, setNotificationPost] = useState<FeedPost | null>(null); // 알림 클릭 시 모달로 보여줄 포스트
   const [notificationPostLoading, setNotificationPostLoading] = useState(false);
@@ -413,6 +419,17 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   useEffect(() => {
     if (!notificationPost) resetSEO();
   }, [notificationPost]);
+
+  // 공지 읽지 않은 수 로드
+  useEffect(() => {
+    if (!accessToken) return;
+    const load = () => {
+      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices/unread-count`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).then(r => r.ok ? r.json() : { count: 0, isNew: false }).then(d => { setNoticeUnreadCount(d.count ?? 0); setNoticeIsNew(d.isNew ?? false); }).catch(() => {});
+    };
+    load();
+  }, [accessToken, noticeRefreshKey]);
 
   // /post/:postId URL 진입 시 게시물 모달로 직접 열기
   useEffect(() => {
@@ -1712,6 +1729,19 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
             {/* 하단 설정 */}
             <div className="mt-auto flex flex-col items-center gap-1 relative">
+              {/* 확성기(공지) 버튼 */}
+              {accessToken && (
+                <button onClick={() => setShowNoticeModal(true)}
+                  className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                  title="공지사항">
+                  <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
+                  {(noticeIsNew || noticeUnreadCount > 0) && (
+                    <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                      {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
               {/* 알림 버튼 */}
               {accessToken && (
                 <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
@@ -1769,9 +1799,18 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={logoImage} alt="BOARDRAUM" className="w-8 h-8 object-contain" />
               </button>
               <div className="flex items-center gap-1">
-                <button onClick={() => setShowSponsorModal(true)} className="w-9 h-9 flex items-center justify-center text-yellow-500">
-                  <Coffee className="w-5 h-5" />
-                </button>
+                {accessToken && (
+                  <button onClick={() => setShowNoticeModal(true)}
+                    className="relative w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                    title="공지사항">
+                    <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
+                    {(noticeIsNew || noticeUnreadCount > 0) && (
+                      <span className="absolute top-1 right-1 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                        {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                )}
                 {accessToken && (
                   <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
                 )}
@@ -1798,6 +1837,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                         <Shield className="w-4 h-4" /> 관리자 페이지
                       </button>
                     )}
+                    <button onClick={() => { setShowSponsorModal(true); setShowUserMenu(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-yellow-600 hover:bg-yellow-50 rounded-xl">
+                      <Coffee className="w-4 h-4" /> 후원하기
+                    </button>
                     <a href="https://open.kakao.com/o/gPD26Qmi" target="_blank" rel="noopener noreferrer"
                       className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl">
                       <MessageCircle className="w-4 h-4" /> 카카오 문의
@@ -1861,6 +1904,16 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
           </nav>
 
           {/* ── 플러스 메뉴 ── */}
+          {/* 공지 모달 */}
+          {showNoticeModal && (
+            <NoticeModal
+              accessToken={accessToken}
+              onClose={() => setShowNoticeModal(false)}
+              onRead={() => { setNoticeUnreadCount(0); setNoticeIsNew(false); }}
+              isAdmin={userRole === 'admin' || isAdminEmail(userEmail || '')}
+              onNoticeChange={() => setNoticeRefreshKey(k => k + 1)}
+            />
+          )}
           {/* 알림 모달 */}
           {accessToken && (
             <NotificationPanel
@@ -1978,6 +2031,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   }
                 }}
                 onGuestAction={() => setShowGuestModal(true)}
+                noticeRefreshKey={noticeRefreshKey}
                 wishlistGames={wishlistGames}
                 onRemoveFromWishlist={(gameId) => {
                   handleWishlistGamesChange(wishlistGames.filter(g => g.id !== gameId && g.bggId !== gameId));
