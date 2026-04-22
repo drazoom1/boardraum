@@ -393,21 +393,6 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     if (activeTab === 'custom') setCustomMountKey(k => k + 1);
   }, [activeTab]);
 
-  // 앱 초기화: 뒤로가기 guard 항목 push (첫 back이 사이트 이탈 대신 popstate 발생)
-  useEffect(() => {
-    window.history.replaceState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
-    window.history.pushState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
-  }, []);
-
-  // 탭 / 다른 유저 프로필 변경 시 history에 push
-  useEffect(() => {
-    if (isRestoringNavRef.current) { isRestoringNavRef.current = false; return; }
-    const newEntry = { tab: activeTab, viewingUserId: viewingUserId || null };
-    const current = navStackRef.current[navStackRef.current.length - 1];
-    if (current?.tab === newEntry.tab && current?.viewingUserId === newEntry.viewingUserId) return;
-    navStackRef.current.push(newEntry);
-    window.history.pushState({ boardraumNav: true, tab: activeTab }, '', window.location.pathname);
-  }, [activeTab, viewingUserId]);
 
   // MyPage 온보딩 카드에서 게임 추가 다이얼로그 열기
   useEffect(() => {
@@ -464,6 +449,23 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [releaseGame, setReleaseGame] = useState<any>(null); // ReleaseConfirmModal 대상
   const [listingGame, setListingGame] = useState<any>(null); // ListingModal 대상
   const [wikiGame, setWikiGame] = useState<BoardGame | undefined>(undefined);
+
+  // 앱 초기화: 뒤로가기 guard 항목 push (첫 back이 사이트 이탈 대신 popstate 발생)
+  useEffect(() => {
+    window.history.replaceState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
+    window.history.pushState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
+  }, []);
+
+  // 탭 / 다른 유저 프로필 변경 시 history에 push (선언 이후에 위치해야 TDZ 오류 없음)
+  useEffect(() => {
+    if (isRestoringNavRef.current) { isRestoringNavRef.current = false; return; }
+    if (wikiGame) return; // 게임 위키는 자체 history 관리
+    const newEntry = { tab: activeTab, viewingUserId: viewingUserId || null };
+    const current = navStackRef.current[navStackRef.current.length - 1];
+    if (current?.tab === newEntry.tab && current?.viewingUserId === newEntry.viewingUserId) return;
+    navStackRef.current.push(newEntry);
+    window.history.pushState({ boardraumNav: true, tab: activeTab }, '', window.location.pathname);
+  }, [activeTab, viewingUserId, wikiGame]);
 
   // /game/:gameId URL 진입 시 해당 게임 위키로 자동 이동
   useEffect(() => {
