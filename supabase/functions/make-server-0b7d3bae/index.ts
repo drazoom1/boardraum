@@ -9896,7 +9896,6 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     }
 
     // action === 'start' - 새 이벤트 추가
-    const { prizeImageUrl } = body;
     const newEventId = `evt_${Date.now()}`;
     const newEvent = {
       id: newEventId,
