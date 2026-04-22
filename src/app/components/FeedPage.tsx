@@ -2314,9 +2314,14 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
     : null;
 
-  // 선두(이벤트 당첨 후보)와 최다카드 사용자가 동일하면 2위에게 선물
+  // 선두(이벤트 당첨 후보)와 최다카드 사용자가 동일하면 2위에게 선물, 2위 없으면 1위 그대로
   const winnerUserId = lastPost?.userId;
-  const effectiveCardUser = cardRanking.find(u => u.userId !== winnerUserId) || null;
+  const effectiveCardUser = (() => {
+    if (cardRanking.length === 0) return null;
+    const top = cardRanking[0];
+    if (top.userId === winnerUserId && cardRanking.length > 1) return cardRanking[1];
+    return top;
+  })();
 
   // ★ 최신 event·lastPost를 ref에 항상 동기화
   // → 인터벌 콜백이 stale closure 없이 항상 최신값을 읽도록 함
