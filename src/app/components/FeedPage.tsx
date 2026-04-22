@@ -2293,9 +2293,6 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
 
   const cardRanking: CardUser[] = cardStatsData?.ranking || [];
   const cardGift = cardStatsData?.gift || null;
-  // 선두(이벤트 당첨 후보)와 최다카드 사용자가 동일하면 2위에게 선물
-  const winnerUserId = lastPost?.userId;
-  const effectiveCardUser = cardRanking.find(u => u.userId !== winnerUserId) || null;
   const autoCloseCalledRef = useRef(false); // useState 대신 ref: event prop 변경 시에도 리셋 안 됨
   const zeroCountRef = useRef(0);            // 연속 0초 카운트
   const intervalRef = useRef<any>(null);
@@ -2315,6 +2312,10 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         )
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
     : null;
+
+  // 선두(이벤트 당첨 후보)와 최다카드 사용자가 동일하면 2위에게 선물
+  const winnerUserId = lastPost?.userId;
+  const effectiveCardUser = cardRanking.find(u => u.userId !== winnerUserId) || null;
 
   // ★ 최신 event·lastPost를 ref에 항상 동기화
   // → 인터벌 콜백이 stale closure 없이 항상 최신값을 읽도록 함
