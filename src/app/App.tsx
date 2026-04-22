@@ -1862,9 +1862,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
           {/* ── 플러스 메뉴 ── */}
           {/* 알림 모달 */}
-          {showNotification && accessToken && (
+          {accessToken && (
             <NotificationPanel
               accessToken={accessToken}
+              visible={showNotification}
               onClose={() => setShowNotification(false)}
               onNavigateToPost={async (postId) => {
                 setShowNotification(false);
@@ -1956,7 +1957,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             />
 
             {/* Content */}
-            {activeTab === 'feed' && (
+            <div style={{ display: activeTab === 'feed' ? undefined : 'none' }}>
               <FeedPage
                 accessToken={accessToken || ''}
                 userId={userId || ''}
@@ -2004,7 +2005,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   setActiveTab('custom');
                 }}
               />
-            )}
+            </div>
 
             {activeTab === 'owned' && (
               isInitialLoad ? <GameListSkeleton /> :

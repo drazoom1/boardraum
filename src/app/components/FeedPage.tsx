@@ -4157,9 +4157,24 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       )}
 
       {/* 피드 목록 */}
-      {loading ? (
-        <div className="flex justify-center py-16 bg-white rounded-2xl shadow-sm">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+      {loading && posts.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="p-4 animate-pulse">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full bg-gray-200 flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3.5 bg-gray-200 rounded w-24" />
+                  <div className="h-2.5 bg-gray-100 rounded w-16" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-full" />
+                <div className="h-3 bg-gray-200 rounded w-5/6" />
+                <div className="h-3 bg-gray-100 rounded w-4/6" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : posts.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm text-center py-16">

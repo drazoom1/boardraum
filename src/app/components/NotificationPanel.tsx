@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, X, Heart, MessageCircle, UserPlus, Star, Loader2, ChevronRight, AtSign, CornerDownRight } from 'lucide-react';
 import { projectId } from '/utils/supabase/info';
 
@@ -39,15 +39,18 @@ function NotifIcon({ type }: { type: Notification['type'] }) {
 }
 
 // ─── 알림 모달 ───
-export function NotificationPanel({ accessToken, onClose, onNavigateToPost }: {
+export function NotificationPanel({ accessToken, onClose, onNavigateToPost, visible = true }: {
   accessToken: string;
   onClose: () => void;
   onNavigateToPost?: (postId: string) => void;
+  visible?: boolean;
 }) {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const everLoadedRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/notifications`,
@@ -59,15 +62,23 @@ export function NotificationPanel({ accessToken, onClose, onNavigateToPost }: {
       }
     } catch {}
     setLoading(false);
+    everLoadedRef.current = true;
   }, [accessToken]);
 
+  // Initial load
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Re-fetch silently when panel is reopened; also mark all as read
+  useEffect(() => {
+    if (!visible) return;
+    if (everLoadedRef.current) load(true);
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/notifications/read-all`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     }).catch(() => {});
-  }, [accessToken, load]);
+  }, [visible]);
 
   const handleClick = (n: Notification) => {
     if (n.type === 'points') { onClose(); return; }
@@ -80,7 +91,8 @@ export function NotificationPanel({ accessToken, onClose, onNavigateToPost }: {
   const isClickable = (n: Notification) => n.type !== 'points' && !!n.postId;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[9990] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+    <div style={{ display: visible ? undefined : 'none' }}
+      className="fixed inset-0 bg-black/50 z-[9990] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:w-[min(100vw-2rem,420px)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -93,9 +105,17 @@ export function NotificationPanel({ accessToken, onClose, onNavigateToPost }: {
         </div>
 
         <div className="overflow-y-auto flex-1">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+          {loading && notifs.length === 0 ? (
+            <div className="divide-y divide-gray-50">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-start gap-3 px-5 py-3.5 animate-pulse">
+                  <div className="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0" />
+                  <div className="flex-1 space-y-2 py-0.5">
+                    <div className="h-3 bg-gray-200 rounded w-4/5" />
+                    <div className="h-2.5 bg-gray-100 rounded w-2/5" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : notifs.length === 0 ? (
             <div className="text-center py-16">
