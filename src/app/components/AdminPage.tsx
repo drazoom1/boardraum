@@ -2203,6 +2203,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [cardGiftImageUploading, setCardGiftImageUploading] = useState(false);
   const [cardGiftLoaded, setCardGiftLoaded] = useState(false);
   const [cardRanking, setCardRanking] = useState<{ userId: string; userName: string; count: number }[]>([]);
+  const [manualCardName, setManualCardName] = useState(event?.manualCardUser?.userName || '');
+  const [manualCardCount, setManualCardCount] = useState(String(event?.manualCardUser?.count ?? ''));
+  const [manualCardSaving, setManualCardSaving] = useState(false);
 
   // 서버에서 전체 집계(현재+히스토리) 카드 스탯 로드
   useEffect(() => {
@@ -2456,6 +2459,72 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
                 {cardGiftLoaded ? '🃏 아직 카드 사용 내역 없음' : '🃏 카드 순위 로딩중...'}
               </p>
             )}
+            {/* 최다 카드 수동 지정 */}
+            <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+              <p className="text-xs font-semibold text-amber-700">🃏 최다 카드 수동 지정 (로그 누락 시)</p>
+              {event?.manualCardUser && (
+                <p className="text-xs text-amber-600">현재: {event.manualCardUser.userName} ({event.manualCardUser.count}회)</p>
+              )}
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={manualCardName}
+                  onChange={e => setManualCardName(e.target.value)}
+                  placeholder="사용자명"
+                  className="flex-1 border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-amber-400 bg-white"
+                />
+                <input
+                  type="number"
+                  value={manualCardCount}
+                  onChange={e => setManualCardCount(e.target.value)}
+                  placeholder="횟수"
+                  min="1"
+                  className="w-16 border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-amber-400 bg-white"
+                />
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  disabled={manualCardSaving || !manualCardName.trim() || !manualCardCount}
+                  onClick={async () => {
+                    setManualCardSaving(true);
+                    try {
+                      const res = await fetch(
+                        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+                        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                          body: JSON.stringify({ action: 'update', eventId: event.id, manualCardUser: { userName: manualCardName.trim(), count: Number(manualCardCount) } }) }
+                      );
+                      if (res.ok) toast.success('최다 카드 사용자 지정 완료!');
+                      else toast.error('저장 실패');
+                    } catch { toast.error('저장 오류'); }
+                    setManualCardSaving(false);
+                  }}
+                  className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {manualCardSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  지정
+                </button>
+                {event?.manualCardUser && (
+                  <button
+                    disabled={manualCardSaving}
+                    onClick={async () => {
+                      setManualCardSaving(true);
+                      try {
+                        const res = await fetch(
+                          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+                          { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                            body: JSON.stringify({ action: 'update', eventId: event.id, manualCardUser: null }) }
+                        );
+                        if (res.ok) { setManualCardName(''); setManualCardCount(''); toast.success('지정 해제됨'); }
+                      } catch { toast.error('해제 오류'); }
+                      setManualCardSaving(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 disabled:opacity-50"
+                  >
+                    해제
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <p className="text-xs font-semibold text-gray-600">
                 🎁 최다 카드 사용자 선물 내용

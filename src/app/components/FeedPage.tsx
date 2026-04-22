@@ -2280,10 +2280,6 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [showManualCardModal, setShowManualCardModal] = useState(false);
-  const [manualName, setManualName] = useState('');
-  const [manualCount, setManualCount] = useState('');
-  const [savingManual, setSavingManual] = useState(false);
   type CardUser = { userId: string; userName: string; count: number };
   const [cardGiftData, setCardGiftData] = useState<{ gift: string | null; cardGiftImageUrl: string | null } | null>(null);
 
@@ -2582,9 +2578,9 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             )}
           </div>
         </div>
-        {(effectiveCardUser || isAdmin) && (
+        {effectiveCardUser && (
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
-            <div className="flex-1 min-w-0">
+            <div>
               <p className="text-gray-400 text-[10px] mb-0.5 flex items-center gap-0.5">
                 <span>🃏 최다 카드</span>
                 <button
@@ -2593,18 +2589,8 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                   style={{ fontFamily: 'Georgia, serif', fontSize: 13 }}
                   title="순위 보기"
                 >❝</button>
-                {isAdmin && (
-                  <button
-                    onClick={e => { e.stopPropagation(); setManualName(event?.manualCardUser?.userName || ''); setManualCount(String(event?.manualCardUser?.count ?? '')); setShowManualCardModal(true); }}
-                    className="ml-0.5 text-gray-300 hover:text-cyan-500 transition-colors"
-                    title="수동 지정"
-                  ><PenLine className="w-3 h-3" /></button>
-                )}
               </p>
-              {effectiveCardUser
-                ? <p className="text-gray-800 font-bold text-sm">{effectiveCardUser.userName}</p>
-                : <p className="text-gray-400 text-xs">미지정 (관리자 지정 가능)</p>
-              }
+              <p className="text-gray-800 font-bold text-sm">{effectiveCardUser.userName}</p>
             </div>
             <div className="flex items-center gap-2">
               {cardGift && (
@@ -2926,88 +2912,6 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
           accessToken={accessToken}
           onClose={() => setShowReferralModal(false)}
         />
-      )}
-      {/* 관리자: 최다 카드 수동 지정 모달 */}
-      {showManualCardModal && isAdmin && (
-        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={() => setShowManualCardModal(false)}>
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 pt-6 pb-4 text-center border-b border-gray-100">
-              <div className="text-2xl mb-2">🃏</div>
-              <h3 className="text-base font-bold text-gray-900">최다 카드 수동 지정</h3>
-              <p className="text-xs text-gray-400 mt-1">로그 누락 시 관리자가 직접 지정</p>
-            </div>
-            <div className="px-6 py-4 space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">사용자명</label>
-                <input
-                  type="text"
-                  value={manualName}
-                  onChange={e => setManualName(e.target.value)}
-                  placeholder="예: Yiju_boardgame"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">사용 횟수</label>
-                <input
-                  type="number"
-                  value={manualCount}
-                  onChange={e => setManualCount(e.target.value)}
-                  placeholder="예: 22"
-                  min="1"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-              {event?.manualCardUser && (
-                <p className="text-xs text-cyan-600 bg-cyan-50 rounded-xl px-3 py-2">
-                  현재 지정: {event.manualCardUser.userName} ({event.manualCardUser.count}회)
-                </p>
-              )}
-            </div>
-            <div className="px-6 pb-6 space-y-2">
-              <button
-                disabled={savingManual || !manualName.trim() || !manualCount}
-                onClick={async () => {
-                  setSavingManual(true);
-                  try {
-                    await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                      body: JSON.stringify({ action: 'update', eventId: event.id, manualCardUser: { userName: manualName.trim(), count: Number(manualCount) } }),
-                    });
-                    setShowManualCardModal(false);
-                  } finally { setSavingManual(false); }
-                }}
-                className="w-full py-3 rounded-2xl text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-50"
-                style={{ background: '#00BCD4' }}
-              >
-                {savingManual ? '저장 중...' : '저장'}
-              </button>
-              {event?.manualCardUser && (
-                <button
-                  disabled={savingManual}
-                  onClick={async () => {
-                    setSavingManual(true);
-                    try {
-                      await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                        body: JSON.stringify({ action: 'update', eventId: event.id, manualCardUser: null }),
-                      });
-                      setShowManualCardModal(false);
-                    } finally { setSavingManual(false); }
-                  }}
-                  className="w-full py-2.5 rounded-2xl text-sm text-red-400 font-medium hover:bg-red-50 transition-colors border border-red-100"
-                >
-                  지정 해제
-                </button>
-              )}
-              <button onClick={() => setShowManualCardModal(false)} className="w-full py-2.5 rounded-2xl text-sm text-gray-400 font-medium hover:bg-gray-50 transition-colors border border-gray-100">
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </>
   );
