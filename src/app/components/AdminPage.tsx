@@ -2195,7 +2195,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
   const [cardReductionSaving, setCardReductionSaving] = useState(false);
   const [cardGift, setCardGift] = useState('');
+  const [cardGiftImageUrl, setCardGiftImageUrl] = useState('');
   const [cardGiftSaving, setCardGiftSaving] = useState(false);
+  const [cardGiftImageUploading, setCardGiftImageUploading] = useState(false);
   const [cardGiftLoaded, setCardGiftLoaded] = useState(false);
   const [cardRanking, setCardRanking] = useState<{ userId: string; userName: string; count: number }[]>([]);
 
@@ -2206,10 +2208,27 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then(r => r.json()).then(d => {
       setCardGift(d.gift || '');
+      setCardGiftImageUrl(d.cardGiftImageUrl || '');
       setCardRanking(d.ranking || []);
       setCardGiftLoaded(true);
     }).catch(() => setCardGiftLoaded(true));
   }, [event?.id]);
+
+  const uploadCardGiftImage = async (file: File) => {
+    setCardGiftImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/upload-image`,
+        { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: formData }
+      );
+      const data = await res.json();
+      if (data.imageUrl) { setCardGiftImageUrl(data.imageUrl); toast.success('이미지 업로드 완료!'); }
+      else toast.error('업로드 실패');
+    } catch { toast.error('업로드 오류'); }
+    setCardGiftImageUploading(false);
+  };
 
   const saveCardGift = async () => {
     setCardGiftSaving(true);
@@ -2217,9 +2236,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event/card-gift`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ eventId: event.id, gift: cardGift }) }
+          body: JSON.stringify({ eventId: event.id, gift: cardGift, cardGiftImageUrl }) }
       );
-      if (res.ok) toast.success(cardGift.trim() ? '선물 내용 저장! 배너에 🎁 아이콘 활성화됩니다.' : '선물 내용 삭제됨');
+      if (res.ok) toast.success(cardGift.trim() ? '선물 내용 저장!' : '선물 내용 삭제됨');
       else toast.error('저장 실패');
     } catch { toast.error('오류'); }
     setCardGiftSaving(false);
@@ -2424,10 +2443,28 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
               <p className="text-xs font-semibold text-gray-600">
                 🎁 최다 카드 사용자 선물 내용
               </p>
+              {/* 선물 이미지 */}
+              <div className="flex items-center gap-2">
+                {cardGiftImageUrl ? (
+                  <div className="relative flex-shrink-0">
+                    <img src={cardGiftImageUrl} className="w-14 h-14 rounded-xl object-cover border border-gray-200" />
+                    <button onClick={() => setCardGiftImageUrl('')}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full text-white flex items-center justify-center">
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : null}
+                <label className="flex-1 flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+                  {cardGiftImageUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" /> : <Camera className="w-3.5 h-3.5 text-gray-400" />}
+                  <span className="text-xs text-gray-500">{cardGiftImageUploading ? '업로드 중...' : '선물 이미지'}</span>
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadCardGiftImage(f); }} />
+                </label>
+              </div>
               <textarea
                 value={cardGift}
                 onChange={e => setCardGift(e.target.value)}
-                placeholder="입력 시 배너에 🎁 아이콘 활성화. 비우면 비활성화."
+                placeholder="선물 내용 (배너에 표시)"
                 rows={2}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
               />

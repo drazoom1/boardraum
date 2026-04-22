@@ -9586,7 +9586,7 @@ app.get("/make-server-0b7d3bae/last-post-event/card-stats", async (c) => {
       countMap[key].count++;
     }
     const ranking = Object.values(countMap).sort((a: any, b: any) => b.count - a.count);
-    return c.json({ gift: stats.gift || null, topUser: ranking[0] || null, ranking });
+    return c.json({ gift: stats.gift || null, cardGiftImageUrl: stats.cardGiftImageUrl || null, topUser: ranking[0] || null, ranking });
   } catch { return c.json({ gift: null, topUser: null, ranking: [] }); }
 });
 
@@ -9595,10 +9595,12 @@ app.post("/make-server-0b7d3bae/admin/last-post-event/card-gift", async (c) => {
   const { user, error } = await requireAdmin(c);
   if (error) return error;
   try {
-    const { eventId, gift } = await c.req.json();
+    const { eventId, gift, cardGiftImageUrl } = await c.req.json();
     if (!eventId) return c.json({ error: "eventId required" }, 400);
     const existing: any = await kv.get(`last_post_event_card_stats_${eventId}`) || {};
-    await kv.set(`last_post_event_card_stats_${eventId}`, { ...existing, gift: gift ?? '' });
+    const patch: any = { ...existing, gift: gift ?? '' };
+    if (cardGiftImageUrl !== undefined) patch.cardGiftImageUrl = cardGiftImageUrl;
+    await kv.set(`last_post_event_card_stats_${eventId}`, patch);
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
