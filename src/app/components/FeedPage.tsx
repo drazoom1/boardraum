@@ -2281,19 +2281,30 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
   type CardUser = { userId: string; userName: string; count: number };
-  const [cardStatsData, setCardStatsData] = useState<{ gift: string | null; cardGiftImageUrl: string | null; ranking: CardUser[] } | null>(null);
+  const [cardGiftData, setCardGiftData] = useState<{ gift: string | null; cardGiftImageUrl: string | null } | null>(null);
 
-  // 서버에서 전체 집계(현재+히스토리) 기반 카드 스탯 조회
+  // 선물 정보만 서버에서 조회 (랭킹은 event.cardUsageLog에서 직접 계산)
   useEffect(() => {
     if (!event?.id) return;
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/card-stats?eventId=${event.id}`, {
       headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` },
-    }).then(r => r.json()).then(d => setCardStatsData({ gift: d.gift || null, cardGiftImageUrl: d.cardGiftImageUrl || null, ranking: d.ranking || [] })).catch(() => {});
+    }).then(r => r.json()).then(d => setCardGiftData({ gift: d.gift || null, cardGiftImageUrl: d.cardGiftImageUrl || null })).catch(() => {});
   }, [event?.id]);
 
-  const cardRanking: CardUser[] = cardStatsData?.ranking || [];
-  const cardGift = cardStatsData?.gift || null;
-  const cardGiftImageUrl = cardStatsData?.cardGiftImageUrl || null;
+  // event.cardUsageLog에서 직접 랭킹 계산
+  const cardRanking: CardUser[] = (() => {
+    const log: any[] = event?.cardUsageLog || [];
+    const countMap: Record<string, CardUser> = {};
+    for (const entry of log) {
+      const key = entry.userId || entry.email || entry.userName;
+      if (!key) continue;
+      if (!countMap[key]) countMap[key] = { userId: entry.userId || key, userName: entry.userName || entry.email || key, count: 0 };
+      countMap[key].count++;
+    }
+    return Object.values(countMap).sort((a, b) => b.count - a.count);
+  })();
+  const cardGift = cardGiftData?.gift || null;
+  const cardGiftImageUrl = cardGiftData?.cardGiftImageUrl || null;
   const autoCloseCalledRef = useRef(false); // useState 대신 ref: event prop 변경 시에도 리셋 안 됨
   const zeroCountRef = useRef(0);            // 연속 0초 카운트
   const intervalRef = useRef<any>(null);
