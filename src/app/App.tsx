@@ -1741,7 +1741,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               {accessToken && (
                 <div className="flex items-center">
                   {bonusCardCount !== null && (
-                    <span className="text-[13px] text-gray-600 font-medium leading-none">🃏{bonusCardCount}</span>
+                    <span className="text-[13px] text-gray-600 font-medium leading-none"><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
                   )}
                   <button onClick={() => setShowNoticeModal(true)}
                     className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
@@ -1813,7 +1813,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               </button>
               <div className="flex items-center gap-1">
                 {accessToken && bonusCardCount !== null && (
-                  <span className="text-[13px] text-gray-600 font-medium px-1">🃏{bonusCardCount}</span>
+                  <span className="text-[13px] text-gray-600 font-medium px-1"><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
                 )}
                 {accessToken && (
                   <button onClick={() => setShowNoticeModal(true)}
