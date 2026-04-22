@@ -37,7 +37,8 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(len\\(d\\)\\)\")",
       "Bash(npx tsc *)",
       "Bash(cat .github/workflows/*.yml)",
-      "Bash(ls .github/workflows/)"
+      "Bash(ls .github/workflows/)",
+      "Bash(git *)"
     ]
   }
 }

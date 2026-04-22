@@ -2279,6 +2279,23 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [showNotLeaderModal, setShowNotLeaderModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
+  type CardUser = { userId: string; userName: string; count: number };
+  const [cardStatsData, setCardStatsData] = useState<{ gift: string | null; ranking: CardUser[] } | null>(null);
+
+  // 서버에서 전체 집계(현재+히스토리) 기반 카드 스탯 조회
+  useEffect(() => {
+    if (!event?.id) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/card-stats?eventId=${event.id}`, {
+      headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` },
+    }).then(r => r.json()).then(d => setCardStatsData({ gift: d.gift || null, ranking: d.ranking || [] })).catch(() => {});
+  }, [event?.id]);
+
+  const cardRanking: CardUser[] = cardStatsData?.ranking || [];
+  const cardGift = cardStatsData?.gift || null;
+  // 선두(이벤트 당첨 후보)와 최다카드 사용자가 동일하면 2위에게 선물
+  const winnerUserId = lastPost?.userId;
+  const effectiveCardUser = cardRanking.find(u => u.userId !== winnerUserId) || null;
   const autoCloseCalledRef = useRef(false); // useState 대신 ref: event prop 변경 시에도 리셋 안 됨
   const zeroCountRef = useRef(0);            // 연속 0초 카운트
   const intervalRef = useRef<any>(null);
@@ -2523,6 +2540,19 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <p className="text-gray-800 font-bold text-sm">
               {lastPost ? lastPost.userName : '아직 없음'}
             </p>
+            {effectiveCardUser && (
+              <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: '#00BCD4' }}>
+                <span>🃏 최다카드</span>
+                <span className="font-black">{effectiveCardUser.userName}</span>
+                <span className="opacity-60">{cardGift ? `${cardGift} 증정` : `(${effectiveCardUser.count}회)`}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); setShowGiftModal(true); }}
+                  className="font-black leading-none hover:scale-125 transition-transform"
+                  style={{ fontFamily: 'Georgia, serif', fontSize: 13 }}
+                  title="순위 보기"
+                >❝</button>
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <div className="text-right">
@@ -2617,6 +2647,48 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
           </div>
           <button onClick={() => setShowDescModal(false)}
+            className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
+            확인
+          </button>
+        </div>
+      </div>
+    )}
+    {showGiftModal && (
+      <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4" onClick={() => setShowGiftModal(false)}>
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="text-center">
+            <div className="text-3xl mb-2">🃏</div>
+            <h3 className="text-lg font-bold text-gray-900">카드 사용 순위</h3>
+          </div>
+          {cardRanking.length > 0 ? (
+            <div className="space-y-1.5">
+              {cardRanking.slice(0, 5).map((u, i) => {
+                const isWinner = u.userId === winnerUserId;
+                const isEffective = u.userId === effectiveCardUser?.userId;
+                return (
+                  <div key={u.userId} className={`flex items-center justify-between text-sm px-3 py-1.5 rounded-xl ${isEffective && cardGift ? 'bg-cyan-50 border border-cyan-200' : 'bg-gray-50'}`}>
+                    <span className={`font-medium ${isEffective && cardGift ? 'text-cyan-700' : 'text-gray-700'}`}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} {u.userName}
+                      {isWinner && <span className="ml-1 text-[10px] text-amber-500 font-bold">선두</span>}
+                    </span>
+                    <span className={`font-bold text-xs ${isEffective && cardGift ? 'text-cyan-600' : 'text-gray-500'}`}>{u.count}회</span>
+                  </div>
+                );
+              })}
+              {cardRanking[0]?.userId === winnerUserId && effectiveCardUser && (
+                <p className="text-[11px] text-gray-400 text-center pt-1">1위가 선두여서 2위에게 선물 증정</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center">아직 카드 사용 내역이 없어요</p>
+          )}
+          {cardGift && effectiveCardUser && (
+            <div className="bg-cyan-50 rounded-xl p-4">
+              <p className="text-xs text-cyan-600 font-bold mb-1 text-center">🎁 {effectiveCardUser.userName}님 선물</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line text-center">{cardGift}</p>
+            </div>
+          )}
+          <button onClick={() => setShowGiftModal(false)}
             className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
             확인
           </button>
@@ -2871,6 +2943,18 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
   const [congratsExpanded, setCongratsExpanded] = useState(false);
   const [expiryLeft, setExpiryLeft] = useState('');
   const [closing, setClosing] = useState(false);
+  const [cardStats, setCardStats] = useState<{ gift: string | null; ranking: { userId: string; userName: string; count: number }[] } | null>(null);
+
+  useEffect(() => {
+    if (!winner?.eventId) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/card-stats?eventId=${winner.eventId}`, {
+      headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` },
+    }).then(r => r.json()).then(d => setCardStats({ gift: d.gift || null, ranking: d.ranking || [] })).catch(() => {});
+  }, [winner?.eventId]);
+
+  const cardGiftForWinner = cardStats?.gift || null;
+  const cardRankingForWinner = cardStats?.ranking || [];
+  const effectiveCardGiftUser = cardRankingForWinner.find(u => u.userId !== winner?.winnerUserId) || null;
 
   // 만료까지 남은 시간
   useEffect(() => {
@@ -3005,6 +3089,16 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
           )}
           {winner.cardUsedLogs?.length > 0 && (
             <CardLogsToggle logs={winner.cardUsedLogs} />
+          )}
+          {effectiveCardGiftUser && cardGiftForWinner && (
+            <div className="mt-3 bg-cyan-50 border border-cyan-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-[11px] text-cyan-600 font-bold mb-0.5">🃏 최다 카드 사용자 선물</p>
+              <p className="text-sm font-black text-gray-800">{effectiveCardGiftUser.userName}</p>
+              {cardRankingForWinner[0]?.userId === winner?.winnerUserId && (
+                <p className="text-[10px] text-gray-400 mt-0.5">1위가 선두 당첨자여서 2위에게 증정</p>
+              )}
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed whitespace-pre-line">{cardGiftForWinner}</p>
+            </div>
           )}
         </div>
 

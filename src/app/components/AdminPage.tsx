@@ -2194,6 +2194,36 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [showCardReductionEdit, setShowCardReductionEdit] = useState(false);
   const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
   const [cardReductionSaving, setCardReductionSaving] = useState(false);
+  const [cardGift, setCardGift] = useState('');
+  const [cardGiftSaving, setCardGiftSaving] = useState(false);
+  const [cardGiftLoaded, setCardGiftLoaded] = useState(false);
+  const [cardRanking, setCardRanking] = useState<{ userId: string; userName: string; count: number }[]>([]);
+
+  // 서버에서 전체 집계(현재+히스토리) 카드 스탯 로드
+  useEffect(() => {
+    if (!event?.id) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/card-stats?eventId=${event.id}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.json()).then(d => {
+      setCardGift(d.gift || '');
+      setCardRanking(d.ranking || []);
+      setCardGiftLoaded(true);
+    }).catch(() => setCardGiftLoaded(true));
+  }, [event?.id]);
+
+  const saveCardGift = async () => {
+    setCardGiftSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event/card-gift`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ eventId: event.id, gift: cardGift }) }
+      );
+      if (res.ok) toast.success(cardGift.trim() ? '선물 내용 저장! 배너에 🎁 아이콘 활성화됩니다.' : '선물 내용 삭제됨');
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setCardGiftSaving(false);
+  };
 
   const saveDuration = async () => {
     const mins = Number(editDuration);
@@ -2368,6 +2398,46 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
           {(event.cardUsageLog?.length > 0) && (
             <CardUsageLogBlock log={event.cardUsageLog} />
           )}
+
+          {/* 🏆 카드 사용 순위 + 선물 설정 (항상 표시) */}
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            {cardRanking.length > 0 ? (
+              <>
+                <p className="text-xs font-semibold text-indigo-600 mb-1.5">🏆 카드 사용 순위 (전체 누적)</p>
+                <div className="space-y-1 mb-2">
+                  {cardRanking.slice(0, 5).map((entry, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-700 font-medium">
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} {entry.userName}
+                      </span>
+                      <span className="text-indigo-500 font-bold">{entry.count}회</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400 mb-2">
+                {cardGiftLoaded ? '🃏 아직 카드 사용 내역 없음' : '🃏 카드 순위 로딩중...'}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-gray-600">
+                🎁 최다 카드 사용자 선물 내용
+              </p>
+              <textarea
+                value={cardGift}
+                onChange={e => setCardGift(e.target.value)}
+                placeholder="입력 시 배너에 🎁 아이콘 활성화. 비우면 비활성화."
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+              />
+              <button onClick={saveCardGift} disabled={cardGiftSaving || !cardGiftLoaded}
+                className="w-full py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1">
+                {cardGiftSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                {cardGiftSaving ? '저장중...' : '선물 저장'}
+              </button>
+            </div>
+          </div>
 
           {/* 타이머 시간 수정 */}
           <div className="mt-2 pt-2 border-t border-gray-100">

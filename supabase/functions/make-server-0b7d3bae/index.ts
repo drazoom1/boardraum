@@ -4125,7 +4125,7 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
               console.log(`[이벤트] 타이머 만료 상태에서 글 작성 → 카드 리셋 SKIP (eventId=${e.id}, userId=${user.id})`);
               return e; // reductionSeconds 그대로 유지
             }
-            return { ...e, reductionSeconds: 0, cardUsageLog: [], lastReductionAt: null, lastReductionBy: null };
+            return { ...e, reductionSeconds: 0, lastReductionAt: null, lastReductionBy: null };
           });
           await kv.set('last_post_events', resetEvents);
           console.log(`[이벤트] 선두 교체 처리 (userId=${user.id}, postId=${postId}, category=${category})`);
@@ -5376,9 +5376,14 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
     // 사용자 이름 조회
     let cardUserName = user.email || user.id;
     try {
-      const betaEntry = await kv.get(`beta_user_${user.id}`).catch(() => null);
-      if (betaEntry?.name) cardUserName = betaEntry.name;
-      else if (betaEntry?.username) cardUserName = betaEntry.username;
+      const profileEntry = await kv.get(`user_profile_${user.id}`).catch(() => null);
+      if (profileEntry?.username) cardUserName = profileEntry.username;
+      else if (profileEntry?.name) cardUserName = profileEntry.name;
+      else {
+        const betaEntry = await kv.get(`beta_user_${user.id}`).catch(() => null);
+        if (betaEntry?.username) cardUserName = betaEntry.username;
+        else if (betaEntry?.name) cardUserName = betaEntry.name;
+      }
     } catch {}
 
     if (useEvents.length > 0) {
@@ -9539,6 +9544,63 @@ app.get("/make-server-0b7d3bae/last-post-event/winner", async (c) => {
     console.log("[last-post-event/winner] 오류:", String(e));
     return c.json([]);
   }
+});
+
+// [임시 디버그] 전체 히스토리에서 카드 사용 내역 검색
+app.get("/make-server-0b7d3bae/admin/card-usage-debug", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const allEvents: any[] = await kv.get("last_post_events") || [];
+    const history: any[] = await kv.get("last_post_events_history") || [];
+    const result: any[] = [];
+    for (const ev of [...allEvents, ...history]) {
+      const log: any[] = ev.cardUsageLog || [];
+      if (log.length > 0) {
+        result.push({
+          eventId: ev.id,
+          startedAt: ev.startedAt,
+          active: ev.active,
+          entries: log.map((e: any) => ({ userName: e.userName, email: e.email, userId: e.userId, usedAt: e.usedAt }))
+        });
+      }
+    }
+    return c.json(result);
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 이벤트 카드 스탯 조회 (해당 이벤트 cardUsageLog만 집계)
+app.get("/make-server-0b7d3bae/last-post-event/card-stats", async (c) => {
+  try {
+    const eventId = c.req.query("eventId");
+    if (!eventId) return c.json({ gift: null, topUser: null, ranking: [] });
+    const stats: any = await kv.get(`last_post_event_card_stats_${eventId}`) || {};
+    const allEvents: any[] = await kv.get("last_post_events") || [];
+    const history: any[] = await kv.get("last_post_events_history") || [];
+    const target = [...allEvents, ...history].find((e: any) => e.id === eventId);
+    const countMap: Record<string, { userId: string; userName: string; count: number }> = {};
+    for (const entry of (target?.cardUsageLog || [])) {
+      const key = entry.userId || entry.email || entry.userName;
+      if (!key) continue;
+      if (!countMap[key]) countMap[key] = { userId: entry.userId || key, userName: entry.userName || entry.email || key, count: 0 };
+      countMap[key].count++;
+    }
+    const ranking = Object.values(countMap).sort((a: any, b: any) => b.count - a.count);
+    return c.json({ gift: stats.gift || null, topUser: ranking[0] || null, ranking });
+  } catch { return c.json({ gift: null, topUser: null, ranking: [] }); }
+});
+
+// 관리자: 최다 카드 사용자 선물 설정
+app.post("/make-server-0b7d3bae/admin/last-post-event/card-gift", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const { eventId, gift } = await c.req.json();
+    if (!eventId) return c.json({ error: "eventId required" }, 400);
+    const existing: any = await kv.get(`last_post_event_card_stats_${eventId}`) || {};
+    await kv.set(`last_post_event_card_stats_${eventId}`, { ...existing, gift: gift ?? '' });
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
 // 관리자: 수동으로 당첨 배너 등록
