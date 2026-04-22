@@ -319,30 +319,6 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     }).catch(() => {});
   }, [accessToken]);
 
-  // 이벤트 카테고리 규칙
-  const [eventCategoryNotice, setEventCategoryNotice] = useState<{ title?: string; content?: string } | null>(null);
-  const [showEventRulesModal, setShowEventRulesModal] = useState(false);
-  // localStorage 기반: 24시간 이내 확인 여부 체크
-  const [rulesConfirmedTick, setRulesConfirmedTick] = useState(0);
-  const eventRulesConfirmed = (() => {
-    const ts = localStorage.getItem('event_rules_confirmed_at');
-    if (!ts) return false;
-    return Date.now() - Number(ts) < 24 * 60 * 60 * 1000;
-  })();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = rulesConfirmedTick;
-  const confirmEventRules = () => {
-    localStorage.setItem('event_rules_confirmed_at', String(Date.now()));
-    setShowEventRulesModal(false);
-    setRulesConfirmedTick(t => t + 1);
-  };
-  useEffect(() => {
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/event-category-notice`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    ).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.notice?.content) setEventCategoryNotice(d.notice);
-    }).catch(() => {});
-  }, [accessToken]);
 
   const activeHwCat = hwCategories.find(c => c.name === category);
 
@@ -719,27 +695,6 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
             </div>
           )}
         </div>
-
-        {/* 이벤트 규칙 모달 */}
-        {showEventRulesModal && eventCategoryNotice && (
-          <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-            onClick={() => setShowEventRulesModal(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl p-5 w-full max-w-sm"
-              onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-900 text-sm">📋 {eventCategoryNotice.title || '이벤트 규칙'}</h3>
-                <button onClick={() => setShowEventRulesModal(false)}
-                  className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 text-xs">✕</button>
-              </div>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line mb-4">{eventCategoryNotice.content}</p>
-              <button
-                onClick={confirmEventRules}
-                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-bold rounded-xl transition-colors">
-                규칙을 확인했습니다
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* 세부 카테고리 모달 */}
         {showSubCategoryModal && pendingMainCategory && (
@@ -1223,22 +1178,12 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                 </div>
               )}
 
-              {/* 이벤트 규칙 미확인 시 안내 버튼 */}
-              {category === '이벤트' && eventCategoryNotice?.content && !eventRulesConfirmed ? (
-                <button
-                  onClick={() => setShowEventRulesModal(true)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-cyan-50 border border-cyan-200 rounded-xl text-left transition-colors hover:bg-cyan-100 min-h-[60px]">
-                  <span className="text-sm text-cyan-700 font-medium">📋 이벤트 규칙을 먼저 확인해주세요</span>
-                  <span className="text-xs text-cyan-500 font-semibold whitespace-nowrap">규칙 보기 →</span>
-                </button>
-              ) : (
-                <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
-                  onFocus={() => activeHwCat && setGuideVisible(false)}
-                  placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
-                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
-                  style={{ fontSize: '16px' }}
-                  rows={category === '재능판매' ? 2 : 3} />
-              )}
+              <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
+                onFocus={() => activeHwCat && setGuideVisible(false)}
+                placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
+                className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
+                style={{ fontSize: '16px' }}
+                rows={category === '재능판매' ? 2 : 3} />
 
               {/* 연결된 게임 (살래말래 제외) - 여러개 */}
               {linkedGames.length > 0 && category !== '살래말래' && (
