@@ -411,6 +411,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [noticeUnreadCount, setNoticeUnreadCount] = useState(0);
   const [noticeIsNew, setNoticeIsNew] = useState(false);
   const [noticeRefreshKey, setNoticeRefreshKey] = useState(0);
+  const [bonusCardCount, setBonusCardCount] = useState<number | null>(null);
   const [highlightFeedPostId, setHighlightFeedPostId] = useState<string | null>(null);
   const [notificationPost, setNotificationPost] = useState<FeedPost | null>(null); // 알림 클릭 시 모달로 보여줄 포스트
   const [notificationPostLoading, setNotificationPostLoading] = useState(false);
@@ -430,6 +431,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     };
     load();
   }, [accessToken, noticeRefreshKey]);
+
+  useEffect(() => {
+    if (!accessToken) { setBonusCardCount(null); return; }
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.ok ? r.json() : null).then(d => { if (d) setBonusCardCount(d.cards ?? 0); }).catch(() => {});
+  }, [accessToken]);
 
   // /post/:postId URL 진입 시 게시물 모달로 직접 열기
   useEffect(() => {
@@ -1729,18 +1737,23 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
             {/* 하단 설정 */}
             <div className="mt-auto flex flex-col items-center gap-1 relative">
-              {/* 확성기(공지) 버튼 */}
+              {/* 보너스카드 + 공지 버튼 */}
               {accessToken && (
-                <button onClick={() => setShowNoticeModal(true)}
-                  className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
-                  title="공지사항">
-                  <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
-                  {(noticeIsNew || noticeUnreadCount > 0) && (
-                    <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
-                      {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
-                    </span>
+                <div className="flex items-center">
+                  {bonusCardCount !== null && (
+                    <span className="text-[11px] text-gray-500 font-medium leading-none">🃏{bonusCardCount}</span>
                   )}
-                </button>
+                  <button onClick={() => setShowNoticeModal(true)}
+                    className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                    title="공지사항">
+                    <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
+                    {(noticeIsNew || noticeUnreadCount > 0) && (
+                      <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                        {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )}
               {/* 알림 버튼 */}
               {accessToken && (
@@ -1799,6 +1812,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={logoImage} alt="BOARDRAUM" className="w-8 h-8 object-contain" />
               </button>
               <div className="flex items-center gap-1">
+                {accessToken && bonusCardCount !== null && (
+                  <span className="text-[11px] text-gray-500 font-medium px-1">🃏{bonusCardCount}</span>
+                )}
                 {accessToken && (
                   <button onClick={() => setShowNoticeModal(true)}
                     className="relative w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
