@@ -377,6 +377,11 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [bannerUrl, setBannerUrl] = useState('');
   const [activeTab, setActiveTab] = useState(initialGameId ? 'custom' : 'feed'); // 비로그인도 피드에서 시작
+
+  // 모바일 뒤로가기 네비게이션 스택
+  type NavEntry = { tab: string; viewingUserId: string | null };
+  const navStackRef = useRef<NavEntry[]>([{ tab: initialGameId ? 'custom' : 'feed', viewingUserId: null }]);
+  const isRestoringNavRef = useRef(false);
   const [myPageScrollTrigger, setMyPageScrollTrigger] = useState(0);
   
   // /post/:postId URL 진입 시 처리 (notificationPost state 선언 후 아래에서 처리)
@@ -387,6 +392,23 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (activeTab === 'custom') setCustomMountKey(k => k + 1);
   }, [activeTab]);
+
+  // 앱 초기화: 뒤로가기 guard 항목 push (첫 back이 사이트 이탈 대신 popstate 발생)
+  useEffect(() => {
+    window.history.replaceState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
+    window.history.pushState({ boardraumNav: true, tab: navStackRef.current[0].tab }, '', window.location.pathname);
+  }, []);
+
+  // 탭 / 다른 유저 프로필 변경 시 history에 push
+  useEffect(() => {
+    if (isRestoringNavRef.current) { isRestoringNavRef.current = false; return; }
+    if (wikiGame) return; // 게임 위키는 자체 history 관리
+    const newEntry: NavEntry = { tab: activeTab, viewingUserId: viewingUserId || null };
+    const current = navStackRef.current[navStackRef.current.length - 1];
+    if (current?.tab === newEntry.tab && current?.viewingUserId === newEntry.viewingUserId) return;
+    navStackRef.current.push(newEntry);
+    window.history.pushState({ boardraumNav: true, tab: activeTab }, '', window.location.pathname);
+  }, [activeTab, viewingUserId, wikiGame]);
 
   // MyPage 온보딩 카드에서 게임 추가 다이얼로그 열기
   useEffect(() => {
@@ -483,12 +505,15 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     }
   }, [wikiGame]);
 
-  // 브라우저 뒤로가기 시 게임 위키 닫기 + 게시물 URL 처리
+  // 브라우저 뒤로가기 시 게임 위키 닫기 + 내부 네비게이션 스택 복원
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
+
+      // 1. 게임 위키 처리 (기존 로직)
       if (!path.startsWith('/game/') && wikiGame) {
         setWikiGame(undefined);
+        return;
       } else if (path.startsWith('/game/')) {
         const match = path.match(/^\/game\/([^/]+)$/);
         if (match) {
@@ -498,19 +523,47 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             setActiveTab('custom');
           }
         }
+        return;
       }
-      // /post/:id URL에서 뒤로가기 시 SEO 초기화
-      if (!path.startsWith('/post/') && !path.startsWith('/game/')) {
-        resetSEO();
+
+      // 2. 전체화면 오버레이 모달 닫기 (뒤로가기로 닫힘, history 재push)
+      if (showCalculator) {
+        setShowCalculator(false);
+        window.history.pushState({ boardraumNav: true }, '', path);
+        return;
       }
-      // /post/:id → 홈으로 돌아갈 때 하이라이트 해제
-      if (path === '/' || path === '') {
-        setHighlightFeedPostId(null);
+      if (notificationPost) {
+        setNotificationPost(null);
+        window.history.pushState({ boardraumNav: true }, '', path);
+        return;
       }
+      if (showPlusMenu) {
+        setShowPlusMenu(false);
+        window.history.pushState({ boardraumNav: true }, '', path);
+        return;
+      }
+
+      // 3. 내부 탭/프로필 네비게이션 스택 복원
+      const stack = navStackRef.current;
+      if (stack.length > 1) {
+        stack.pop();
+        const prev = stack[stack.length - 1];
+        isRestoringNavRef.current = true;
+        setActiveTab(prev.tab);
+        setViewingUserId(prev.viewingUserId);
+        // 스택 바닥에 도달했으면 guard 재push — 다음 back도 popstate 발생
+        if (stack.length === 1) {
+          window.history.pushState({ boardraumNav: true }, '', path);
+        }
+      }
+
+      // SEO/하이라이트 정리
+      if (!path.startsWith('/post/') && !path.startsWith('/game/')) resetSEO();
+      if (path === '/' || path === '') setHighlightFeedPostId(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [wikiGame]);
+  }, [wikiGame, showCalculator, notificationPost, showPlusMenu]);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
