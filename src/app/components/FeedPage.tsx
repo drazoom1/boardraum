@@ -2556,7 +2556,15 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         {effectiveCardUser && (
           <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
             <div>
-              <p className="text-gray-400 text-[10px] mb-0.5">🃏 최다 카드</p>
+              <p className="text-gray-400 text-[10px] mb-0.5 flex items-center gap-0.5">
+                <span>🃏 최다 카드</span>
+                <button
+                  onClick={e => { e.stopPropagation(); setShowGiftModal(true); }}
+                  className="font-black leading-none hover:scale-125 transition-transform text-gray-400 hover:text-cyan-500"
+                  style={{ fontFamily: 'Georgia, serif', fontSize: 13 }}
+                  title="순위 보기"
+                >❝</button>
+              </p>
               <p className="text-gray-800 font-bold text-sm">{effectiveCardUser.userName}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -2569,12 +2577,6 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               {cardGiftImageUrl && (
                 <img src={cardGiftImageUrl} alt="선물" className="w-14 h-14 object-contain rounded-xl bg-white border border-gray-100 flex-shrink-0" />
               )}
-              <button
-                onClick={e => { e.stopPropagation(); setShowGiftModal(true); }}
-                className="font-black leading-none hover:scale-125 transition-transform text-gray-400 hover:text-cyan-500"
-                style={{ fontFamily: 'Georgia, serif', fontSize: 16 }}
-                title="순위 보기"
-              >❝</button>
             </div>
           </div>
         )}
