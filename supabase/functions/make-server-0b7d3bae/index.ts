@@ -11259,4 +11259,20 @@ app.post("/make-server-0b7d3bae/admin/last-post-event/card-gift", async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 임시: 카드 사용 로그 복원 (관리자)
+app.post("/make-server-0b7d3bae/admin/restore-card-log", async (c) => {
+  const { error: adminError } = await requireAdmin(c);
+  if (adminError) return adminError;
+  try {
+    const { eventId, entries } = await c.req.json();
+    if (!eventId || !Array.isArray(entries)) return c.json({ error: "eventId and entries required" }, 400);
+    const events: any[] = await kv.get("last_post_events") || [];
+    const idx = events.findIndex((e: any) => e.id === eventId);
+    if (idx < 0) return c.json({ error: "event not found" }, 404);
+    events[idx] = { ...events[idx], cardUsageLog: entries };
+    await kv.set("last_post_events", events);
+    return c.json({ success: true, count: entries.length });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 Deno.serve(app.fetch);
