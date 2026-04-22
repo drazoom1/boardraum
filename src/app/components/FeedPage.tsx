@@ -928,24 +928,44 @@ function PinnedContent({ content, linkifyText, expanded, onToggle, needsCollapse
 function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSelect: (g: {id: string; name: string; imageUrl: string}) => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef<any>(null);
+  const [allGames, setAllGames] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/data/all-games`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then(r => r.ok ? r.json() : { games: [] })
+      .then(data => setAllGames(data.games || []))
+      .catch(() => {});
+  }, []);
+
+  const filterLocal = (val: string) => {
+    const qLow = val.toLowerCase();
+    const byName = new Map<string, any>();
+    for (const g of allGames) {
+      if (
+        (g.koreanName || '').toLowerCase().includes(qLow) ||
+        (g.englishName || '').toLowerCase().includes(qLow) ||
+        (g.name || '').toLowerCase().includes(qLow)
+      ) {
+        const nameKey = (g.koreanName || g.englishName || g.name || '').toLowerCase().trim();
+        if (!nameKey) continue;
+        const existing = byName.get(nameKey);
+        if (!existing) {
+          byName.set(nameKey, g);
+        } else {
+          const newBetter = (g.bggId && !existing.bggId) || (g.englishName && !existing.englishName);
+          if (newBetter) byName.set(nameKey, g);
+        }
+      }
+    }
+    return Array.from(byName.values()).slice(0, 10);
+  };
 
   const search = (val: string) => {
     setQ(val);
-    if (timerRef.current) clearTimeout(timerRef.current);
     if (!val.trim()) { setResults([]); return; }
-    timerRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ query: val }),
-        });
-        if (res.ok) setResults(await res.json());
-      } catch {}
-      setLoading(false);
-    }, 400);
+    setResults(filterLocal(val));
   };
 
   return (
@@ -953,8 +973,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
       <input value={q} onChange={e => search(e.target.value)}
         placeholder="게임 검색..."
         className="w-full h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30 mb-2" />
-      {loading && <p className="text-xs text-gray-400 text-center py-2">검색 중...</p>}
-      {results.slice(0, 5).map(g => {
+      {results.slice(0, 8).map(g => {
         const img = (g.thumbnail || g.imageUrl || '').replace(/^\/\//, 'https://');
         return (
           <button key={g.id} onClick={() => { onSelect({ id: g.id, name: g.koreanName || g.name, imageUrl: img }); setQ(''); setResults([]); }}

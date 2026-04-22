@@ -32,77 +32,46 @@ interface FeedPost {
 }
 
 // ─── 게임 검색 모달 ───
-function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selectedIds = [] }: {
-  ownedGames: BoardGame[];
+function GamePickerModal({ onConfirm, onClose, accessToken, selectedIds = [], allGames = [] }: {
+  ownedGames?: BoardGame[];
   onConfirm: (games: { id: string; name: string; imageUrl: string; bggId?: string }[]) => void;
   onClose: () => void;
   accessToken: string;
   selectedIds?: string[];
+  allGames?: any[];
 }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [allGames, setAllGames] = useState<any[]>([]);
-  const searchTimerRef = useRef<any>(null);
-  // 대기열: 모달 내부에서만 관리
   const [queue, setQueue] = useState<{ id: string; name: string; imageUrl: string; bggId?: string }[]>([]);
 
-  // AddGameDialog와 동일하게 전체 등록 게임 프리로드
-  useEffect(() => {
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/data/all-games`, {
-      headers: { Authorization: `Bearer ${publicAnonKey}` },
-    })
-      .then(r => r.ok ? r.json() : { games: [] })
-      .then(data => setAllGames(data.games || []))
-      .catch(() => {});
-  }, []);
-
-  const getThumb = (g: any) => {
-    const t = g.thumbnail || g.imageUrl || '';
-    return t.startsWith('//') ? 'https:' + t : t;
-  };
-
-  const ownedFiltered = ownedGames.filter(g =>
-    !q || (g.koreanName || g.englishName || '').toLowerCase().includes(q.toLowerCase())
-  );
-
-  const handleQueryChange = (val: string) => {
-    setQ(val);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!val.trim()) { setResults([]); return; }
-
-    // 등록 게임: allGames 로컬 필터 (AddGameDialog와 동일 방식 — 전체 데이터 즉시 표시)
-    const qLow = val.toLowerCase();
-    const localSite: any[] = [];
-    const seenKeys = new Set<string>();
+  const filterLocal = (val: string) => {
+    const q = val.toLowerCase();
+    const byName = new Map<string, any>();
     for (const g of allGames) {
       if (
-        (g.koreanName || '').toLowerCase().includes(qLow) ||
-        (g.englishName || '').toLowerCase().includes(qLow) ||
-        (g.name || '').toLowerCase().includes(qLow)
+        (g.koreanName || '').toLowerCase().includes(q) ||
+        (g.englishName || '').toLowerCase().includes(q) ||
+        (g.name || '').toLowerCase().includes(q)
       ) {
-        const dk = g.bggId ? `bgg_${g.bggId}` : `id_${g.id}`;
-        if (!seenKeys.has(dk)) { seenKeys.add(dk); localSite.push({ ...g, source: 'site' }); }
+        const nameKey = (g.koreanName || g.englishName || g.name || '').toLowerCase().trim();
+        if (!nameKey) continue;
+        const existing = byName.get(nameKey);
+        if (!existing) {
+          byName.set(nameKey, g);
+        } else {
+          // bggId 있는 항목, 또는 영문명 있는 항목 우선
+          const newBetter = (g.bggId && !existing.bggId) || (g.englishName && !existing.englishName);
+          if (newBetter) byName.set(nameKey, g);
+        }
       }
     }
-    setResults(localSite.slice(0, 10)); // 즉시 표시
+    return Array.from(byName.values()).slice(0, 15);
+  };
 
-    // BGG: 500ms 디바운스 후 비BGG 결과만 추가
-    searchTimerRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` }, body: JSON.stringify({ query: val }) }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const bggOnly = data.filter((g: any) => g.source !== 'site');
-          setResults([...localSite.slice(0, 10), ...bggOnly]);
-        }
-      } catch {}
-      finally { setLoading(false); }
-    }, 500);
+  const search = (val: string) => {
+    setQ(val);
+    if (!val.trim()) { setResults([]); return; }
+    setResults(filterLocal(val));
   };
 
   const toggleQueue = (g: { id: string; name: string; imageUrl: string; bggId?: string }) => {
@@ -112,118 +81,70 @@ function GamePickerModal({ ownedGames, onConfirm, onClose, accessToken, selected
   const isInQueue = (id: string) => queue.some(x => x.id === id);
   const isAlreadyAdded = (id: string) => selectedIds.includes(id);
 
-  const bggResults = results.filter(g => g.source !== 'site');
-  const siteResults = results.filter(g => g.source === 'site');
-
-  const GameRow = ({ g, id, name, imageUrl }: { g?: any; id: string; name: string; imageUrl: string }) => {
-    const inQueue = isInQueue(id);
-    const added = isAlreadyAdded(id);
-    return (
-      <div className={`flex items-center gap-3 py-3 border-b border-gray-50 rounded-xl px-2 transition-colors ${inQueue ? 'bg-cyan-50' : 'hover:bg-gray-50'}`}>
-        {imageUrl
-          ? <img src={imageUrl} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
-          : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm truncate">{name}</p>
-          {g?.englishName && g?.koreanName && <p className="text-xs text-gray-400 truncate">{g.englishName}</p>}
-          {g?.yearPublished && !g?.koreanName && <p className="text-xs text-gray-400">{g.yearPublished}년</p>}
-        </div>
-        <button onClick={() => toggleQueue({ id, name, imageUrl, bggId: g?.bggId })}
-          className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
-            ${added ? 'bg-gray-200 text-gray-400 cursor-default' : inQueue ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-cyan-500 hover:text-white'}`}
-          disabled={added}>
-          {added ? <span className="text-xs">✓</span> : inQueue ? <span className="text-xs font-bold">✓</span> : <Plus className="w-4 h-4" />}
-        </button>
-      </div>
-    );
-  };
-
   return (
     <div className="fixed inset-0 bg-black/60 z-[9999] flex items-start justify-center p-3">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col mt-8" style={{ height: '45vh' }}>
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col mt-8" style={{ maxHeight: '70vh' }}>
         <div className="px-4 pt-3 pb-2.5 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <h3 className="font-bold text-gray-900">게임 태그</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
           </div>
-          {/* 대기열 표시 */}
           {queue.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {queue.map(g => (
                 <div key={g.id} className="flex items-center gap-1 bg-cyan-500 text-white text-xs px-2 py-1 rounded-full">
                   <span className="max-w-[80px] truncate">{g.name}</span>
-                  <button onClick={() => toggleQueue(g)} className="hover:opacity-70">
-                    <X className="w-3 h-3" />
-                  </button>
+                  <button onClick={() => toggleQueue(g)} className="hover:opacity-70"><X className="w-3 h-3" /></button>
                 </div>
               ))}
             </div>
           )}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input value={q} onChange={e => handleQueryChange(e.target.value)}
-              placeholder="게임 이름 입력 시 자동 검색..."
-              style={{ fontSize: '16px' }}
-              className="w-full h-10 pl-9 pr-9 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
-            {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />}
-          </div>
-          {q && <p className="text-xs text-gray-400 mt-1.5 px-1">💡 1글자만 입력해도 전체 DB에서 검색돼요</p>}
+          <input value={q} onChange={e => search(e.target.value)}
+            autoFocus
+            placeholder="게임 검색..."
+            style={{ fontSize: '16px' }}
+            className="w-full h-10 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
         </div>
-        <div className="overflow-y-auto flex-1 px-4 pb-2">
-          {!q ? (
-            <>
-              <p className="text-xs text-gray-400 mb-2 px-1">내 보유게임</p>
-              {ownedGames.length === 0
-                ? <p className="text-center py-6 text-sm text-gray-400">게임 이름을 입력하면 전체 DB에서 검색돼요</p>
-                : ownedFiltered.map(g => (
-                    <GameRow key={g.id} id={g.bggId || g.id} name={g.koreanName || g.englishName} imageUrl={g.imageUrl || ''} g={g} />
-                  ))
-              }
-            </>
-          ) : loading && results.length === 0 ? (
-            <div className="flex flex-col items-center py-10 text-gray-400">
-              <Loader2 className="w-7 h-7 animate-spin mb-2" />
-              <p className="text-sm">검색 중...</p>
-            </div>
-          ) : results.length === 0 && !loading ? (
-            <div className="py-6 px-2">
-              <p className="text-center text-sm text-gray-400 mb-4">검색 결과가 없어요</p>
+        <div className="overflow-y-auto flex-1 px-2 py-1">
+          {!q && (
+            <p className="text-center py-8 text-sm text-gray-400">게임 이름을 입력하면 자동 검색돼요</p>
+          )}
+          {q && results.length === 0 && (
+            <div className="py-6 px-2 text-center">
+              <p className="text-sm text-gray-400 mb-3">검색 결과가 없어요</p>
               <button onClick={() => toggleQueue({ id: `custom_${Date.now()}`, name: q, imageUrl: '' })}
-                className="w-full flex items-center gap-3 py-3 border border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-xl px-3 text-left transition-colors">
-                <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>
-                <div>
-                  <p className="font-semibold text-gray-800 text-sm">"{q}" 직접 등록</p>
-                  <p className="text-xs text-gray-400">검색 결과에 없는 게임 직접 추가</p>
-                </div>
+                className="px-4 py-2 text-sm text-gray-600 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50">
+                "{q}" 직접 추가
               </button>
             </div>
-          ) : (
-            <>
-              {siteResults.length > 0 && (
-                <>
-                  <p className="text-xs text-cyan-600 font-semibold mb-1 px-1 mt-1">📚 보드라움 회원 등록 게임</p>
-                  {siteResults.map(g => {
-                    const thumb = getThumb(g);
-                    return <GameRow key={g.id} g={g} id={g.bggId || String(g.id)} name={g.koreanName || g.name} imageUrl={thumb} />;
-                  })}
-                </>
-              )}
-              {bggResults.length > 0 && (
-                <>
-                  {siteResults.length > 0 && <p className="text-xs text-gray-400 font-semibold mb-1 px-1 mt-3">🌐 BGG 검색 결과</p>}
-                  {bggResults.map(g => {
-                    const thumb = getThumb(g);
-                    return <GameRow key={g.id} g={g} id={String(g.id)} name={g.koreanName || g.name} imageUrl={thumb} />;
-                  })}
-                </>
-              )}
-            </>
           )}
+          {results.map(g => {
+            const img = (g.thumbnail || g.imageUrl || '').replace(/^\/\//, 'https://');
+            const id = String(g.id);
+            const inQueue = isInQueue(id);
+            const added = isAlreadyAdded(id);
+            return (
+              <div key={id} className={`flex items-center gap-3 py-2.5 px-2 rounded-xl transition-colors ${inQueue ? 'bg-cyan-50' : 'hover:bg-gray-50'}`}>
+                {img
+                  ? <img src={img} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm truncate">{g.koreanName || g.name}</p>
+                  {g.englishName && g.koreanName && <p className="text-xs text-gray-400 truncate">{g.englishName}</p>}
+                  {g.yearPublished && !g.koreanName && <p className="text-xs text-gray-400">{g.yearPublished}년</p>}
+                </div>
+                <button onClick={() => toggleQueue({ id, name: g.koreanName || g.name, imageUrl: img, bggId: g.bggId || g.id })}
+                  className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors
+                    ${added ? 'bg-gray-200 text-gray-400 cursor-default' : inQueue ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-cyan-500 hover:text-white'}`}
+                  disabled={added}>
+                  {added ? <span className="text-xs">✓</span> : inQueue ? <span className="text-xs font-bold">✓</span> : <Plus className="w-4 h-4" />}
+                </button>
+              </div>
+            );
+          })}
         </div>
-        {/* 확정 버튼 */}
         <div className="px-4 pb-5 pt-2 flex-shrink-0 border-t border-gray-100">
-          <button
-            onClick={() => { onConfirm(queue); onClose(); }}
+          <button onClick={() => { onConfirm(queue); onClose(); }}
             disabled={queue.length === 0}
             className="w-full py-3 rounded-2xl bg-gray-900 text-white font-bold text-sm disabled:opacity-30 hover:bg-gray-700 transition-colors">
             {queue.length > 0 ? `게임 ${queue.length}개 추가하기` : '게임을 선택해주세요'}
@@ -254,6 +175,8 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const [wikiGameSearchQ, setWikiGameSearchQ] = useState('');
   const [wikiGameResults, setWikiGameResults] = useState<any[]>([]);
   const [wikiGameSearching, setWikiGameSearching] = useState(false);
+  const [wikiAllGames, setWikiAllGames] = useState<any[]>([]);
+  const wikiSearchTimerRef = useRef<any>(null);
   const [selectedWikiGame, setSelectedWikiGame] = useState<any | null>(null);
   const [showWikiForm, setShowWikiForm] = useState(false); // GameOverviewForm
   const [wikiFormSubmitting, setWikiFormSubmitting] = useState(false);
@@ -337,6 +260,90 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     }).catch(() => {});
   }, [accessToken]);
 
+
+  // wikiGameSearch용 전체 게임 프리로드
+  useEffect(() => {
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/data/all-games`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then(r => r.ok ? r.json() : { games: [] })
+      .then(data => setWikiAllGames(data.games || []))
+      .catch(() => {});
+  }, []);
+
+  // 로컬 결과 부족할 때만 BGG API 보완 (AddGameDialog와 동일한 프리로드 우선 방식)
+  useEffect(() => {
+    if (wikiSearchTimerRef.current) clearTimeout(wikiSearchTimerRef.current);
+    if (!wikiGameSearchQ.trim()) { setWikiGameResults([]); setWikiGameSearching(false); return; }
+    wikiSearchTimerRef.current = setTimeout(async () => {
+      // 로컬 결과 수 계산 — 5개 이상이면 BGG 호출 생략
+      const q = wikiGameSearchQ.toLowerCase();
+      const localCount = wikiAllGames.filter(g =>
+        (g.koreanName || '').toLowerCase().includes(q) ||
+        (g.englishName || '').toLowerCase().includes(q) ||
+        (g.name || '').toLowerCase().includes(q)
+      ).length;
+      if (localCount >= 5) { setWikiGameResults([]); return; }
+
+      setWikiGameSearching(true);
+      try {
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` }, body: JSON.stringify({ query: wikiGameSearchQ }) }
+        );
+        if (res.ok) {
+          const data: any[] = await res.json();
+          const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+          const seenIds = new Set<string>(), seenNames = new Set<string>();
+          const bggOnly = data.filter((g: any) => {
+            if (g.source === 'site') return false;
+            if (seenIds.has(g.id)) return false;
+            const nKo = norm(g.koreanName || '');
+            const nEn = norm(g.englishName || g.name || '');
+            if ((nKo && seenNames.has(nKo)) || (nEn && seenNames.has(nEn))) return false;
+            seenIds.add(g.id);
+            if (nKo) seenNames.add(nKo);
+            if (nEn) seenNames.add(nEn);
+            return true;
+          });
+          setWikiGameResults(bggOnly.slice(0, 20));
+        }
+      } catch {}
+      finally { setWikiGameSearching(false); }
+    }, 500);
+    return () => { if (wikiSearchTimerRef.current) clearTimeout(wikiSearchTimerRef.current); };
+  }, [wikiGameSearchQ, wikiAllGames]);
+
+  // AddGameDialog의 getFilteredRegisteredGames와 완전히 동일한 로직
+  const getWikiFilteredGames = () => {
+    if (!wikiGameSearchQ || wikiGameSearchQ.length === 0) return [];
+
+    const query = wikiGameSearchQ.toLowerCase();
+    const filtered = wikiAllGames.filter(game => {
+      const koreanMatch = (game.koreanName || '').toLowerCase().includes(query);
+      const englishMatch = (game.englishName || '').toLowerCase().includes(query);
+      const nameMatch = (game.name || '').toLowerCase().includes(query);
+      return koreanMatch || englishMatch || nameMatch;
+    });
+
+    // 중복 제거: 한국어명이 같으면 영문명이 있는 버전 우선
+    const uniqueGamesMap = new Map();
+    for (const game of filtered) {
+      const uniqueKey = (game.koreanName || game.englishName || '').toLowerCase().trim();
+      if (!uniqueKey) continue;
+      const existing = uniqueGamesMap.get(uniqueKey);
+      if (!existing) {
+        uniqueGamesMap.set(uniqueKey, game);
+      } else {
+        const existingHasEnglish = !!(existing.englishName && existing.englishName.trim());
+        const newHasEnglish = !!(game.englishName && game.englishName.trim());
+        if (newHasEnglish && !existingHasEnglish) uniqueGamesMap.set(uniqueKey, game);
+      }
+    }
+
+    return Array.from(uniqueGamesMap.values()).slice(0, 15);
+  };
+  const wikiFilteredGames = getWikiFilteredGames();
 
   const activeHwCat = hwCategories.find(c => c.name === category);
 
@@ -782,36 +789,34 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
           </div>
         )}
 
-        {/* 보드위키 게임 검색 모달 */}
+        {/* 보드위키 게임 검색 모달 — AddGameDialog 방식 두 섹션 */}
         {showWikiGameSearch && (
           <div className="fixed inset-0 bg-black/50 z-[9999] flex items-start justify-center p-4 pt-12"
             onClick={() => setShowWikiGameSearch(false)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style={{ maxHeight: '80vh' }}
               onClick={e => e.stopPropagation()}>
+              {/* 헤더 + 검색 input */}
               <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
                 <h3 className="font-bold text-gray-900 mb-3 text-sm">🎲 게임 선택</h3>
-                <input autoFocus value={wikiGameSearchQ}
-                  onChange={async e => {
-                    const q = e.target.value;
-                    setWikiGameSearchQ(q);
-                    if (!q.trim()) { setWikiGameResults([]); return; }
-                    setWikiGameSearching(true);
-                    try {
-                      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-search`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken || publicAnonKey}` },
-                        body: JSON.stringify({ query: q }),
-                      });
-                      if (res.ok) setWikiGameResults(await res.json());
-                    } catch {}
-                    setWikiGameSearching(false);
-                  }}
-                  placeholder="게임 이름으로 검색 (한글/영문)..."
-                  className="w-full h-10 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input autoFocus value={wikiGameSearchQ}
+                    onChange={e => setWikiGameSearchQ(e.target.value)}
+                    placeholder="게임 이름으로 검색 (한글/영문/초성)..."
+                    className="w-full h-10 pl-9 pr-9 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                  {wikiGameSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />}
+                </div>
               </div>
-              <div className="overflow-y-auto flex-1 px-3 py-2">
-                {wikiGameSearching && <p className="text-center py-6 text-sm text-gray-400">검색 중...</p>}
-                {!wikiGameSearching && wikiGameSearchQ && wikiGameResults.length === 0 && (
+              <div className="overflow-y-auto flex-1 px-3 py-3 space-y-2">
+                {/* BGG 로딩 중 + 아직 결과 없음 */}
+                {wikiGameSearching && wikiFilteredGames.length === 0 && wikiGameResults.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+                    <p className="text-sm">검색 중...</p>
+                  </div>
+                )}
+                {/* 결과 없음 */}
+                {!wikiGameSearching && wikiGameSearchQ && wikiFilteredGames.length === 0 && wikiGameResults.length === 0 && (
                   <div className="py-6 text-center">
                     <p className="text-sm text-gray-400 mb-3">검색 결과가 없어요</p>
                     <button onClick={() => {
@@ -824,39 +829,80 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                     </button>
                   </div>
                 )}
-                {wikiGameResults.map((g: any) => {
-                  const thumb = (g.thumbnail || g.imageUrl || '');
-                  const imgUrl = thumb.startsWith('//') ? 'https:' + thumb : thumb;
-                  return (
-                    <button key={g.id} onClick={async () => {
-                      const game = { ...g, koreanName: g.koreanName || g.name, imageUrl: imgUrl, bggId: g.source === 'bgg' ? g.id : (g.bggId || '') };
-                      setSelectedWikiGame(game);
-                      setShowWikiGameSearch(false);
-                      // 기존 등록 데이터 조회
-                      try {
-                        const gameId = getWikiGameId(game);
-                        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${gameId}?category=overview`, { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } });
-                        if (res.ok) {
-                          const data = await res.json();
-                          const existing = data.posts?.filter((p: any) => p.postType === 'info');
-                          if (existing && existing.length > 0) {
-                            setExistingWikiPost(existing[0]);
-                            setShowWikiConfirm(true);
-                            return;
-                          }
-                        }
-                      } catch {}
-                      setExistingWikiPost(null);
-                      setShowWikiForm(true);
-                    }} className="w-full flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-xl text-left transition-colors">
-                      {imgUrl ? <img src={imgUrl} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center">🎲</div>}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{g.koreanName || g.name}</p>
-                        {g.yearPublished && <p className="text-xs text-gray-400">{g.yearPublished}년</p>}
-                      </div>
-                    </button>
-                  );
-                })}
+
+                {/* 보드라움 등록 게임 섹션 */}
+                {wikiFilteredGames.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg divide-y overflow-hidden">
+                    {wikiFilteredGames.map((game: any) => {
+                      const thumb = (game.imageUrl || '');
+                      const imgUrl = thumb.startsWith('//') ? 'https:' + thumb : thumb;
+                      return (
+                        <div key={game.id} className="px-4 py-3 flex items-center gap-3 hover:bg-cyan-50 transition-colors cursor-pointer"
+                          onClick={async () => {
+                            const g = { ...game, koreanName: game.koreanName || game.name, imageUrl: imgUrl, bggId: game.bggId || '' };
+                            setSelectedWikiGame(g);
+                            setShowWikiGameSearch(false);
+                            try {
+                              const gameId = getWikiGameId(g);
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${gameId}?category=overview`, { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } });
+                              if (res.ok) {
+                                const data = await res.json();
+                                const existing = data.posts?.filter((p: any) => p.postType === 'info');
+                                if (existing && existing.length > 0) { setExistingWikiPost(existing[0]); setShowWikiConfirm(true); return; }
+                              }
+                            } catch {}
+                            setExistingWikiPost(null);
+                            setShowWikiForm(true);
+                          }}>
+                          {imgUrl ? <img src={imgUrl} className="w-10 h-10 object-cover rounded-xl flex-shrink-0" /> : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-gray-900 truncate">{game.koreanName || game.englishName || game.name}</span>
+                              <span className="text-[10px] bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded-full flex-shrink-0">보드라움</span>
+                            </div>
+                            {game.koreanName && game.englishName && <div className="text-sm text-gray-500 truncate">{game.englishName}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* BGG 결과 섹션 */}
+                {wikiGameResults.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg divide-y overflow-hidden">
+                    {wikiGameResults.map((result: any) => {
+                      const thumb = result.thumbnail ? (result.thumbnail.startsWith('//') ? 'https:' + result.thumbnail : result.thumbnail) : '';
+                      return (
+                        <div key={result.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={async () => {
+                            const g = { ...result, koreanName: result.koreanName || result.name, imageUrl: thumb, bggId: result.id };
+                            setSelectedWikiGame(g);
+                            setShowWikiGameSearch(false);
+                            try {
+                              const gameId = getWikiGameId(g);
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${gameId}?category=overview`, { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } });
+                              if (res.ok) {
+                                const data = await res.json();
+                                const existing = data.posts?.filter((p: any) => p.postType === 'info');
+                                if (existing && existing.length > 0) { setExistingWikiPost(existing[0]); setShowWikiConfirm(true); return; }
+                              }
+                            } catch {}
+                            setExistingWikiPost(null);
+                            setShowWikiForm(true);
+                          }}>
+                          {thumb ? <img src={thumb} className="w-10 h-10 object-cover rounded-xl flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} /> : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{result.koreanName || result.name}</div>
+                            {(result.englishName || result.yearPublished) && (
+                              <div className="text-sm text-gray-500 truncate">{[result.englishName, result.yearPublished ? `(${result.yearPublished})` : ''].filter(Boolean).join(' ')}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex-shrink-0">
                 <button onClick={() => setShowWikiGameSearch(false)} className="w-full py-2 text-sm text-gray-400 hover:text-gray-600">취소</button>
@@ -1393,7 +1439,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
       )}
 
       {showGamePicker && (
-        <GamePickerModal ownedGames={ownedGames} selectedIds={linkedGames.map(g => g.id)}
+        <GamePickerModal ownedGames={ownedGames} selectedIds={linkedGames.map(g => g.id)} allGames={wikiAllGames}
           onConfirm={games => {
             if (category === '살래말래') setLinkedGames(games.slice(0, 1));
             else setLinkedGames(prev => {
