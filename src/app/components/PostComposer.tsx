@@ -275,7 +275,15 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
       { headers: { Authorization: `Bearer ${accessToken}` } }
     ).then(r => r.ok ? r.json() : null).then(d => {
       const events: any[] = Array.isArray(d) ? d : (d?.events || (d?.active ? [d] : []));
-      const activeEvent = events.find((e: any) => e.active);
+      // 타이머가 아직 살아있는 이벤트만 진행중으로 판단 (당첨 배너 상태 제외)
+      const activeEvent = events.find((e: any) => {
+        if (!e.active) return false;
+        const posts: any[] = e.posts || [];
+        if (posts.length === 0) return true; // 게시글 없으면 이벤트 시작 전 → 진행중
+        const lastPost = posts[posts.length - 1];
+        const endTime = new Date(lastPost.createdAt).getTime() + (e.durationMinutes || 60) * 60 * 1000;
+        return Date.now() < endTime;
+      });
       setHasActiveEvent(!!activeEvent);
       setActiveEventId(activeEvent?.id || null);
     }).catch(() => {});

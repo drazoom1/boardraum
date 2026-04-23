@@ -621,7 +621,8 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
       if (!res.ok) throw new Error(data.error || '댓글 등록 실패');
       const realComment = data.comment || tempComment;
       setLocalComments(prev => prev.map(c => c.id === tempId ? realComment : c));
-      toast.success('댓글을 등록했어요 (+3pt)');
+      const pts = data.pointsEarned ?? 3;
+      toast.success(pts > 3 ? `🎉 첫 게시글 댓글 보너스! (+${pts}pt)` : `댓글을 등록했어요 (+${pts}pt)`);
       // 1% 확률 보너스카드 체크
       try {
         const cardRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/activity`, {
@@ -1561,6 +1562,27 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                           <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setShowNoticePinInput(true); }}
                             className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
                             📢 공지 등록
+                          </button>
+                        )}
+                        {isOwnFirstPost && (
+                          <button onClick={async () => {
+                            setShowMenu(false);
+                            if (!confirm('생애 첫 게시글을 취소하시겠습니까?\n포인트 300pt와 카드 3장이 회수됩니다.')) return;
+                            try {
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/posts/${post.id}/cancel-first-post`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data.error || '취소 실패');
+                              toast.success('첫 게시글 취소 완료 (포인트·카드 회수)');
+                              onUpdate();
+                            } catch (e: any) {
+                              toast.error(e.message || '취소 실패');
+                            }
+                          }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors">
+                            🎉 첫 게시글 취소
                           </button>
                         )}
                         <div className="border-t border-gray-100 my-1" />
