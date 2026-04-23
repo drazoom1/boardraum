@@ -738,8 +738,10 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               const isHw = hwCategories.some(h => h.name === c);
               const isSelected = currentMain === c || (isHw && category === c);
               const hasSub = SUB_CATEGORIES[c] && SUB_CATEGORIES[c].length > 0;
+              const isEventDisabled = c === '이벤트' && !hasActiveEvent;
               return (
                 <button key={c} onClick={() => {
+                  if (isEventDisabled) return;
                   if (c === '숙제') {
                     setPendingMainCategory('숙제');
                     setShowSubCategoryModal(true);
@@ -750,13 +752,16 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                     setCategory(c);
                   }
                 }}
+                  disabled={isEventDisabled}
                   className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                    isSelected || (c === '숙제' && hwCategories.some(h => h.name === category))
-                      ? isHw ? 'bg-orange-500 text-white' : c === '이벤트' ? 'bg-cyan-500 text-white' : c === '숙제' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
-                      : isHw ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
-                      : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border border-cyan-200'
-                      : c === '숙제' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    isEventDisabled
+                      ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200'
+                      : isSelected || (c === '숙제' && hwCategories.some(h => h.name === category))
+                        ? isHw ? 'bg-orange-500 text-white' : c === '이벤트' ? 'bg-cyan-500 text-white' : c === '숙제' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
+                        : isHw ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
+                        : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border border-cyan-200'
+                        : c === '숙제' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}>
                   {c === '이벤트' ? '🎉 ' : c === '숙제' ? '📚 ' : ''}{c}{hasSub || c === '숙제' ? ' ›' : ''}
                 </button>
