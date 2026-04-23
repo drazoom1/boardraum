@@ -4569,11 +4569,13 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
     await kv.set(`beta_post_${postId}`, post);
     
     // 댓글 작성 포인트 + 알림
-    // 첫 게시글 여부: post.isFirstPost 또는 게시글 작성자의 user_first_post_ KV로 확인 (배포 전 작성글 대응)
+    // 첫 게시글 여부: 2026-04-23 이후 작성된 글 + post.isFirstPost 또는 KV 확인
+    const FIRST_POST_COMMENT_CUTOFF = '2026-04-23T00:00:00.000Z';
+    const postCreatedAfterCutoff = post.createdAt ? new Date(post.createdAt) >= new Date(FIRST_POST_COMMENT_CUTOFF) : false;
     let bonusPointsGiven = 0;
-    const isFirstPostByKv = post.isFirstPost || (() => false)();
-    const authorFirstPostKv = post.userId ? await kv.get(`user_first_post_${post.userId}`).catch(() => null) : null;
-    const isActualFirstPost = isFirstPostByKv || (authorFirstPostKv && authorFirstPostKv.postId === postId);
+    const isFirstPostByKv = post.isFirstPost || false;
+    const authorFirstPostKv = postCreatedAfterCutoff && post.userId ? await kv.get(`user_first_post_${post.userId}`).catch(() => null) : null;
+    const isActualFirstPost = postCreatedAfterCutoff && (isFirstPostByKv || (authorFirstPostKv && authorFirstPostKv.postId === postId));
 
     if (isActualFirstPost && post.userId !== user.id) {
       const bonusKey = `first_post_comment_bonus_${postId}_${user.id}`;
