@@ -11224,58 +11224,54 @@ app.post("/make-server-0b7d3bae/admin/site-games/merge", async (c) => {
 
 // ─── sitemap.xml 생성 ─────────────────────────────────────────────────────────
 app.get("/make-server-0b7d3bae/sitemap.xml", async (c) => {
+  const SITE = 'https://boardraum.site';
   try {
-    // 게임 URL
-    const siteGames = await getByPrefix('site_game_');
-    const gameUrls = siteGames
-      .map(({ value: g }: any) => {
+    const urls: string[] = [];
+
+    // 메인
+    urls.push(`  <url>\n    <loc>${SITE}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`);
+
+    // 게임 URL (site_game_ + game_custom_ 양쪽 수집, 이름 중복 제거)
+    const gameNames = new Set<string>();
+    try {
+      const siteGames = await getByPrefix('site_game_');
+      for (const { value: g } of siteGames) {
         const name = g?.koreanName || g?.englishName || g?.name;
-        if (!name) return null;
-        const slug = encodeURIComponent(name);
-        return `  <url>
-    <loc>https://boardraum.site/game/${slug}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-      })
-      .filter(Boolean)
-      .join('\n');
+        if (name) gameNames.add(name);
+      }
+    } catch {}
+    try {
+      const customGames = await getByPrefix('game_custom_');
+      for (const { value: g } of customGames) {
+        const name = g?.gameName || g?.koreanName || g?.englishName;
+        if (name) gameNames.add(name);
+      }
+    } catch {}
+    for (const name of gameNames) {
+      urls.push(`  <url>\n    <loc>${SITE}/game/${encodeURIComponent(name)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`);
+    }
 
-    // 게시물 URL
-    const posts = await getByPrefix('beta_post_');
-    const postUrls = posts
-      .map((item: any) => {
-        const p = item?.value ?? item;
-        if (!p || p.isDraft || p.isPrivate) return null;
-        const id = p.id;
-        if (!id) return null;
-        const lastmod = p.updatedAt || p.createdAt || '';
-        return `  <url>
-    <loc>https://boardraum.site/post/${id}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>${lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''}
-  </url>`;
-      })
-      .filter(Boolean)
-      .join('\n');
+    // 최근 게시글 100개
+    try {
+      const allPosts = await getByPrefix('beta_post_');
+      const published = allPosts
+        .map((item: any) => item?.value ?? item)
+        .filter((p: any) => p && !p.isDraft && !p.isPrivate && p.id)
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 100);
+      for (const p of published) {
+        const lastmod = p.updatedAt || p.createdAt;
+        urls.push(`  <url>\n    <loc>${SITE}/post/${p.id}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>${lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''}\n  </url>`);
+      }
+    } catch {}
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://boardraum.site/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-${gameUrls}
-${postUrls}
-</urlset>`;
-
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`;
     return new Response(xml, {
-      headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' },
     });
-  } catch (e) {
-    return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://boardraum.site/</loc></url></urlset>`, {
-      headers: { 'Content-Type': 'application/xml; charset=utf-8' }
+  } catch {
+    return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${SITE}/</loc></url></urlset>`, {
+      headers: { 'Content-Type': 'application/xml; charset=utf-8' },
     });
   }
 });
@@ -11469,48 +11465,6 @@ app.get("/make-server-0b7d3bae/prerender", async (c) => {
   }
 });
 
-app.get("/make-server-0b7d3bae/sitemap.xml", async (c) => {
-  try {
-    const urls: string[] = [];
-    urls.push(`<url><loc>${SITE_URL}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`);
-
-    try {
-      const allGames = await getByPrefix('game_custom_');
-      const gameNames = new Set<string>();
-      for (const g of allGames) {
-        const v = g.value;
-        if (v?.gameName) gameNames.add(v.gameName);
-        else if (v?.koreanName) gameNames.add(v.koreanName);
-        else if (v?.englishName) gameNames.add(v.englishName);
-      }
-      for (const name of gameNames) {
-        urls.push(`<url><loc>${SITE_URL}/game/${encodeURIComponent(name)}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`);
-      }
-    } catch {}
-
-    try {
-      const allPosts = await getByPrefix('beta_post_');
-      const published = allPosts
-        .map((p: any) => p.value)
-        .filter((p: any) => p && !p.isDraft && !p.isPrivate && p.id)
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 200);
-      for (const post of published) {
-        urls.push(`<url><loc>${SITE_URL}/post/${post.id}</loc><changefreq>monthly</changefreq><priority>0.6</priority><lastmod>${new Date(post.createdAt).toISOString().split('T')[0]}</lastmod></url>`);
-      }
-    } catch {}
-
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join('\n')}
-</urlset>`;
-    return new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
-  } catch (e) {
-    return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${SITE_URL}/</loc></url></urlset>`, {
-      headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-    });
-  }
-});
 
 // 카드 선물 통계 조회 (공개)
 app.get("/make-server-0b7d3bae/last-post-event/card-stats", async (c) => {
