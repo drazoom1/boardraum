@@ -2776,15 +2776,19 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                 }
               </button>
             </div>
-            {/* 카드 사용 횟수 표시 */}
-            {(event.cardUsageLog?.length > 0) && (
-              <p className="text-[10px] text-center mt-1" style={{ color: '#00BCD4' }}>
-                🃏 시간 감축 카드 총 <span className="font-black">{event.cardUsageLog.length}회</span> 사용됨
-                {(event.reductionSeconds || 0) > 0 && (
-                  <span className="text-gray-400"> · -{Math.floor((event.reductionSeconds || 0) / 60)}분 {(event.reductionSeconds || 0) % 60 > 0 ? `${(event.reductionSeconds || 0) % 60}초` : ''} 적용</span>
-                )}
-              </p>
-            )}
+            {/* 카드 사용 횟수 표시 - 현재 선두 글 이후 사용분만 */}
+            {(() => {
+              const lastPostTime = lastPost ? new Date(lastPost.createdAt).getTime() : 0;
+              const currentUsages = (event.cardUsageLog || []).filter((e: any) => e.usedAt && new Date(e.usedAt).getTime() >= lastPostTime);
+              if (currentUsages.length === 0) return null;
+              const reductionSecs = currentUsages.length * (event.cardReductionSeconds ?? 300);
+              return (
+                <p className="text-[10px] text-center mt-1" style={{ color: '#00BCD4' }}>
+                  🃏 이번 선두 이후 카드 <span className="font-black">{currentUsages.length}회</span> 사용됨
+                  <span className="text-gray-400"> · -{Math.floor(reductionSecs / 60)}분 {reductionSecs % 60 > 0 ? `${reductionSecs % 60}초` : ''} 감축</span>
+                </p>
+              );
+            })()}
             <p className="text-gray-400 text-[10px] text-center mt-1.5">
               타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨!
             </p>
