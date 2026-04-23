@@ -1741,7 +1741,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               {accessToken && (
                 <div className="flex flex-col items-center">
                   {bonusCardCount !== null && (
-                    <span className="text-[13px] text-gray-600 font-medium leading-none"><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
+                    <div className="flex flex-col items-center leading-none">
+                      <span className="text-[22px]">🃏</span>
+                      <span className="text-[13px] text-gray-600 font-medium">{bonusCardCount}</span>
+                    </div>
                   )}
                   <button onClick={() => setShowNoticeModal(true)}
                     className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
