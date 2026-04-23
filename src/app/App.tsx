@@ -1739,7 +1739,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             <div className="mt-auto flex flex-col items-center gap-1 relative">
               {/* 보너스카드 + 공지 버튼 */}
               {accessToken && (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center gap-2">
                   {bonusCardCount !== null && (
                     <div className="flex flex-col items-center leading-none">
                       <span className="text-[22px]">🃏</span>
