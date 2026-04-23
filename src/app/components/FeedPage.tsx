@@ -1564,7 +1564,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                             📢 공지 등록
                           </button>
                         )}
-                        {isOwnFirstPost && (
+                        {(post as any).isFirstPost && (
                           <button onClick={async () => {
                             setShowMenu(false);
                             if (!confirm('생애 첫 게시글을 취소하시겠습니까?\n포인트 300pt와 카드 3장이 회수됩니다.')) return;
