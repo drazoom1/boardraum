@@ -4058,9 +4058,12 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       getUserPoints(user.id).catch(() => null),
     ]);
     // 첫 게시물 여부 미리 확인 (post 객체에 플래그 포함시키기 위해)
+    // 2026-04-23 이후 가입자만 적용
+    const FIRST_POST_CUTOFF = '2026-04-23T00:00:00.000Z';
+    const isEligibleForFirstPost = user.created_at ? new Date(user.created_at) >= new Date(FIRST_POST_CUTOFF) : false;
     const firstPostKey = `user_first_post_${user.id}`;
     const alreadyFirstPost = !isDraft ? await kv.get(firstPostKey).catch(() => null) : true;
-    const isFirstPostFlag = !isDraft && !alreadyFirstPost;
+    const isFirstPostFlag = !isDraft && !alreadyFirstPost && isEligibleForFirstPost;
 
     const post = {
       id: postId,
@@ -4114,16 +4117,17 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
             message: `🎉 첫 게시물 축하! +300pt 지급!`,
           }).catch(() => {});
         } catch {}
-        // 카드 3장 지급
+        // 카드 3장 지급 (user.email 직접 사용 — beta_user_ KV 없어도 동작)
         try {
-          const betaEntry = await kv.get(`beta_user_${user.id}`).catch(() => null);
-          const userEmail = betaEntry?.email;
-          if (userEmail) {
-            const current = await readCardCountByEmail(userEmail, user.id);
-            await writeCardCountByEmail(userEmail, current + 3);
+          const cardEmail = user.email || (await kv.get(`beta_user_${user.id}`).catch(() => null))?.email;
+          if (cardEmail) {
+            const current = await readCardCountByEmail(cardEmail, user.id);
+            await writeCardCountByEmail(cardEmail, current + 3);
+            console.log(`🃏 첫게시글 카드 3장 지급: email=${cardEmail} (${current}→${current + 3})`);
           } else {
             const current = await readCardCount(user.id);
             await writeCardCount(user.id, current + 3);
+            console.log(`🃏 첫게시글 카드 3장 지급(레거시): userId=${user.id} (${current}→${current + 3})`);
           }
         } catch {}
       }
@@ -4212,6 +4216,9 @@ app.get("/make-server-0b7d3bae/community/posts/first-post-status", async (c) => 
     if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
     const { data: { user } } = await supabase.auth.getUser(accessToken);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const FIRST_POST_CUTOFF = '2026-04-23T00:00:00.000Z';
+    const isEligible = user.created_at ? new Date(user.created_at) >= new Date(FIRST_POST_CUTOFF) : false;
+    if (!isEligible) return c.json({ isFirstTime: false });
     const already = await kv.get(`user_first_post_${user.id}`).catch(() => null);
     return c.json({ isFirstTime: !already });
   } catch {
@@ -4562,30 +4569,39 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
     await kv.set(`beta_post_${postId}`, post);
     
     // 댓글 작성 포인트 + 알림
-    await addPoints(user.id, 'COMMENT').catch(() => {}); // 기본 3pt + comments 카운트
-    // 첫 게시글에 댓글 시 추가 27pt (총 10배, 1회)
+    // 첫 게시글 여부: post.isFirstPost 또는 게시글 작성자의 user_first_post_ KV로 확인 (배포 전 작성글 대응)
     let bonusPointsGiven = 0;
-    if (post.isFirstPost && post.userId !== user.id) {
+    const isFirstPostByKv = post.isFirstPost || (() => false)();
+    const authorFirstPostKv = post.userId ? await kv.get(`user_first_post_${post.userId}`).catch(() => null) : null;
+    const isActualFirstPost = isFirstPostByKv || (authorFirstPostKv && authorFirstPostKv.postId === postId);
+
+    if (isActualFirstPost && post.userId !== user.id) {
       const bonusKey = `first_post_comment_bonus_${postId}_${user.id}`;
       const alreadyClaimed = await kv.get(bonusKey).catch(() => null);
       if (!alreadyClaimed) {
-        const extraPoints = POINT_RULES.COMMENT * 9; // 27pt extra (기본 3pt 포함 총 30pt)
+        // addPoints(COMMENT) 대신 직접 30pt 지급 (comments 카운트는 +1)
         const currentPoints = await getUserPoints(user.id).catch(() => ({ points: 0, posts: 0, comments: 0, likesReceived: 0 }));
         await kv.set(`user_points_${user.id}`, {
           ...currentPoints,
-          points: (currentPoints.points || 0) + extraPoints,
+          points: (currentPoints.points || 0) + POINT_RULES.COMMENT * 10,
+          comments: (currentPoints.comments || 0) + 1,
         }).catch(() => {});
         await kv.set(bonusKey, { claimedAt: new Date().toISOString() }).catch(() => {});
-        bonusPointsGiven = extraPoints;
+        bonusPointsGiven = POINT_RULES.COMMENT * 10; // 30pt
+      } else {
+        await addPoints(user.id, 'COMMENT').catch(() => {});
       }
+    } else {
+      await addPoints(user.id, 'COMMENT').catch(() => {});
     }
+
     await createNotification(user.id, {
       type: 'points',
       fromUserId: user.id,
       fromUserName: userName || 'Anonymous',
       postId,
       message: bonusPointsGiven > 0
-        ? `첫 게시글 댓글 보너스! +${POINT_RULES.COMMENT + bonusPointsGiven}pt 획득! 🎉`
+        ? `🎉 첫 게시글 댓글 보너스! +${bonusPointsGiven}pt 획득! (10배 적용)`
         : `댓글 작성으로 +${POINT_RULES.COMMENT}pt 획득!`,
     }).catch(() => {});
     
