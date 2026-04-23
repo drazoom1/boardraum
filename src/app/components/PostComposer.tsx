@@ -5,6 +5,7 @@ import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { getSupabaseClient } from '../lib/supabase';
 import type { BoardGame } from '../App';
 import { BonusCardWinOverlay } from './BonusCardWinOverlay';
+import { FirstPostCelebration } from './FirstPostCelebration';
 import { GameOverviewForm as GameOverviewFormInline } from './GameCustomForms';
 import { getWikiGameId } from '../utils/wikiGameId';
 import { SpamWarningModal } from './SpamWarningModal';
@@ -157,12 +158,14 @@ function GamePickerModal({ onConfirm, onClose, accessToken, selectedIds = [], al
 
 // ─── 글 작성 모달 ───
 // ─── 글 작성 모달 ───
-export function PostComposer({ accessToken, userId, userEmail, userProfile, ownedGames, onClose, onPosted, draftPost, editPost, initialCategory }: {
+export function PostComposer({ accessToken, userId, userEmail, userProfile, ownedGames, onClose, onPosted, draftPost, editPost, initialCategory, myPostCount, onFirstPost }: {
   accessToken: string; userId: string; userEmail: string;
   userProfile: { username: string; profileImage?: string } | null;
   ownedGames: BoardGame[]; onClose: () => void;
   onPosted: () => void; draftPost?: Partial<FeedPost>; editPost?: FeedPost;
   initialCategory?: string;
+  myPostCount?: number;
+  onFirstPost?: () => void;
 }) {
   const isEditMode = !!editPost;
   const [content, setContent] = useState(editPost?.content || draftPost?.content || '');
@@ -212,6 +215,9 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const [draftLoading, setDraftLoading] = useState(false);
   const [showCardWon, setShowCardWon] = useState(false);
   const [showSpamWarning, setShowSpamWarning] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(false);
+  const [showFirstPostCelebration, setShowFirstPostCelebration] = useState(false);
+  const [firstPostCardDismissed, setFirstPostCardDismissed] = useState(false);
 
   // 모바일 키보드 대응: 키보드가 올라오면 paddingBottom으로 모달을 밀어올림
   const [vvHeight, setVvHeight] = useState<number>(() =>
@@ -230,6 +236,21 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     };
   }, []);
   const keyboardHeight = typeof window !== 'undefined' ? Math.max(0, window.innerHeight - vvHeight) : 0;
+
+  // 첫 게시물 여부: myPostCount > 0이면 확정적으로 아님, 0이면 서버에서 확인 (삭제 후 재작성 방지)
+  useEffect(() => {
+    if (isEditMode) return;
+    if (myPostCount !== undefined && myPostCount > 0) {
+      setIsFirstTime(false);
+      return;
+    }
+    if (!accessToken) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/first-post-status`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(r => r.ok ? r.json() : null).then(d => {
+      setIsFirstTime(!!d?.isFirstTime);
+    }).catch(() => {});
+  }, [accessToken, isEditMode, myPostCount]);
 
   // 숙제 카테고리
   const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string }[]>([]);
@@ -574,7 +595,29 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
           const err = await res.json();
           throw new Error(err.error || '등록 실패');
         }
-        isDraft ? toast.success('임시저장 완료') : toast.success('게시물이 등록됐어요!');
+        const resData = await res.json().catch(() => ({}));
+        if (isDraft) {
+          toast.success('임시저장 완료');
+          onPosted();
+          onClose();
+          return;
+        }
+        // 첫 게시물 축하 — isFirstTime(클라이언트) 또는 서버 응답 중 하나라도 true면 발동
+        const wasFirstPost = isFirstTime || resData.isFirstPost;
+        if (wasFirstPost) {
+          toast.success('🎉 첫 게시물을 작성했어요!', { duration: 3000 });
+          setIsFirstTime(false);
+          // 첫 글 postId 영구 저장 (서버 배포 전 fallback)
+          const firstPostId = resData.post?.id;
+          if (firstPostId && userId) {
+            localStorage.setItem(`first_post_id_${userId}`, firstPostId);
+          }
+          onPosted();
+          onFirstPost?.();
+          setShowFirstPostCelebration(true);
+          return;
+        }
+        toast.success('게시물이 등록됐어요!');
         onPosted();
         if (!isDraft) {
           // 5% 확률 보너스카드 체크 (먼저 닫기 전에 확인)
@@ -1251,12 +1294,38 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                 </div>
               )}
 
-              <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
-                onFocus={() => activeHwCat && setGuideVisible(false)}
-                placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
-                className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
-                style={{ fontSize: '16px' }}
-                rows={category === '재능판매' ? 2 : 3} />
+              {isFirstTime && !firstPostCardDismissed ? (
+                /* 첫 게시글 안내 카드 — textarea와 동일 공간 차지 */
+                <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid #B2EBF2' }}>
+                  <div className="px-4 py-3" style={{ background: 'white' }}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-lg">🎉</span>
+                      <p className="font-black text-sm" style={{ color: '#00838F' }}>첫 게시글 특별 혜택!</p>
+                    </div>
+                    <p className="text-xs leading-relaxed text-gray-500">
+                      첫 게시글 작성자에게는 <strong style={{ color: '#00838F' }}>포인트 300pt</strong>와 <strong style={{ color: '#00838F' }}>조커카드 3장</strong>을 드립니다. 조커카드로 선물 이벤트에 참여하실 수 있어요!
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: '#E0F7FA', color: '#00838F' }}>✨ +300pt</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: '#E0F7FA', color: '#00838F' }}>🃏 ×3장</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setFirstPostCardDismissed(true); setTimeout(() => textRef.current?.focus(), 50); }}
+                    className="w-full py-2 font-black text-sm text-white transition-all active:scale-[0.99]"
+                    style={{ background: '#00BCD4' }}
+                  >
+                    첫 게시글 작성하기
+                  </button>
+                </div>
+              ) : (
+                <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
+                  onFocus={() => activeHwCat && setGuideVisible(false)}
+                  placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
+                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
+                  style={{ fontSize: '16px' }}
+                  rows={category === '재능판매' ? 2 : 3} />
+              )}
 
               {/* 연결된 게임 (살래말래 제외) - 여러개 */}
               {linkedGames.length > 0 && category !== '살래말래' && (
@@ -1504,6 +1573,9 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     </div>
     {showCardWon && (
       <BonusCardWinOverlay onClose={() => { setShowCardWon(false); onClose(); }} />
+    )}
+    {showFirstPostCelebration && (
+      <FirstPostCelebration onClose={() => { setShowFirstPostCelebration(false); onClose(); }} />
     )}
     {showSpamWarning && <SpamWarningModal onClose={() => setShowSpamWarning(false)} />}
     </>

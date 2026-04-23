@@ -988,7 +988,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -1022,6 +1022,8 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   isLeading?: boolean;
   noticeInfo?: { showInFeed: boolean } | null;
   onNoticeChange?: () => void;
+  isCelebrating?: boolean;
+  isOwnFirstPost?: boolean;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -1392,8 +1394,24 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
 
   return (
     <>
-      <div className={`pt-4 pb-3 border-b border-gray-100 last:border-b-0 ${post.pinned ? 'bg-orange-50/40' : ''} ${post.isBest && !post.pinned ? 'bg-yellow-50/30' : ''} ${isWinner ? 'bg-gradient-to-b from-yellow-50 to-red-50' : isLeading ? 'bg-gradient-to-b from-indigo-50 to-white' : ''}`}
-        style={isWinner ? { boxShadow: 'inset 0 0 0 2px #f59e0b' } : isLeading ? { boxShadow: 'inset 0 0 0 2px #6366f1' } : post.isBest && !post.pinned ? { boxShadow: 'inset 0 0 0 1.5px #fbbf24' } : {}}>
+      <div className={`relative pt-4 pb-3 border-b border-gray-100 last:border-b-0 ${post.pinned ? 'bg-orange-50/40' : ''} ${post.isBest && !post.pinned ? 'bg-yellow-50/30' : ''} ${isWinner ? 'bg-gradient-to-b from-yellow-50 to-red-50' : isLeading ? 'bg-gradient-to-b from-indigo-50 to-white' : isOwnFirstPost ? 'bg-gradient-to-b from-cyan-50 to-white' : ''}`}
+        style={isWinner ? { boxShadow: 'inset 0 0 0 2px #f59e0b' } : isLeading ? { boxShadow: 'inset 0 0 0 2px #6366f1' } : isOwnFirstPost ? { boxShadow: 'inset 0 0 0 2px #00BCD4' } : post.isBest && !post.pinned ? { boxShadow: 'inset 0 0 0 1.5px #fbbf24' } : {}}>
+        {/* 첫 게시글 축하 sparkle */}
+        {isCelebrating && (
+          <>
+            {[
+              { top: '8%',  left: '5%',  size: 16, delay: '0s' },
+              { top: '5%',  left: '40%', size: 14, delay: '0.2s' },
+              { top: '10%', left: '80%', size: 18, delay: '0.1s' },
+              { top: '60%', left: '3%',  size: 12, delay: '0.3s' },
+              { top: '55%', left: '90%', size: 14, delay: '0.15s' },
+              { top: '85%', left: '25%', size: 16, delay: '0.25s' },
+              { top: '80%', left: '70%', size: 12, delay: '0.05s' },
+            ].map((s, i) => (
+              <span key={i} style={{ position: 'absolute', top: s.top, left: s.left, fontSize: s.size, animationDelay: s.delay, animation: 'sparkle-pop 1s ease infinite alternate', pointerEvents: 'none', zIndex: 1 }}>✨</span>
+            ))}
+          </>
+        )}
         {/* 이벤트 당첨/선두 배지 */}
         {isWinner && (
           <div className="mx-4 mb-3 rounded-xl overflow-hidden"
@@ -1411,6 +1429,28 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
           <div className="mx-4 mb-2 px-3 py-1.5 rounded-xl bg-indigo-600 flex items-center gap-1.5">
             <Timer className="w-3.5 h-3.5 text-indigo-200 flex-shrink-0" />
             <p className="text-indigo-100 text-xs font-bold">⚡ 현재 선두 — 타이머가 0이 되면 당첨!</p>
+          </div>
+        )}
+        {/* 첫 게시글 배지 */}
+        {isOwnFirstPost && (
+          <div className="mx-4 mb-2 overflow-hidden rounded-xl" style={{ border: '1px solid #80DEEA' }}>
+            <div className="px-3 py-1.5 flex items-center gap-1.5 relative"
+              style={{ background: 'linear-gradient(90deg, #E0F7FA, #B2EBF2)' }}>
+              <span style={{ fontSize: 14 }}>🎉</span>
+              <p className="text-xs font-bold" style={{ color: '#00838F' }}>생애 첫 게시글이에요!</p>
+              {(['15%','45%','75%','90%'] as const).map((left, i) => (
+                <span key={i} style={{
+                  position: 'absolute', left, top: i % 2 === 0 ? '10%' : '60%',
+                  fontSize: 10, opacity: 0.7,
+                  animation: `sparkle-pop 0.8s ease ${i * 0.15}s infinite alternate`,
+                  pointerEvents: 'none',
+                }}>✨</span>
+              ))}
+            </div>
+            <div className="px-3 py-1.5 flex items-center gap-1.5" style={{ background: '#fff' }}>
+              <span style={{ fontSize: 12 }}>💬</span>
+              <p className="text-xs font-semibold" style={{ color: '#0097A7' }}>해당 게시글에 댓글 작성시 포인트 10배 지급(1회적용)</p>
+            </div>
           </div>
         )}
         {/* 고정/숙제 배지 */}
@@ -3393,6 +3433,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showSubPicker, setShowSubPicker] = useState<string | null>(null); // 하위 카테고리 드롭다운
   const [showComposer, setShowComposer] = useState(false);
+  const [celebrateFirstPost, setCelebrateFirstPost] = useState(false);
+  const firstPostId = userId ? (localStorage.getItem(`first_post_id_${userId}`) || null) : null;
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
@@ -4404,11 +4446,13 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                     else leadingPostId = lastPost.id; // 휴식 중에도 선두 표시
                   }
                 }
-                return filteredPosts.slice(0, displayedPostsCount).map(post => (
+                return filteredPosts.slice(0, displayedPostsCount).map((post, idx) => (
                 <div key={post.id} id={`post-${post.id}`} className="py-3 transition-all duration-300 ease-in-out">
                   <FeedCard post={post} accessToken={accessToken}
                     isWinner={post.id === winnerPostId}
                     isLeading={post.id === leadingPostId}
+                    isCelebrating={celebrateFirstPost && post.id === firstPostId}
+                    isOwnFirstPost={(post as any).isFirstPost || post.id === firstPostId}
                     userId={userId} userName={userName}
                     onUpdate={() => loadPosts(false, openCommentPostIdsRef.current)} onFollowToggle={handleFollowToggle} onDelete={loadPosts} onViewProfile={onViewProfile}
                     myAvatarUrl={avatarUrl} myRankPoints={myPoints}
@@ -4501,6 +4545,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           onClose={() => { setShowComposer(false); setComposerCategory(undefined); }}
           onPosted={loadPosts}
           initialCategory={composerCategory}
+          myPostCount={myPoints.posts}
+          onFirstPost={() => { setCelebrateFirstPost(true); setTimeout(() => setCelebrateFirstPost(false), 5000); }}
         />
       )}
     </div>

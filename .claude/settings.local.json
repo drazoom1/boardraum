@@ -48,7 +48,12 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); e=d[0]; print\\('cardUsageLog entries:', len\\(e.get\\('cardUsageLog', []\\)\\)\\); print\\('reductionSeconds:', e.get\\('reductionSeconds'\\)\\)\")",
       "Bash(cat vercel.json)",
       "Bash(ls -la vercel.json)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npx firebase *)",
+      "Read(//usr/local/bin/**)",
+      "Read(//Users/drazoom/.npm/bin/**)",
+      "Read(//usr/local/**)",
+      "Bash(npm list *)"
     ]
   }
 }

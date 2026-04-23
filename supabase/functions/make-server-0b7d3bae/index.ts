@@ -4057,6 +4057,11 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       getUserName(user.id),
       getUserPoints(user.id).catch(() => null),
     ]);
+    // 첫 게시물 여부 미리 확인 (post 객체에 플래그 포함시키기 위해)
+    const firstPostKey = `user_first_post_${user.id}`;
+    const alreadyFirstPost = !isDraft ? await kv.get(firstPostKey).catch(() => null) : true;
+    const isFirstPostFlag = !isDraft && !alreadyFirstPost;
+
     const post = {
       id: postId,
       userId: user.id,
@@ -4075,6 +4080,7 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       likes: [],
       comments: [],
       userRankPoints: resolvedRankPoints,
+      isFirstPost: isFirstPostFlag || undefined,
     };
     
     const kvKey = `beta_post_${postId}`;
@@ -4088,9 +4094,42 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       }
     }
     // 포인트 적립 + 알림 (임시저장 제외)
+    let isFirstPost = false;
     if (!isDraft) {
+      // ── 첫 게시물 처리 (위에서 미리 확인한 isFirstPostFlag 재사용) ──
+      if (isFirstPostFlag) {
+        isFirstPost = true;
+        // KV 저장 (중복 방지)
+        await kv.set(firstPostKey, { postId, createdAt: new Date().toISOString() }).catch(() => {});
+        // 300pt 추가 지급
+        try {
+          const current = await getUserPoints(user.id);
+          const updated = { ...current, points: current.points + 300 };
+          await kv.set(`user_points_${user.id}`, updated);
+          await createNotification(user.id, {
+            type: 'points',
+            fromUserId: user.id,
+            fromUserName: userName || '',
+            postId,
+            message: `🎉 첫 게시물 축하! +300pt 지급!`,
+          }).catch(() => {});
+        } catch {}
+        // 카드 3장 지급
+        try {
+          const betaEntry = await kv.get(`beta_user_${user.id}`).catch(() => null);
+          const userEmail = betaEntry?.email;
+          if (userEmail) {
+            const current = await readCardCountByEmail(userEmail, user.id);
+            await writeCardCountByEmail(userEmail, current + 3);
+          } else {
+            const current = await readCardCount(user.id);
+            await writeCardCount(user.id, current + 3);
+          }
+        } catch {}
+      }
+
       const pts = await addPoints(user.id, 'POST').catch(() => null);
-      if (pts) {
+      if (pts && !isFirstPost) {
         await createNotification(user.id, {
           type: 'points',
           fromUserId: user.id,
@@ -4159,10 +4198,24 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
     }
 
     invalidateFeedCache().catch(() => {});
-    return c.json({ success: true, post });
+    return c.json({ success: true, post, isFirstPost });
   } catch (error) {
     console.error('❌ [Community] Create post error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
+// 첫 게시물 여부 조회
+app.get("/make-server-0b7d3bae/community/posts/first-post-status", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const already = await kv.get(`user_first_post_${user.id}`).catch(() => null);
+    return c.json({ isFirstTime: !already });
+  } catch {
+    return c.json({ isFirstTime: false });
   }
 });
 
@@ -4509,13 +4562,31 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
     await kv.set(`beta_post_${postId}`, post);
     
     // 댓글 작성 포인트 + 알림
-    await addPoints(user.id, 'COMMENT').catch(() => {});
+    await addPoints(user.id, 'COMMENT').catch(() => {}); // 기본 3pt + comments 카운트
+    // 첫 게시글에 댓글 시 추가 27pt (총 10배, 1회)
+    let bonusPointsGiven = 0;
+    if (post.isFirstPost && post.userId !== user.id) {
+      const bonusKey = `first_post_comment_bonus_${postId}_${user.id}`;
+      const alreadyClaimed = await kv.get(bonusKey).catch(() => null);
+      if (!alreadyClaimed) {
+        const extraPoints = POINT_RULES.COMMENT * 9; // 27pt extra (기본 3pt 포함 총 30pt)
+        const currentPoints = await getUserPoints(user.id).catch(() => ({ points: 0, posts: 0, comments: 0, likesReceived: 0 }));
+        await kv.set(`user_points_${user.id}`, {
+          ...currentPoints,
+          points: (currentPoints.points || 0) + extraPoints,
+        }).catch(() => {});
+        await kv.set(bonusKey, { claimedAt: new Date().toISOString() }).catch(() => {});
+        bonusPointsGiven = extraPoints;
+      }
+    }
     await createNotification(user.id, {
       type: 'points',
       fromUserId: user.id,
       fromUserName: userName || 'Anonymous',
       postId,
-      message: `댓글 작성으로 +${3}pt 획득!`,
+      message: bonusPointsGiven > 0
+        ? `첫 게시글 댓글 보너스! +${POINT_RULES.COMMENT + bonusPointsGiven}pt 획득! 🎉`
+        : `댓글 작성으로 +${POINT_RULES.COMMENT}pt 획득!`,
     }).catch(() => {});
     
     const commenterName = comment.userName || userName || 'Anonymous';
@@ -8613,20 +8684,21 @@ app.post("/make-server-0b7d3bae/admin/notices", async (c) => {
 app.get("/make-server-0b7d3bae/post-notices", async (c) => {
   try {
     const token = c.req.header('Authorization')?.split(' ')[1];
-    if (!token) return c.json({ notices: [], readIds: [], unreadCount: 0 });
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user?.id) return c.json({ notices: [], readIds: [], unreadCount: 0 });
     const noticeItems = await getByPrefix('notice_');
     const notices = noticeItems
       .map(item => item.value)
       .filter((n: any) => n?.postId)
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const announced = await kv.get('site_notice_announced_at') as any;
+    const announcementActive = announced?.active === true;
+    // 비로그인(anon key)이면 read tracking 없이 notices만 반환
+    if (!token) return c.json({ notices, readIds: [], unreadCount: notices.length, announcementActive });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ notices, readIds: [], unreadCount: notices.length, announcementActive });
     const readData = await kv.get(`user_notice_read_${user.id}`) as any;
     const readIds: string[] = readData?.readIds || [];
     const readSet = new Set(readIds);
     const unreadCount = notices.filter((n: any) => !readSet.has(n.postId)).length;
-    const announced = await kv.get('site_notice_announced_at') as any;
-    const announcementActive = announced?.active === true;
     return c.json({ notices, readIds, unreadCount, announcementActive });
   } catch { return c.json({ notices: [], readIds: [], unreadCount: 0, announcementActive: false }); }
 });

@@ -1738,26 +1738,24 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             {/* 하단 설정 */}
             <div className="mt-auto flex flex-col items-center gap-1 relative">
               {/* 보너스카드 + 공지 버튼 */}
-              {accessToken && (
-                <div className="flex flex-col items-center gap-2">
-                  {bonusCardCount !== null && (
-                    <div className="flex flex-col items-center leading-none">
-                      <span className="text-[22px]">🃏</span>
-                      <span className="text-[13px] text-gray-600 font-medium">{bonusCardCount}</span>
-                    </div>
+              <div className="flex flex-col items-center gap-2">
+                {accessToken && bonusCardCount !== null && (
+                  <div className="flex flex-col items-center leading-none">
+                    <span className="text-[22px]">🃏</span>
+                    <span className="text-[13px] text-gray-600 font-medium">{bonusCardCount}</span>
+                  </div>
+                )}
+                <button onClick={() => setShowNoticeModal(true)}
+                  className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                  title="공지사항">
+                  <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
+                  {(noticeIsNew || noticeUnreadCount > 0) && (
+                    <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                      {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
+                    </span>
                   )}
-                  <button onClick={() => setShowNoticeModal(true)}
-                    className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
-                    title="공지사항">
-                    <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
-                    {(noticeIsNew || noticeUnreadCount > 0) && (
-                      <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
-                        {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
+                </button>
+              </div>
               {/* 알림 버튼 */}
               {accessToken && (
                 <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
@@ -1818,18 +1816,16 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 {accessToken && bonusCardCount !== null && (
                   <span className="text-[13px] text-gray-600 font-medium px-1"><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
                 )}
-                {accessToken && (
-                  <button onClick={() => setShowNoticeModal(true)}
-                    className="relative w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
-                    title="공지사항">
-                    <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
-                    {(noticeIsNew || noticeUnreadCount > 0) && (
-                      <span className="absolute top-1 right-1 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
-                        {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
-                      </span>
-                    )}
-                  </button>
-                )}
+                <button onClick={() => setShowNoticeModal(true)}
+                  className="relative w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                  title="공지사항">
+                  <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
+                  {(noticeIsNew || noticeUnreadCount > 0) && (
+                    <span className="absolute top-1 right-1 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                      {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
+                    </span>
+                  )}
+                </button>
                 {accessToken && (
                   <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
                 )}
