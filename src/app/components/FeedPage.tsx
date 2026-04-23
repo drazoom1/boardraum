@@ -1564,7 +1564,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                             📢 공지 등록
                           </button>
                         )}
-                        {(post as any).isFirstPost && (
+                        {(post as any).isFirstPost ? (
                           <button onClick={async () => {
                             setShowMenu(false);
                             if (!confirm('생애 첫 게시글을 취소하시겠습니까?\n포인트 300pt와 카드 3장이 회수됩니다.')) return;
@@ -1583,6 +1583,26 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                           }}
                             className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors">
                             🎉 첫 게시글 취소
+                          </button>
+                        ) : (
+                          <button onClick={async () => {
+                            setShowMenu(false);
+                            if (!confirm('이 게시글을 생애 첫 게시글로 지정하시겠습니까?\n포인트 300pt와 카드 3장이 지급됩니다.')) return;
+                            try {
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/posts/${post.id}/set-first-post`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data.error || '지정 실패');
+                              toast.success('첫 게시글 지정 완료 (포인트·카드 지급)');
+                              onUpdate();
+                            } catch (e: any) {
+                              toast.error(e.message || '지정 실패');
+                            }
+                          }}
+                            className="w-full px-4 py-2 text-left text-sm text-cyan-600 hover:bg-cyan-50 transition-colors">
+                            🎉 첫 게시글로 지정
                           </button>
                         )}
                         <div className="border-t border-gray-100 my-1" />

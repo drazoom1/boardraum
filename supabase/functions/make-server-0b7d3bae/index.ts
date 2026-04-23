@@ -4284,6 +4284,64 @@ app.post("/make-server-0b7d3bae/admin/posts/:postId/cancel-first-post", async (c
   }
 });
 
+// 관리자 - 일반 게시글을 생애 첫 게시글로 지정 (포인트 300pt + 카드 3장 지급)
+app.post("/make-server-0b7d3bae/admin/posts/:postId/set-first-post", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+
+    const postId = c.req.param('postId');
+    const post = await kv.get(`beta_post_${postId}`).catch(() => null);
+    if (!post) return c.json({ error: 'Post not found' }, 404);
+    if (post.isFirstPost) return c.json({ error: '이미 첫 게시글로 지정되어 있습니다' }, 400);
+
+    const targetUserId = post.userId;
+
+    // 1. 게시글 isFirstPost 플래그 설정
+    post.isFirstPost = true;
+    await kv.set(`beta_post_${postId}`, post);
+
+    // 2. user_first_post_ KV 저장
+    await kv.set(`user_first_post_${targetUserId}`, { postId, createdAt: new Date().toISOString() }).catch(() => {});
+
+    // 3. 포인트 300pt 지급
+    const currentPts = await getUserPoints(targetUserId).catch(() => ({ points: 0, posts: 0, comments: 0, likesReceived: 0 }));
+    await kv.set(`user_points_${targetUserId}`, {
+      ...currentPts,
+      points: (currentPts.points || 0) + 300,
+    }).catch(() => {});
+
+    // 4. 카드 3장 지급
+    const targetBetaEntry = await kv.get(`beta_user_${targetUserId}`).catch(() => null);
+    const targetEmail = targetBetaEntry?.email || user.email;
+    if (targetEmail) {
+      const currentCards = await readCardCountByEmail(targetEmail, targetUserId);
+      await writeCardCountByEmail(targetEmail, currentCards + 3);
+    } else {
+      const currentCards = await readCardCount(targetUserId);
+      await writeCardCount(targetUserId, currentCards + 3);
+    }
+
+    // 5. 알림
+    await createNotification(targetUserId, {
+      type: 'system',
+      fromUserId: user.id,
+      fromUserName: '관리자',
+      postId,
+      message: '🎉 생애 첫 게시글 혜택이 지급되었습니다! (포인트 +300pt, 카드 3장)',
+    }).catch(() => {});
+
+    invalidateFeedCache().catch(() => {});
+    return c.json({ success: true });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
 // Delete a post (admin only)
 // 이벤트 실격자 목록 조회
 app.get("/make-server-0b7d3bae/last-post-event/disqualified", async (c) => {
