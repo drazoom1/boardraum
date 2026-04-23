@@ -4058,9 +4058,9 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       getUserPoints(user.id).catch(() => null),
     ]);
     // 첫 게시물 여부 미리 확인 (post 객체에 플래그 포함시키기 위해)
-    // 2026-04-23 이후 가입자만 적용
-    const FIRST_POST_CUTOFF = '2026-04-23T00:00:00.000Z';
-    const isEligibleForFirstPost = user.created_at ? new Date(user.created_at) >= new Date(FIRST_POST_CUTOFF) : false;
+    // 이전에 글을 한 번도 올린 적 없는 사람만 적용 (posts 카운트 0 확인)
+    const prevPostCount = (resolvedRankPoints as any)?.posts ?? 0;
+    const isEligibleForFirstPost = prevPostCount === 0;
     const firstPostKey = `user_first_post_${user.id}`;
     const alreadyFirstPost = !isDraft ? await kv.get(firstPostKey).catch(() => null) : true;
     const isFirstPostFlag = !isDraft && !alreadyFirstPost && isEligibleForFirstPost;
@@ -4216,9 +4216,10 @@ app.get("/make-server-0b7d3bae/community/posts/first-post-status", async (c) => 
     if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
     const { data: { user } } = await supabase.auth.getUser(accessToken);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
-    const FIRST_POST_CUTOFF = '2026-04-23T00:00:00.000Z';
-    const isEligible = user.created_at ? new Date(user.created_at) >= new Date(FIRST_POST_CUTOFF) : false;
-    if (!isEligible) return c.json({ isFirstTime: false });
+    // 이전에 글을 올린 적 없는 사람만 적용
+    const userPts = await getUserPoints(user.id).catch(() => null);
+    const prevPostCount = (userPts as any)?.posts ?? 0;
+    if (prevPostCount > 0) return c.json({ isFirstTime: false });
     const already = await kv.get(`user_first_post_${user.id}`).catch(() => null);
     return c.json({ isFirstTime: !already });
   } catch {

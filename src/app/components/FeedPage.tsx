@@ -4452,7 +4452,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                     isWinner={post.id === winnerPostId}
                     isLeading={post.id === leadingPostId}
                     isCelebrating={celebrateFirstPost && post.id === firstPostId}
-                    isOwnFirstPost={((post as any).isFirstPost || post.id === firstPostId) && new Date(post.createdAt) >= new Date('2026-04-23T00:00:00.000Z')}
+                    isOwnFirstPost={(post as any).isFirstPost || post.id === firstPostId}
                     userId={userId} userName={userName}
                     onUpdate={() => loadPosts(false, openCommentPostIdsRef.current)} onFollowToggle={handleFollowToggle} onDelete={loadPosts} onViewProfile={onViewProfile}
                     myAvatarUrl={avatarUrl} myRankPoints={myPoints}
