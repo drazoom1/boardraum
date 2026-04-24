@@ -9672,7 +9672,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
   if (error) return error;
   try {
     const body = await c.req.json();
-    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId, hostUserId, hostNickname } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId, hostUserId, hostNickname, tags } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     if (!startPrice || Number(startPrice) < 1) return c.json({ error: '시작가를 입력해주세요' }, 400);
     if (!bidUnit || Number(bidUnit) < 1) return c.json({ error: '입찰 단위를 입력해주세요' }, 400);
@@ -9720,6 +9720,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
       gameId: gameId || '', type: 'admin',
       winnerUserId: null, winnerNickname: null, createdAt: now,
       hostUserId: hostUserId || null, hostNickname: hostNickname || null,
+      tags: Array.isArray(tags) ? tags : [],
     };
 
     await kv.set(`auction_${auctionId}`, auction);
@@ -9908,6 +9909,85 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/dismiss-banner", async (c) =>
     auction.resultExpiresAt = new Date(Date.now() - 1000).toISOString();
     await kv.set(`auction_${auctionId}`, auction);
     return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ─── 경매 태그 ───────────────────────────────────────────────
+// GET /auction/tags
+app.get("/make-server-0b7d3bae/auction/tags", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const tags = (await kv.get('auction_tags') as string[] | null) || [];
+    return c.json({ tags });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/tags (관리자)
+app.post("/make-server-0b7d3bae/auction/tags", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const { tag } = await c.req.json();
+    if (!tag?.trim()) return c.json({ error: '태그명을 입력해주세요' }, 400);
+    const tags = (await kv.get('auction_tags') as string[] | null) || [];
+    const t = tag.trim();
+    if (!tags.includes(t)) { tags.push(t); await kv.set('auction_tags', tags); }
+    return c.json({ tags });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// DELETE /auction/tags/:tag (관리자)
+app.delete("/make-server-0b7d3bae/auction/tags/:tag", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const tag = decodeURIComponent(c.req.param('tag'));
+    const tags = (await kv.get('auction_tags') as string[] | null) || [];
+    await kv.set('auction_tags', tags.filter(t => t !== tag));
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ─── 경매 채팅 ───────────────────────────────────────────────
+// GET /auction/:auctionId/chat
+app.get("/make-server-0b7d3bae/auction/:auctionId/chat", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const auctionId = c.req.param('auctionId');
+    const messages = (await kv.get(`auction_chat_${auctionId}`) as any[] | null) || [];
+    return c.json({ messages });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:auctionId/chat
+app.post("/make-server-0b7d3bae/auction/:auctionId/chat", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const auctionId = c.req.param('auctionId');
+    const { text } = await c.req.json();
+    if (!text?.trim()) return c.json({ error: '내용을 입력해주세요' }, 400);
+    const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
+    const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const nickname = noEmail(profile?.username) || noEmail(profile?.userName) || noEmail(profile?.nickname) || noEmail(profile?.name) || user.email?.split('@')[0] || '익명';
+    const messages = (await kv.get(`auction_chat_${auctionId}`) as any[] | null) || [];
+    messages.push({
+      msgId: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      userId: user.id, nickname, text: text.trim(),
+      sentAt: new Date().toISOString(),
+    });
+    // 최대 200개 유지
+    if (messages.length > 200) messages.splice(0, messages.length - 200);
+    await kv.set(`auction_chat_${auctionId}`, messages);
+    return c.json({ success: true, messages });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

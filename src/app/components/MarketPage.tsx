@@ -65,6 +65,7 @@ interface Auction {
   winnerNickname: string | null;
   createdAt: string;
   resultExpiresAt?: string;
+  tags?: string[];
 }
 
 function maskName(str: string): string {
@@ -759,6 +760,9 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
   const [hostResults, setHostResults] = useState<any[]>([]);
   const [hostSearching, setHostSearching] = useState(false);
   const [allUsers, setAllUsers] = useState<any[] | null>(null);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   function selectGame(game: BoardGame) {
@@ -801,6 +805,37 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
     : Number(schedulePreset);
 
   const AAPI = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+
+  useEffect(() => {
+    fetch(`${AAPI}/auction/tags`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(r => r.json()).then(d => setAvailableTags(d.tags || [])).catch(() => {});
+  }, []);
+
+  async function addTag(tag: string) {
+    const t = tag.trim();
+    if (!t) return;
+    try {
+      const r = await fetch(`${AAPI}/auction/tags`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: t }),
+      });
+      if (r.ok) { const d = await r.json(); setAvailableTags(d.tags || []); if (!selectedTags.includes(t)) setSelectedTags(prev => [...prev, t]); }
+    } catch {}
+    setNewTagInput('');
+  }
+
+  async function deleteTag(tag: string) {
+    try {
+      const r = await fetch(`${AAPI}/auction/tags/${encodeURIComponent(tag)}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) { setAvailableTags(prev => prev.filter(t => t !== tag)); setSelectedTags(prev => prev.filter(t => t !== tag)); }
+    } catch {}
+  }
+
+  function toggleTag(tag: string) {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  }
 
   async function searchHost(q: string) {
     setHostSearchQ(q);
@@ -854,6 +889,7 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
           gameId: selectedGame?.id,
           hostUserId: hostUserId || undefined,
           hostNickname: hostNickname || undefined,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
         }),
       });
       const d = await res.json();
@@ -1082,6 +1118,37 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
                   <p className="text-xs text-blue-500 mt-1.5 font-medium">예고 배너 표시 후 {scheduleAfterMinutes}분 뒤 경매 시작</p>
                 )}
               </div>
+              {/* 태그 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">상태 태그</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {availableTags.map(tag => (
+                    <div key={tag} className="flex items-center gap-0.5">
+                      <button type="button" onClick={() => toggleTag(tag)}
+                        className={`text-xs px-2.5 py-1 rounded-full font-semibold border transition-colors ${selectedTags.includes(tag) ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                        {tag}
+                      </button>
+                      <button type="button" onClick={() => deleteTag(tag)}
+                        className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={newTagInput} onChange={e => setNewTagInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(newTagInput); } }}
+                    placeholder="새 태그 추가 (예: S급, 카드슬리브)"
+                    className="flex-1 h-9 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300"
+                  />
+                  <button type="button" onClick={() => addTag(newTagInput)}
+                    className="h-9 px-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors">
+                    추가
+                  </button>
+                </div>
+              </div>
+
               {/* 경매 주체 (카드 수령인) */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">경매 주체 (낙찰 카드 수령인)</label>
@@ -1254,7 +1321,12 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
 
@@ -1289,6 +1361,15 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     loadAuction();
     if (accessToken) loadCardCount();
   }, [accessToken]);
+
+  // 채팅 폴링: 경매 active/ended 상태에서 5초마다 갱신
+  useEffect(() => {
+    if (chatPollRef.current) clearInterval(chatPollRef.current);
+    if (!auction || !accessToken) return;
+    loadChat(auction.auctionId);
+    chatPollRef.current = setInterval(() => loadChat(auction.auctionId), 5000);
+    return () => { if (chatPollRef.current) clearInterval(chatPollRef.current); };
+  }, [auction?.auctionId, accessToken]);
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -1359,6 +1440,33 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       } else toast.error(d.error || '참여 실패');
     } catch { toast.error('네트워크 오류'); }
     setJoining(false);
+  }
+
+  async function loadChat(id: string) {
+    if (!accessToken) return;
+    try {
+      const r = await fetch(`${API}/auction/${id}/chat`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (r.ok) { const d = await r.json(); setChatMessages(d.messages || []); }
+    } catch {}
+  }
+
+  async function sendChat() {
+    if (!accessToken || !auction || !chatInput.trim()) return;
+    setSendingChat(true);
+    try {
+      const r = await fetch(`${API}/auction/${auction.auctionId}/chat`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chatInput.trim() }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setChatMessages(d.messages || []);
+        setChatInput('');
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      }
+    } catch {}
+    setSendingChat(false);
   }
 
   async function handleDismissBanner() {
@@ -1467,6 +1575,13 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-sm truncate">{auction.title}</p>
+              {(auction.tags?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {auction.tags!.map((t, i) => (
+                    <span key={i} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600">{t}</span>
+                  ))}
+                </div>
+              )}
               {auction.prize && <p className="text-xs text-gray-500 mt-0.5">{auction.prize}</p>}
               <p className="text-xs text-gray-400 mt-0.5">입찰 단위 {auction.bidUnit}장</p>
             </div>
@@ -1650,6 +1765,50 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           {participants.length === 0 && joined && (
             <p className="text-xs text-center text-teal-600 font-semibold">✓ 참여 중</p>
           )}
+        </div>
+      )}
+
+      {/* 채팅창 */}
+      {auction && accessToken && (
+        <div className="border-t border-orange-100 px-5 pt-3 pb-4">
+          <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
+          {chatMessages.length > 0 && (
+            <div className="max-h-48 overflow-y-auto space-y-2 mb-3 pr-1">
+              {chatMessages.map((m, i) => (
+                <div key={m.msgId ?? i} className={`flex gap-2 ${m.userId === userId ? 'flex-row-reverse' : ''}`}>
+                  <div className={`max-w-[75%] ${m.userId === userId ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+                    {m.userId !== userId && (
+                      <span className="text-[10px] text-gray-400 px-1">{m.nickname}</span>
+                    )}
+                    <div className={`px-3 py-1.5 rounded-2xl text-sm leading-snug ${
+                      m.userId === userId
+                        ? 'bg-orange-500 text-white rounded-tr-sm'
+                        : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
+                    }`}>
+                      {m.text}
+                    </div>
+                    <span className="text-[9px] text-gray-300 px-1">
+                      {new Date(m.sentAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div ref={chatBottomRef} />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+              placeholder="메시지 입력..."
+              className="flex-1 h-9 px-3 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-200"
+            />
+            <button onClick={sendChat} disabled={sendingChat || !chatInput.trim()}
+              className="h-9 px-3 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-1 hover:bg-orange-600 transition-colors">
+              {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            </button>
+          </div>
         </div>
       )}
 
