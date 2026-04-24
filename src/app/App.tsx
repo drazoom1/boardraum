@@ -789,16 +789,17 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         console.log('🔑 [Session] Access token:', session.access_token.substring(0, 20) + '...');
         
         setAccessToken(session.access_token);
+        accessTokenRef.current = session.access_token;
         setUserEmail(session.user.email || null);
         setUserId(session.user.id || null);
-        
+
         // ⚡ 병렬 처리: role 조회, 베타 상태 확인, 데이터 로드를 동시에 실행
         const parallelTasks = [];
-        
+
         // sityplanner2@naver.com이면 자동으로 관리자 설정
         if (session.user.email === 'sityplanner2@naver.com') {
           devLog('👑 [Admin] Setting up admin role...');
-          parallelTasks.push(setupAdmin());
+          parallelTasks.push(setupAdmin(session.access_token));
         }
         
         // ���버에서 role 조회
@@ -1295,13 +1296,15 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     }
   };
 
-  const setupAdmin = async () => {
+  const setupAdmin = async (token?: string) => {
+    const authToken = token || accessTokenRef.current || accessToken;
+    if (!authToken) return;
     try {
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/setup-admin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          'Authorization': `Bearer ${authToken}`,
         },
       });
       if (response.ok) {
