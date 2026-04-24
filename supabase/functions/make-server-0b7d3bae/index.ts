@@ -11728,6 +11728,18 @@ app.get('/make-server-0b7d3bae/staff/list', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 공개: 운영진 등급 맵 (userId → level), 인증 불필요
+app.get('/make-server-0b7d3bae/staff/grade-map', async (c) => {
+  try {
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const map: Record<string, number> = {};
+    for (const m of members) {
+      if (m.userId && m.level) map[m.userId] = m.level;
+    }
+    return c.json({ map });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 app.post('/make-server-0b7d3bae/staff/add', async (c) => {
   try {
     const auth = await requireStaffAdmin(c);
@@ -12127,14 +12139,90 @@ app.get('/make-server-0b7d3bae/staff/agreement-status', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 동의서 초기화 (관리자)
+app.delete('/make-server-0b7d3bae/staff/agreement/:userId', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const userId = c.req.param('userId');
+    await kv.del(`staff_agreement_${userId}`);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 동의서 동의 저장
 app.post('/make-server-0b7d3bae/staff/agreement', async (c) => {
   try {
     const auth = await requireStaffMember(c);
     if (auth instanceof Response) return auth;
     const userId = (auth as any).user.id;
-    await kv.set(`staff_agreement_${userId}`, { agreedAt: new Date().toISOString(), userId });
+
+    // 닉네임 조회 (법적 기록용)
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const member = members.find((m: any) => m.userId === userId);
+    const nickname = member?.nickname ?? '관리자';
+
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      ?? c.req.header('cf-connecting-ip')
+      ?? 'unknown';
+    const userAgent = c.req.header('user-agent') ?? 'unknown';
+    const agreedAt = new Date().toISOString();
+    const documentVersion = 'staff-agreement-v1';
+
+    const record = { userId, nickname, agreedAt, ip, userAgent, documentVersion };
+
+    // 개인 동의 상태 저장
+    await kv.set(`staff_agreement_${userId}`, record);
+
+    // 법적 감사 로그에 누적 (삭제해도 남음)
+    const log: any[] = (await kv.get('staff_agreements_log') as any[]) ?? [];
+    log.push(record);
+    await kv.set('staff_agreements_log', log);
+
     return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 동의 현황 목록 조회 (관리자 전용)
+app.get('/make-server-0b7d3bae/staff/agreements', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const log: any[] = (await kv.get('staff_agreements_log') as any[]) ?? [];
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const adminUserId = (auth as any).user.id;
+
+    // 현재 유효한 동의 상태 수집 (운영진 + 관리자)
+    const activeIds = new Set<string>();
+    const allCheckIds = [...members.map((m: any) => m.userId), adminUserId];
+    for (const uid of allCheckIds) {
+      const status = await kv.get(`staff_agreement_${uid}`);
+      if (status) activeIds.add(uid);
+    }
+
+    // 로그에 없지만 현재 동의가 유효한 경우 보완 항목 추가 (로깅 추가 이전 동의자 포함)
+    const loggedIds = new Set(log.map((e: any) => e.userId));
+    const extraEntries: any[] = [];
+    for (const uid of activeIds) {
+      if (!loggedIds.has(uid)) {
+        const existing: any = await kv.get(`staff_agreement_${uid}`);
+        const m = members.find((m: any) => m.userId === uid);
+        extraEntries.push({
+          userId: uid,
+          nickname: existing?.nickname ?? m?.nickname ?? (uid === adminUserId ? '관리자' : uid.slice(0, 8)),
+          agreedAt: existing?.agreedAt ?? new Date().toISOString(),
+          ip: existing?.ip ?? 'unknown',
+          userAgent: existing?.userAgent ?? 'unknown',
+          documentVersion: existing?.documentVersion ?? 'staff-agreement-v1',
+        });
+      }
+    }
+
+    const fullLog = [...log, ...extraEntries].sort(
+      (a: any, b: any) => new Date(b.agreedAt).getTime() - new Date(a.agreedAt).getTime()
+    );
+
+    return c.json({ log: fullLog, activeIds: [...activeIds] });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

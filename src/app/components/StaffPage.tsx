@@ -6,12 +6,17 @@ import { projectId } from '/utils/supabase/info';
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
 
 const STAFF_GRADES = [
-  { level: 1, name: '노랑 당근', color: '#FACC15', baseEquity: 1.0 },
-  { level: 2, name: '초록 당근', color: '#22C55E', baseEquity: 2.0 },
-  { level: 3, name: '파랑 당근', color: '#3B82F6', baseEquity: 3.0 },
-  { level: 4, name: '빨강 당근', color: '#EF4444', baseEquity: 4.0 },
-  { level: 5, name: '보라 당근', color: '#A855F7', baseEquity: 4.5 },
-  { level: 6, name: '검은 당근', color: '#1F2937', baseEquity: 5.0 },
+  { level: 1, name: '노랑 당근', color: '#FACC15', baseEquity: 1.0,
+    promotion: { cumulative: 500, monthlyAvg: 100, tenure: '3개월', tenureMonths: 3, agreement: '운영진 전원 동의' } },
+  { level: 2, name: '초록 당근', color: '#22C55E', baseEquity: 2.0,
+    promotion: { cumulative: 1500, monthlyAvg: 150, tenure: '6개월', tenureMonths: 6, agreement: '운영진 전원 동의' } },
+  { level: 3, name: '파랑 당근', color: '#3B82F6', baseEquity: 3.0,
+    promotion: { cumulative: 3000, monthlyAvg: 200, tenure: '1년', tenureMonths: 12, agreement: '운영진 전원 동의' } },
+  { level: 4, name: '빨강 당근', color: '#EF4444', baseEquity: 4.0,
+    promotion: { cumulative: 6000, monthlyAvg: 250, tenure: '1년 6개월', tenureMonths: 18, agreement: '전원 동의 + 대표 승인' } },
+  { level: 5, name: '보라 당근', color: '#A855F7', baseEquity: 4.5,
+    promotion: { cumulative: 10000, monthlyAvg: 300, tenure: '2년', tenureMonths: 24, agreement: '대표자 단독 임명' } },
+  { level: 6, name: '검은 당근', color: '#1F2937', baseEquity: 5.0, promotion: null },
 ];
 
 type StaffTab = 'status' | 'revenue' | 'meeting' | 'activity';
@@ -79,6 +84,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [guideOpen, setGuideOpen] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
+  const [gradeModalTab, setGradeModalTab] = useState<'my' | 'table'>('my');
 
   // 동의서 모달
   const [showAgreement, setShowAgreement] = useState(false);
@@ -399,46 +405,160 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
           />
         </div>
       )}
-      {/* ── 당근 등급표 모달 ── */}
-      {showGradeModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">당근 등급표</h2>
-              <button onClick={() => setShowGradeModal(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4 space-y-1.5">
-              {STAFF_GRADES.map(g => {
-                const isCurrent = g.level === (member.level ?? 1);
-                return (
-                  <div key={g.level}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                      isCurrent ? '' : 'opacity-50'
-                    }`}
-                    style={isCurrent ? { backgroundColor: g.color + '15', outline: `1.5px solid ${g.color}` } : {}}>
-                    <img src={`/staff-grade-${g.level}.webp`} alt={g.name}
-                      className="w-6 h-6 object-contain shrink-0"
-                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800">Lv.{g.level} {g.name}</p>
+      {/* ── 당근 등급 모달 ── */}
+      {showGradeModal && (() => {
+        const curLevel = member.level ?? 1;
+        const curGrade = STAFF_GRADES.find(g => g.level === curLevel) ?? STAFF_GRADES[0];
+        const nextGrade = STAFF_GRADES.find(g => g.level === curLevel + 1) ?? null;
+        const tenureMonths = member.joinedAt
+          ? Math.floor((Date.now() - new Date(member.joinedAt).getTime()) / (30 * 24 * 3600 * 1000))
+          : 0;
+        const monthlyPct = nextGrade?.promotion
+          ? Math.min(100, Math.round(monthlyScore / nextGrade.promotion.monthlyAvg * 100))
+          : 100;
+        const tenurePct = nextGrade?.promotion
+          ? Math.min(100, Math.round(tenureMonths / nextGrade.promotion.tenureMonths * 100))
+          : 100;
+
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:w-[min(100vw-2rem,480px)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+              {/* 헤더 */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <h2 className="text-base font-bold text-gray-900">🥕 당근 등급</h2>
+                <button onClick={() => setShowGradeModal(false)} className="text-gray-400 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* 탭 */}
+              <div className="flex border-b border-gray-100 shrink-0">
+                {(['my', 'table'] as const).map(t => (
+                  <button key={t} onClick={() => setGradeModalTab(t)}
+                    className={`flex-1 py-2.5 text-sm font-semibold relative ${gradeModalTab === t ? 'text-gray-900' : 'text-gray-400'}`}>
+                    {t === 'my' ? '내 등급' : '등급표'}
+                    {gradeModalTab === t && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900 rounded-full" />}
+                  </button>
+                ))}
+              </div>
+
+              <div className="overflow-y-auto flex-1">
+                {gradeModalTab === 'my' ? (
+                  <div className="px-5 py-5 space-y-4">
+                    {/* 현재 등급 카드 */}
+                    <div className="rounded-2xl p-5 text-center" style={{ backgroundColor: curGrade.color + '15' }}>
+                      <img src={`/staff-grade-${curLevel}.webp`} className="w-20 h-20 object-contain mx-auto mb-2"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <p className="text-xl font-black text-gray-900">Lv.{curLevel} {curGrade.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">기본 지분 {curGrade.baseEquity}%</p>
                     </div>
-                    <span className="text-sm font-bold" style={{ color: isCurrent ? g.color : '#9ca3af' }}>
-                      기본 {g.baseEquity}%
-                    </span>
-                    {isCurrent && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white shrink-0"
-                        style={{ backgroundColor: g.color }}>현재</span>
+
+                    {nextGrade && nextGrade.promotion ? (
+                      <>
+                        <p className="text-xs font-bold text-gray-500">다음 등급 승급 조건 · Lv.{nextGrade.level} {nextGrade.name}</p>
+
+                        {/* 이달 활동 점수 */}
+                        <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span className="font-semibold text-gray-700">이달 활동 점수</span>
+                            <span>{monthlyScore} / {nextGrade.promotion.monthlyAvg}점 × 3개월</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${monthlyPct}%`, backgroundColor: curGrade.color }} />
+                          </div>
+                          <p className="text-xs text-right" style={{ color: monthlyPct >= 100 ? '#16a34a' : '#9ca3af' }}>
+                            {monthlyPct >= 100 ? '✅ 충족' : `${monthlyPct}%`}
+                          </p>
+                        </div>
+
+                        {/* 재직 기간 */}
+                        <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span className="font-semibold text-gray-700">재직 기간</span>
+                            <span>{tenureMonths}개월 / {nextGrade.promotion.tenureMonths}개월</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${tenurePct}%`, backgroundColor: curGrade.color }} />
+                          </div>
+                          <p className="text-xs text-right" style={{ color: tenurePct >= 100 ? '#16a34a' : '#9ca3af' }}>
+                            {tenurePct >= 100 ? '✅ 충족' : `${tenurePct}%`}
+                          </p>
+                        </div>
+
+                        {/* 기타 조건 */}
+                        <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+                          {[
+                            { label: '누적 활동점수', val: `${nextGrade.promotion.cumulative.toLocaleString()}점 이상` },
+                            { label: '동의 조건', val: nextGrade.promotion.agreement },
+                          ].map(r => (
+                            <div key={r.label} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-500">{r.label}</span>
+                              <span className="font-semibold text-gray-800 text-right ml-3">{r.val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-center text-sm font-bold text-gray-900 py-4">🏆 최고 등급입니다!</p>
                     )}
                   </div>
-                );
-              })}
+                ) : (
+                  <div className="px-4 py-4 space-y-2">
+                    {/* 테이블 헤더 */}
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 bg-gray-50 rounded-xl text-[11px] text-gray-400 font-medium">
+                      <span>등급</span>
+                      <span className="text-right">누적 점수</span>
+                      <span className="text-right">월 평균</span>
+                    </div>
+                    {STAFF_GRADES.map(g => {
+                      const isCurrent = g.level === curLevel;
+                      return (
+                        <div key={g.level}
+                          className={`rounded-xl overflow-hidden border transition-all ${isCurrent ? 'border-2' : 'border-gray-100'}`}
+                          style={isCurrent ? { borderColor: g.color, backgroundColor: g.color + '10' } : {}}>
+                          <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2.5 items-center">
+                            <div className="flex items-center gap-2">
+                              <img src={`/staff-grade-${g.level}.webp`} className="w-6 h-6 object-contain shrink-0"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <div>
+                                <p className="text-xs font-bold text-gray-800">Lv.{g.level} {g.name}</p>
+                                <p className="text-[10px] text-gray-400">지분 {g.baseEquity}%</p>
+                              </div>
+                              {isCurrent && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white ml-1"
+                                  style={{ backgroundColor: g.color }}>현재</span>
+                              )}
+                            </div>
+                            {g.promotion ? (
+                              <>
+                                <span className="text-xs font-bold text-gray-700 text-right">{g.promotion.cumulative.toLocaleString()}</span>
+                                <span className="text-xs text-gray-500 text-right">{g.promotion.monthlyAvg}/월</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-gray-300 text-right">—</span>
+                                <span className="text-xs text-gray-300 text-right">—</span>
+                              </>
+                            )}
+                          </div>
+                          {g.promotion && (
+                            <div className="px-3 pb-2.5 flex gap-3 text-[10px] text-gray-400">
+                              <span>재직 {g.promotion.tenure}</span>
+                              <span className="text-gray-300">|</span>
+                              <span>{g.promotion.agreement}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
