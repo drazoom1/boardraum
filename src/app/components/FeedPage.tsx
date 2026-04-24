@@ -4113,12 +4113,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             auctionBadge.status === 'active' ? (
               <button onClick={onNavigateToMarket}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-400 text-white hover:bg-teal-500 transition-colors active:scale-95">
-                🔨 경매중
+                🔨 경매중 <ChevronRight className="w-3 h-3" />
               </button>
             ) : (
               <button onClick={onNavigateToMarket}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-100 text-teal-600 hover:bg-teal-200 transition-colors active:scale-95">
-                ⏰ 경매예정 {auctionBadge.countdown}
+                ⏰ 경매예정 {auctionBadge.countdown} <ChevronRight className="w-3 h-3" />
               </button>
             )
           )}
