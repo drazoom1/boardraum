@@ -9991,6 +9991,19 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/submit-tracking", async (c) =
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// DELETE /auction/result/:auctionId — 관리자: 경매 거래 결과 카드 삭제
+app.delete("/make-server-0b7d3bae/auction/result/:auctionId", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const auctionId = c.req.param('auctionId');
+    const results = (await kv.get('auction_results') as any[] | null) || [];
+    const updated = results.filter((r: any) => r.auctionId !== auctionId);
+    await kv.set('auction_results', updated);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // GET /my/auction-trades — 내가 낙찰자 또는 주체인 경매 거래 목록
 app.get("/make-server-0b7d3bae/my/auction-trades", async (c) => {
   try {

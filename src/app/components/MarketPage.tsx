@@ -1938,6 +1938,7 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
   const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function loadTrades() {
     setLoading(true);
@@ -1948,6 +1949,20 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
       if (r.ok) { const d = await r.json(); setTrades(d.trades || []); }
     } catch {}
     setLoading(false);
+  }
+
+  async function deleteTrade(auctionId: string) {
+    if (!confirm('이 거래 카드를 삭제할까요?')) return;
+    setDeletingId(auctionId);
+    try {
+      const r = await fetch(`${API}/auction/result/${auctionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) { toast.success('삭제됐어요'); setTrades(prev => prev.filter(t => t.auctionId !== auctionId)); }
+      else { const d = await r.json(); toast.error(d.error || '삭제 실패'); }
+    } catch { toast.error('네트워크 오류'); }
+    setDeletingId(null);
   }
 
   useEffect(() => { loadTrades(); }, [accessToken]);
@@ -1968,6 +1983,15 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
         const escrowStatus: string = t.escrowStatus || 'pending';
         return (
           <div key={t.auctionId} className="bg-white rounded-2xl shadow-sm border border-orange-100 p-4 space-y-3">
+            {isAdmin && (
+              <div className="flex justify-end">
+                <button onClick={() => deleteTrade(t.auctionId)} disabled={deletingId === t.auctionId}
+                  className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
+                  {deletingId === t.auctionId ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  삭제
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               {t.imageUrl && <img src={t.imageUrl} className="w-12 h-12 rounded-xl object-cover shrink-0 bg-gray-100" />}
               <div className="flex-1 min-w-0">
