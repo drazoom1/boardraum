@@ -4428,6 +4428,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     }
     
     await kv.del(`beta_post_${postId}`);
+    invalidateFeedCache().catch(() => {});
 
     // 본인이 삭제한 경우에만 포인트 회수 (임시저장 제외)
     if (post.userId === user.id && !post.isDraft) {
@@ -4442,7 +4443,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
         }).catch(() => {});
       }
     }
-    
+
     return c.json({ success: true });
   } catch (error) {
     console.error('Delete post error:', error);
