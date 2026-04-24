@@ -134,7 +134,7 @@ function GamePickerModal({ ownedGames, onSelect, onClose }: {
 }
 
 // ─── 댓글 아이템 (최상위 선언 필수 - 내부 선언 시 리렌더링마다 재생성되어 먹통 발생) ───
-function CommentItem({ comment, depth, visibleComments, userId, postId, accessToken, onReply, onDelete, onLike, onViewProfile, onEdit, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick }: {
+function CommentItem({ comment, depth, visibleComments, userId, postId, accessToken, onReply, onDelete, onLike, onViewProfile, onEdit, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick, staffGradeMap = {} }: {
   comment: any; depth: number; visibleComments: any[];
   userId: string; postId: string; accessToken: string;
   onReply: (id: string, name: string, parentIsSecret?: boolean) => void;
@@ -147,6 +147,7 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
   onAddToWishlist?: (game: { id: string; name: string; imageUrl: string }) => void;
   onRemoveFromWishlist?: (gameId: string) => void;
   onGameClick?: (gameId: string, gameName: string, imageUrl?: string) => void;
+  staffGradeMap?: Record<string, number>;
 }) {
   const replies = visibleComments.filter(c => c.parentId === comment.id);
   const isLiked = (comment.likes || []).includes(userId);
@@ -443,7 +444,7 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
             <CommentItem key={reply.id || `reply-${i}`} comment={reply} depth={1}
               visibleComments={visibleComments} userId={userId} postId={postId}
               accessToken={accessToken} onReply={onReply} onDelete={onDelete} onLike={onLike}
-              onViewProfile={onViewProfile} onEdit={onEdit} isAdmin={isAdmin} wishlistGames={wishlistGames ?? []} onAddToWishlist={onAddToWishlist} onRemoveFromWishlist={onRemoveFromWishlist} onGameClick={onGameClick} />
+              onViewProfile={onViewProfile} onEdit={onEdit} isAdmin={isAdmin} wishlistGames={wishlistGames ?? []} onAddToWishlist={onAddToWishlist} onRemoveFromWishlist={onRemoveFromWishlist} onGameClick={onGameClick} staffGradeMap={staffGradeMap} />
           ))}
         </div>
       )}
@@ -716,7 +717,7 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
           visibleComments={flatComments} userId={userId} postId={post.id}
           accessToken={accessToken} onReply={handleReply}
           onDelete={deleteComment} onLike={likeComment}
-          onViewProfile={onViewProfile} onEdit={editComment} isAdmin={isAdmin} wishlistGames={wishlistGames ?? []} onAddToWishlist={onAddToWishlist} onRemoveFromWishlist={onRemoveFromWishlist} onGameClick={onGameClick} />
+          onViewProfile={onViewProfile} onEdit={editComment} isAdmin={isAdmin} wishlistGames={wishlistGames ?? []} onAddToWishlist={onAddToWishlist} onRemoveFromWishlist={onRemoveFromWishlist} onGameClick={onGameClick} staffGradeMap={staffGradeMap} />
       ))}
       {/* 댓글 입력창 */}
       {!userId ? (
