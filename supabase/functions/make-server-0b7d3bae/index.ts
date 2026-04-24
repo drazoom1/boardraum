@@ -4540,7 +4540,8 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     ) {
       const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
       const isMember = members.some((m: any) => m.userId === user.id);
-      if (isMember) {
+      const isAdminUser = await getUserRole(user.id, user.email ?? '') === 'admin';
+      if (isMember || isAdminUser) {
         const prevCount = Array.isArray(post.linkedGames) ? post.linkedGames.length : (post.linkedGame ? 1 : 0);
         const newCount = updatedPost.linkedGames.length;
         const added = Math.max(0, newCount - prevCount);
