@@ -1882,7 +1882,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
       {/* 채팅창 */}
       {auction && accessToken && (
-        <div className="border-t border-orange-100 px-5 pt-3 pb-4">
+        <div className="border-t border-orange-100 px-5 pt-3 pb-4 bg-white">
           <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
           <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
             {chatMessages.length === 0 ? (
