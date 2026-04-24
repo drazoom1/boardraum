@@ -1718,14 +1718,31 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                   </svg>
                   <p className="text-[10px] text-gray-400">배송 정보는 낙찰자·주체자·관리자에게만 공개됩니다</p>
                 </div>
-                {/* 낙찰자: 배송지 입력 */}
+                {/* 낙찰자: 배송지 입력/수정 */}
                 {isWinner && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">📦 배송지 입력</p>
-                    {addr ? (
-                      <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">📦 배송지</p>
+                    {addr && !addressSubmitted ? (
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
+                        <button onClick={() => { setAddressInput(addr); setAddressSubmitted(true); }}
+                          className="text-xs text-orange-500 hover:text-orange-700 font-semibold shrink-0">수정</button>
+                      </div>
                     ) : addressSubmitted ? (
-                      <p className="text-xs text-emerald-600 font-semibold">✓ 배송지 등록 완료</p>
+                      <div className="flex gap-2">
+                        <input
+                          value={addressInput}
+                          onChange={e => setAddressInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && submitAddress()}
+                          placeholder="받으실 주소를 입력해주세요"
+                          className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                          autoFocus
+                        />
+                        <button onClick={submitAddress} disabled={submittingAddress || !addressInput.trim()}
+                          className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+                          {submittingAddress ? '...' : addr ? '수정' : '등록'}
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex gap-2">
                         <input
@@ -2059,10 +2076,10 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
                 </div>
                 <div>
                   <p className="text-[11px] font-semibold text-gray-400 mb-1">배송지</p>
-                  {t.winnerAddress ? (
+                  {isWinner ? (
+                    <WinnerAddressInput auctionId={t.auctionId} accessToken={accessToken} currentAddress={t.winnerAddress} onSubmitted={loadTrades} />
+                  ) : t.winnerAddress ? (
                     <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{t.winnerAddress}</p>
-                  ) : isWinner ? (
-                    <WinnerAddressInput auctionId={t.auctionId} accessToken={accessToken} onSubmitted={loadTrades} />
                   ) : (
                     <p className="text-xs text-gray-400 italic">낙찰자 미입력</p>
                   )}
@@ -2095,12 +2112,17 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
   );
 }
 
-function WinnerAddressInput({ auctionId, accessToken, onSubmitted }: {
-  auctionId: string; accessToken: string; onSubmitted: () => void;
+function WinnerAddressInput({ auctionId, accessToken, currentAddress, onSubmitted }: {
+  auctionId: string; accessToken: string; currentAddress?: string | null; onSubmitted: () => void;
 }) {
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
-  const [addressInput, setAddressInput] = useState('');
+  const [editing, setEditing] = useState(!currentAddress);
+  const [addressInput, setAddressInput] = useState(currentAddress || '');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (currentAddress) { setAddressInput(currentAddress); setEditing(false); }
+  }, [currentAddress]);
 
   async function submit() {
     if (!addressInput.trim()) return;
@@ -2111,10 +2133,19 @@ function WinnerAddressInput({ auctionId, accessToken, onSubmitted }: {
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: addressInput.trim() }),
       });
-      if (r.ok) { toast.success('배송지가 등록됐어요'); onSubmitted(); }
+      if (r.ok) { toast.success(currentAddress ? '배송지가 수정됐어요' : '배송지가 등록됐어요'); setEditing(false); onSubmitted(); }
       else { const d = await r.json(); toast.error(d.error || '실패'); }
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <p className="flex-1 text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{currentAddress}</p>
+        <button onClick={() => setEditing(true)} className="text-xs text-orange-500 hover:text-orange-700 font-semibold shrink-0">수정</button>
+      </div>
+    );
   }
 
   return (
@@ -2125,11 +2156,18 @@ function WinnerAddressInput({ auctionId, accessToken, onSubmitted }: {
         onKeyDown={e => e.key === 'Enter' && submit()}
         placeholder="받으실 주소를 입력해주세요"
         className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+        autoFocus
       />
       <button onClick={submit} disabled={submitting || !addressInput.trim()}
         className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-        {submitting ? '...' : '등록'}
+        {submitting ? '...' : currentAddress ? '수정' : '등록'}
       </button>
+      {currentAddress && (
+        <button onClick={() => { setAddressInput(currentAddress); setEditing(false); }}
+          className="text-xs text-gray-400 hover:text-gray-600 px-2 rounded-lg border border-gray-200 transition-colors">
+          취소
+        </button>
+      )}
     </div>
   );
 }
