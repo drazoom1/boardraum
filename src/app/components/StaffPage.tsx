@@ -542,17 +542,17 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                       ))}
                     </div>
                   </div>
-                  {/* 항목별 설명 */}
+                  {/* 항목별 설명 — 진행중 항목 우선 */}
                   <div className="space-y-3">
                     {[
                       { label: '태그 매기기',    points: 2,  unit: '건', wip: false, desc: '게시물에 게임 태그가 없을 경우 직접 게임을 검색해 태그를 추가합니다.' },
-                      { label: '제목 작성',      points: 3,  unit: '건', wip: true,  desc: '준비중' },
                       { label: '보드위키 등록',  points: 5,  unit: '건', wip: false, desc: '보드위키에 게임 정보를 직접 등록합니다.' },
-                      { label: '신고 처리',      points: 10, unit: '건', wip: true,  desc: '준비중' },
-                      { label: '분쟁 중재',      points: 15, unit: '건', wip: true,  desc: '준비중' },
+                      { label: '회의 참석',      points: 10, unit: '회', wip: false, desc: '관리자가 생성한 회의에 참석 버튼을 누르면 자동 적립됩니다.' },
                       { label: '신규 회원 유입', points: 20, unit: '명', wip: false, desc: '자신의 추천인 코드로 신규 회원이 가입하면 자동 적립됩니다.' },
                       { label: '이벤트 기획',    points: 30, unit: '건', wip: false, desc: '의제를 제안하고 과반수 동의를 얻어 이벤트·숙제가 실제로 진행될 때 적립됩니다.' },
-                      { label: '회의 참석',      points: 10, unit: '회', wip: false, desc: '관리자가 생성한 회의에 참석 버튼을 누르면 자동 적립됩니다.' },
+                      { label: '제목 작성',      points: 3,  unit: '건', wip: true,  desc: '준비중' },
+                      { label: '신고 처리',      points: 10, unit: '건', wip: true,  desc: '준비중' },
+                      { label: '분쟁 중재',      points: 15, unit: '건', wip: true,  desc: '준비중' },
                     ].map(item => (
                       <div key={item.label} className={`flex gap-3 ${item.wip ? 'opacity-40' : ''}`}>
                         <div className="flex-1 min-w-0">
