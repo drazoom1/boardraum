@@ -1822,7 +1822,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           <div className="bg-white rounded-xl px-4 pt-3 pb-3">
             <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
               {chatMessages.length === 0 ? (
-                <p className="text-[11px] text-gray-300 text-center pt-8">첫 메시지를 남겨보세요</p>
+                <p className="text-[11px] text-gray-300 text-center pt-8">경매 진행 중인 상품에 대해 아무거나 물어보세요.</p>
               ) : (
                 chatMessages.map((m, i) => (
                   <div key={m.msgId ?? i} className={`flex gap-2 ${m.userId === userId ? 'flex-row-reverse' : ''}`}>
