@@ -66,6 +66,7 @@ interface Auction {
   createdAt: string;
   resultExpiresAt?: string;
   tags?: string[];
+  entryFee?: number;
 }
 
 function maskName(str: string): string {
@@ -749,6 +750,7 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [startPrice, setStartPrice] = useState('1');
   const [bidUnit, setBidUnit] = useState('1');
+  const [entryFee, setEntryFee] = useState('0');
   const [timerMinutes, setTimerMinutes] = useState('10');
   const [schedulePreset, setSchedulePreset] = useState<'now' | '10' | '30' | '60' | 'custom'>('now');
   const [scheduleCustom, setScheduleCustom] = useState('');
@@ -882,6 +884,7 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
           imageUrls,
           startPrice: Number(startPrice) || 1,
           bidUnit: Number(bidUnit) || 1,
+          entryFee: Number(entryFee) || 0,
           timerMinutes: timer,
           scheduleAfterMinutes,
           prize,
@@ -1074,6 +1077,13 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5">입찰 단위 (카드 수) *</label>
                   <input type="number" min="1" value={bidUnit} onChange={e => setBidUnit(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
                 </div>
+              </div>
+
+              {/* 참가비 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">참가비 (카드 수)</label>
+                <p className="text-[11px] text-gray-400 mb-1.5">참여 버튼을 누를 때 자동 차감돼요. 0이면 무료 참가예요.</p>
+                <input type="number" min="0" value={entryFee} onChange={e => setEntryFee(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
               </div>
 
               {/* 경매 타이머 */}
@@ -1789,7 +1799,14 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           {accessToken && !joined && (
             <button onClick={handleJoin} disabled={joining}
               className="w-full h-9 mb-3 rounded-xl border-2 border-orange-200 text-orange-600 text-sm font-semibold hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 bg-white">
-              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '🙋 경매 참여하기'}
+              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (
+                <>
+                  🙋 경매 참여하기
+                  {(auction?.entryFee ?? 0) > 0 && (
+                    <span className="text-xs font-normal text-orange-400">(참가비 {auction!.entryFee}장)</span>
+                  )}
+                </>
+              )}
             </button>
           )}
           {participants.length > 0 && (

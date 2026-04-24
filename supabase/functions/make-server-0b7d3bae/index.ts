@@ -9682,7 +9682,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
   if (error) return error;
   try {
     const body = await c.req.json();
-    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId, hostUserId, hostNickname, tags } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId, hostUserId, hostNickname, tags, entryFee } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     if (!startPrice || Number(startPrice) < 1) return c.json({ error: '시작가를 입력해주세요' }, 400);
     if (!bidUnit || Number(bidUnit) < 1) return c.json({ error: '입찰 단위를 입력해주세요' }, 400);
@@ -9731,6 +9731,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
       winnerUserId: null, winnerNickname: null, createdAt: now,
       hostUserId: hostUserId || null, hostNickname: hostNickname || null,
       tags: Array.isArray(tags) ? tags : [],
+      entryFee: Math.max(0, Number(entryFee) || 0),
     };
 
     await kv.set(`auction_${auctionId}`, auction);
@@ -9838,7 +9839,18 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
     const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
     const resolvedNickname = noEmail2(profile?.username) || noEmail2(profile?.userName) || noEmail2(profile?.nickname) || noEmail2(profile?.name) || noEmail2(nickname) || user.email?.split('@')[0] || '';
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
-    if (!participants.find((p: any) => p.userId === user.id)) {
+    const alreadyJoined = !!participants.find((p: any) => p.userId === user.id);
+
+    if (!alreadyJoined) {
+      const entryFee = Number(auction.entryFee) || 0;
+      if (entryFee > 0) {
+        if (!user.email) return c.json({ error: '이메일 정보가 없어요' }, 400);
+        const currentCards = await readCardCountByEmail(user.email, user.id);
+        if (currentCards < entryFee) {
+          return c.json({ error: `카드가 부족해요 (보유: ${currentCards}장, 필요: ${entryFee}장)` }, 402);
+        }
+        await writeCardCountByEmail(user.email, currentCards - entryFee);
+      }
       participants.push({ userId: user.id, nickname: resolvedNickname, joinedAt: new Date().toISOString() });
       await kv.set(`auction_participants_${auctionId}`, participants);
     }
