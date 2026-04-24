@@ -9748,19 +9748,106 @@ app.post("/make-server-0b7d3bae/auction/request", async (c) => {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json();
-    const { title, description, imageUrl, startPrice, bidUnit, nickname } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, prize, boxCondition, nickname } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     const requestId = `auc_req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
+    const resolvedNickname = noEmail(profile?.username) || noEmail(profile?.userName) || noEmail(profile?.nickname) || noEmail(nickname) || user.email?.split('@')[0] || '';
     const request = {
-      requestId, userId: user.id, nickname: nickname || '',
+      requestId, userId: user.id, nickname: resolvedNickname,
       title: title.trim(), description: description?.trim() || '',
-      imageUrl: imageUrl || '', startPrice: Number(startPrice) || 1,
-      bidUnit: Number(bidUnit) || 1, status: 'pending',
+      imageUrl: imageUrl || '',
+      imageUrls: Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [],
+      startPrice: Number(startPrice) || 1,
+      bidUnit: Number(bidUnit) || 1,
+      prize: prize?.trim() || '',
+      boxCondition: boxCondition || '',
+      status: 'pending',
       createdAt: new Date().toISOString(),
     };
     const requests = (await kv.get('auction_requests') as any[] | null) || [];
     await kv.set('auction_requests', [...requests, request]);
     return c.json({ success: true, request });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// GET /auction/my-requests — 내 경매 요청 목록 (승인된 것 포함)
+app.get("/make-server-0b7d3bae/auction/my-requests", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    const mine = requests.filter((r: any) => r.userId === user.id);
+    return c.json({ requests: mine });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/request/:requestId/launch — 승인된 요청으로 경매 시작 (5분 후)
+app.post("/make-server-0b7d3bae/auction/request/:requestId/launch", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const requestId = c.req.param('requestId');
+
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    const req = requests.find((r: any) => r.requestId === requestId);
+    if (!req) return c.json({ error: '요청을 찾을 수 없어요' }, 404);
+    if (req.userId !== user.id) return c.json({ error: '본인 요청만 시작할 수 있어요' }, 403);
+    if (req.status !== 'approved') return c.json({ error: '승인된 요청만 시작할 수 있어요' }, 400);
+
+    // 현재 진행 중인 경매 확인
+    const activeId = await kv.get('auction_active_id') as string | null;
+    if (activeId) {
+      const activeAuction = await kv.get(`auction_${activeId}`) as any | null;
+      if (activeAuction && activeAuction.status !== 'ended') {
+        return c.json({ error: '현재 진행 중인 경매가 있어요. 경매 종료 후 시작해주세요.' }, 409);
+      }
+    }
+
+    const schedAfter = 5;
+    const timerMinutes = 10;
+    const nowMs = Date.now();
+    const auctionId = `auction_${nowMs}_${Math.random().toString(36).slice(2)}`;
+    const startAt = new Date(nowMs + schedAfter * 60 * 1000).toISOString();
+    const endAt = new Date(nowMs + (schedAfter + timerMinutes) * 60 * 1000).toISOString();
+    const now = new Date(nowMs).toISOString();
+
+    const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
+    const hostNickname = noEmail(profile?.username) || noEmail(profile?.userName) || noEmail(profile?.nickname) || req.nickname || user.email?.split('@')[0] || '';
+
+    const auction = {
+      auctionId, title: req.title, description: req.description || '',
+      imageUrl: req.imageUrl || '', imageUrls: req.imageUrls || [],
+      startPrice: req.startPrice, bidUnit: req.bidUnit,
+      status: 'scheduled' as const,
+      scheduledAt: startAt, startAt, endAt,
+      timerMinutes, scheduleAfterMinutes: schedAfter,
+      createdBy: user.id, currentBid: req.startPrice,
+      currentBidder: null, currentBidderNickname: null,
+      prize: req.prize || '', boxCondition: req.boxCondition || '',
+      gameId: '', type: 'user',
+      winnerUserId: null, winnerNickname: null, createdAt: now,
+      hostUserId: user.id, hostNickname,
+      tags: [], entryFee: 0,
+      fromRequestId: requestId,
+    };
+
+    await kv.set(`auction_${auctionId}`, auction);
+    await kv.set('auction_active_id', auctionId);
+
+    // 요청 상태를 launched로 변경
+    const updatedRequests = requests.map((r: any) =>
+      r.requestId === requestId ? { ...r, status: 'launched', launchedAuctionId: auctionId, launchedAt: now } : r
+    );
+    await kv.set('auction_requests', updatedRequests);
+
+    return c.json({ success: true, auction });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

@@ -1211,102 +1211,229 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
 }
 
 // ===== 경매 요청 모달 (일반 회원) =====
-function AuctionRequestModal({ accessToken, userNickname, onClose }: {
-  accessToken: string; userNickname?: string; onClose: () => void;
+function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClose }: {
+  accessToken: string; userNickname?: string; ownedGames?: BoardGame[]; onClose: () => void;
 }) {
+  const AAPI = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const [step, setStep] = useState<'game' | 'form'>('game');
+  const [gameSearch, setGameSearch] = useState('');
+  const [selectedGame, setSelectedGame] = useState<BoardGame | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [startPrice, setStartPrice] = useState('1');
   const [bidUnit, setBidUnit] = useState('1');
+  const [prize, setPrize] = useState('');
+  const [boxCondition, setBoxCondition] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function selectGame(game: BoardGame) {
+    setSelectedGame(game);
+    setTitle(game.koreanName || '');
+    setBoxCondition(game.boxCondition || '');
+    setStep('form');
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>, idx: number) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImageUploading(true);
+    setUploadingIdx(idx);
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/image/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: fd,
-      });
+      const res = await fetch(`${AAPI}/image/upload`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: fd });
       const d = await res.json();
-      if (d.url) setImageUrl(d.url);
+      if (d.url) setImageUrls(prev => { const next = [...prev]; next[idx] = d.url; return next; });
       else toast.error('이미지 업로드 실패');
     } catch { toast.error('이미지 업로드 실패'); }
-    setImageUploading(false);
+    setUploadingIdx(null);
   }
+
+  function removeImage(idx: number) { setImageUrls(prev => prev.filter((_, i) => i !== idx)); }
 
   async function handleSubmit() {
     if (!title.trim()) { toast.error('상품명을 입력해주세요'); return; }
     setSubmitting(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/auction/request`, {
+      const res = await fetch(`${AAPI}/auction/request`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, imageUrl, startPrice: Number(startPrice) || 1, bidUnit: Number(bidUnit) || 1, nickname: userNickname }),
+        body: JSON.stringify({
+          title, description,
+          imageUrl: imageUrls[0] || selectedGame?.imageUrl || '',
+          imageUrls,
+          startPrice: Number(startPrice) || 1,
+          bidUnit: Number(bidUnit) || 1,
+          prize, boxCondition,
+          nickname: userNickname,
+        }),
       });
       const d = await res.json();
-      if (d.success) { toast.success('경매 요청이 접수됐어요! 관리자 승인 후 진행돼요.'); onClose(); }
+      if (d.success) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onClose(); }
       else toast.error(d.error || '요청 실패');
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
   }
 
+  const filteredGames = ownedGames.filter(g => {
+    if (!gameSearch.trim()) return true;
+    const q = gameSearch.toLowerCase();
+    return (g.koreanName || '').toLowerCase().includes(q) || (g.englishName || '').toLowerCase().includes(q);
+  });
+  const imageSlots = [...imageUrls, ...(imageUrls.length < 5 ? [''] : [])].slice(0, 5);
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-[9998]" onClick={onClose} />
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[88vh]">
         <div className="px-5 pt-4 pb-3 flex-shrink-0 border-b border-gray-100">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-gray-900">경매 요청하기</h3>
+            <div className="flex items-center gap-2">
+              {step === 'form' && (
+                <button onClick={() => setStep('game')} className="text-gray-400 hover:text-gray-700 -ml-1 mr-1">
+                  <ChevronDown className="w-5 h-5 rotate-90" />
+                </button>
+              )}
+              <h3 className="text-base font-bold text-gray-900">
+                {step === 'game' ? '경매할 게임 선택' : '경매 요청하기'}
+              </h3>
+            </div>
             <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
           </div>
-          <p className="text-xs text-gray-400 mt-1">관리자 승인 후 경매가 진행됩니다. 낙찰 시 카드가 포인트로 지급돼요.</p>
+          {step === 'form' && <p className="text-xs text-gray-400 mt-1">관리자 승인 후 마켓 상단에 '시작하기' 버튼이 나타나요.</p>}
         </div>
-        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5">상품 이미지</label>
-            <label className="flex items-center justify-center w-full h-28 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer hover:border-gray-400 transition-colors overflow-hidden bg-gray-50">
-              {imageUrl ? (
-                <img src={imageUrl} className="w-full h-full object-cover" />
-              ) : imageUploading ? (
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-              ) : (
-                <span className="text-sm text-gray-400">이미지 선택</span>
+
+        {/* 게임 선택 */}
+        {step === 'game' && (
+          <>
+            <div className="px-5 pt-3 pb-2 flex-shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input value={gameSearch} onChange={e => setGameSearch(e.target.value)} placeholder="게임 이름 검색..."
+                  className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/20" autoFocus />
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 pb-6">
+              {filteredGames.map(game => (
+                <button key={game.id} onClick={() => selectGame(game)}
+                  className="w-full flex items-center gap-3 py-3 border-b border-gray-50 hover:bg-gray-50 rounded-xl px-2 transition-colors text-left">
+                  {game.imageUrl
+                    ? <img src={game.imageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 bg-gray-100" />
+                    : <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-xl">🎲</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">{game.koreanName || game.englishName}</p>
+                    {game.koreanName && game.englishName && <p className="text-xs text-gray-400 truncate">{game.englishName}</p>}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                </button>
+              ))}
+              {filteredGames.length === 0 && (
+                <div className="text-center py-8 text-sm text-gray-400">{gameSearch ? '검색 결과가 없어요' : '보유 게임이 없어요'}</div>
               )}
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-            </label>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5">상품명 *</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="경매할 상품명..." className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5">설명</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="상품 설명..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1.5">희망 시작가 (카드)</label>
-              <input type="number" min="1" value={startPrice} onChange={e => setStartPrice(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+              <button onClick={() => { setSelectedGame(null); setStep('form'); }}
+                className="w-full mt-3 py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors">
+                + 게임 목록 없이 직접 입력
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1.5">희망 입찰 단위</label>
-              <input type="number" min="1" value={bidUnit} onChange={e => setBidUnit(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+          </>
+        )}
+
+        {/* 상세 입력 폼 */}
+        {step === 'form' && (
+          <>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+              {selectedGame && (
+                <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                  {selectedGame.imageUrl
+                    ? <img src={selectedGame.imageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                    : <div className="w-12 h-12 rounded-xl bg-gray-200 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">{selectedGame.koreanName}</p>
+                    {selectedGame.englishName && <p className="text-xs text-gray-400 truncate">{selectedGame.englishName}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* 실물 사진 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-2">실물 사진 (최대 5장)</label>
+                <div className="flex gap-2 flex-wrap">
+                  {imageSlots.map((url, idx) => (
+                    <div key={idx} className="relative">
+                      {url ? (
+                        <div className="relative w-20 h-20">
+                          <img src={url} className="w-20 h-20 rounded-xl object-cover bg-gray-100" />
+                          {idx === 0 && <span className="absolute top-1 left-1 text-[9px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-md">표지</span>}
+                          <button onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"><X className="w-3 h-3" /></button>
+                        </div>
+                      ) : (
+                        <label className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 bg-gray-50 transition-colors">
+                          {uploadingIdx === idx ? <Loader2 className="w-5 h-5 animate-spin text-gray-400" /> : <><Plus className="w-5 h-5 text-gray-300" />{idx === 0 && <span className="text-[9px] text-gray-300 mt-0.5">표지</span>}</>}
+                          <input type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e, idx)} />
+                        </label>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 상품명 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">상품명 *</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 아크노바 (완전 새제품)" className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+              </div>
+
+              {/* 게임 상태 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">게임 상태</label>
+                <div className="flex gap-2">
+                  {BOX_CONDITIONS.map(c => (
+                    <button key={c.value} type="button" onClick={() => setBoxCondition(boxCondition === c.value ? '' : c.value)}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-colors ${boxCondition === c.value ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}>
+                      <p>{c.label}</p>
+                      <p className={`font-normal text-[10px] mt-0.5 ${boxCondition === c.value ? 'text-gray-300' : 'text-gray-400'}`}>{c.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 설명 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">설명</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="상품 설명..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none" />
+              </div>
+
+              {/* 상품 내용 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">상품 내용</label>
+                <input value={prize} onChange={e => setPrize(e.target.value)} placeholder="예: 아크노바 보드게임" className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+              </div>
+
+              {/* 시작가 / 입찰 단위 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">희망 시작가 (카드) *</label>
+                  <input type="number" min="1" value={startPrice} onChange={e => setStartPrice(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">희망 입찰 단위 *</label>
+                  <input type="number" min="1" value={bidUnit} onChange={e => setBidUnit(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                <p className="text-xs text-amber-700">⏱ 경매 시간은 관리자가 설정합니다. 승인 후 마켓 상단에 '시작하기' 버튼이 표시돼요.</p>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
-          <button onClick={handleSubmit} disabled={submitting} className="w-full h-12 bg-orange-500 text-white rounded-2xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : '경매 요청 제출'}
-          </button>
-        </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
+              <button onClick={handleSubmit} disabled={submitting} className="w-full h-12 bg-orange-500 text-white rounded-2xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : '경매 요청 제출'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
       </div>
     </>
@@ -1330,6 +1457,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [approvedRequest, setApprovedRequest] = useState<any>(null);
+  const [launching, setLaunching] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
   const [addressInput, setAddressInput] = useState('');
   const [submittingAddress, setSubmittingAddress] = useState(false);
@@ -1371,9 +1500,38 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     } catch {}
   }
 
+  async function loadMyApprovedRequest() {
+    if (!accessToken || isAdmin) return;
+    try {
+      const res = await fetch(`${API}/auction/my-requests`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const d = await res.json();
+      const approved = (d.requests || []).find((r: any) => r.status === 'approved');
+      setApprovedRequest(approved || null);
+    } catch {}
+  }
+
+  async function handleLaunchRequest() {
+    if (!approvedRequest || launching) return;
+    setLaunching(true);
+    try {
+      const res = await fetch(`${API}/auction/request/${approvedRequest.requestId}/launch`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      });
+      const d = await res.json();
+      if (d.success) {
+        toast.success('경매가 5분 후 시작됩니다!');
+        setApprovedRequest(null);
+        await loadAuction();
+      } else {
+        toast.error(d.error || '시작 실패');
+      }
+    } catch { toast.error('네트워크 오류'); }
+    setLaunching(false);
+  }
+
   useEffect(() => {
     loadAuction();
-    if (accessToken) loadCardCount();
+    if (accessToken) { loadCardCount(); loadMyApprovedRequest(); }
   }, [accessToken]);
 
   // 채팅 폴링: 경매 active/ended 상태에서 5초마다 갱신
@@ -1553,6 +1711,24 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   return (
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
+
+      {/* 승인된 요청 배너 */}
+      {approvedRequest && !isAdmin && (
+        <div className="mx-4 mt-4 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="text-xl shrink-0">🎉</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-emerald-800 truncate">"{approvedRequest.title}" 경매가 승인됐어요!</p>
+            <p className="text-[11px] text-emerald-600 mt-0.5">버튼을 누르면 5분 후 경매가 시작돼요{auction && auction.status !== 'ended' ? ' (현재 진행 중인 경매 종료 후 가능)' : ''}.</p>
+          </div>
+          <button
+            onClick={handleLaunchRequest}
+            disabled={launching || (!!auction && auction.status !== 'ended')}
+            className="shrink-0 h-8 px-3 bg-emerald-500 text-white text-xs font-bold rounded-lg disabled:opacity-40 hover:bg-emerald-600 active:scale-95 transition-all flex items-center gap-1">
+            {launching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '시작하기'}
+          </button>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -1895,6 +2071,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         <AuctionRequestModal
           accessToken={accessToken}
           userNickname={userNickname}
+          ownedGames={ownedGames}
           onClose={() => setShowRequestModal(false)}
         />
       )}
