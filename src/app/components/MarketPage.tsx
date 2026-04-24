@@ -67,6 +67,16 @@ interface Auction {
   resultExpiresAt?: string;
 }
 
+function maskName(str: string): string {
+  if (!str) return str;
+  if (/^[가-힣]{2,4}$/.test(str)) {
+    if (str.length === 2) return str[0] + 'X';
+    if (str.length === 3) return str[0] + 'X' + str[2];
+    return str[0] + 'XX' + str[str.length - 1];
+  }
+  return str;
+}
+
 function formatCountdown(ms: number): string {
   if (ms <= 0) return '00:00:00';
   const totalSec = Math.floor(ms / 1000);
@@ -1394,7 +1404,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                 <p className="text-xs text-gray-400">현재 최고 입찰</p>
                 <p className="text-xl font-black text-orange-500">{auction.currentBid}장
                   {auction.currentBidderNickname && (
-                    <span className="text-sm font-semibold text-gray-500 ml-2">· {auction.currentBidderNickname}</span>
+                    <span className="text-sm font-semibold text-gray-500 ml-2">· {maskName(auction.currentBidderNickname)}</span>
                   )}
                 </p>
               </div>

@@ -9767,17 +9767,19 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     });
     await kv.set(`auction_bids_${auctionId}`, bids);
 
+    // 프로필 닉네임 조회
+    const bidProfile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const bidNickname = bidProfile?.username || bidProfile?.userName || bidProfile?.nickname || bidProfile?.name || nickname || user.email?.split('@')[0] || '';
+
     const newEndAt = new Date(Date.now() + (auction.timerMinutes || 10) * 60 * 1000).toISOString();
     auction.currentBid = bidAmount;
     auction.currentBidder = user.id;
-    auction.currentBidderNickname = nickname || '';
+    auction.currentBidderNickname = bidNickname;
     auction.endAt = newEndAt;
     if (auction.status === 'scheduled') auction.status = 'active';
     await kv.set(`auction_${auctionId}`, auction);
 
     // 입찰 시 자동 참여 등록
-    const bidProfile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
-    const bidNickname = bidProfile?.username || bidProfile?.userName || bidProfile?.nickname || bidProfile?.name || nickname || user.email?.split('@')[0] || '';
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
     if (!participants.find((p: any) => p.userId === user.id)) {
       participants.push({ userId: user.id, nickname: bidNickname, joinedAt: now });
