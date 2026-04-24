@@ -758,6 +758,12 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
   const [scheduleCustom, setScheduleCustom] = useState('');
   const [prize, setPrize] = useState('');
   const [boxCondition, setBoxCondition] = useState<string>('');
+  const [hostUserId, setHostUserId] = useState('');
+  const [hostNickname, setHostNickname] = useState('');
+  const [hostSearchQ, setHostSearchQ] = useState('');
+  const [hostResults, setHostResults] = useState<any[]>([]);
+  const [hostSearching, setHostSearching] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   function selectGame(game: BoardGame) {
@@ -799,13 +805,45 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
     : schedulePreset === 'custom' ? (Number(scheduleCustom) || 0)
     : Number(schedulePreset);
 
+  const AAPI = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+
+  async function searchHost(q: string) {
+    setHostSearchQ(q);
+    if (!q.trim()) { setHostResults([]); return; }
+    setHostSearching(true);
+    try {
+      let users = allUsers;
+      if (!users) {
+        const r = await fetch(`${AAPI}/admin/beta-testers?limit=1000&offset=0&includeGameData=false`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (r.ok) { const d = await r.json(); users = (d.testers ?? []).filter((u: any) => u.status === 'approved'); setAllUsers(users); }
+        else { users = []; }
+      }
+      const lq = q.toLowerCase();
+      setHostResults((users ?? []).filter((u: any) => {
+        const name = (u.name || u.username || u.nickname || '').toLowerCase();
+        const email = (u.email || '').toLowerCase();
+        return name.includes(lq) || email.includes(lq);
+      }).slice(0, 8));
+    } catch { /* silent */ }
+    setHostSearching(false);
+  }
+
+  function selectHost(u: any) {
+    setHostUserId(u.userId || u.id || '');
+    setHostNickname(u.name || u.username || u.nickname || u.email || '');
+    setHostSearchQ('');
+    setHostResults([]);
+  }
+
   async function handleSubmit() {
     if (!title.trim()) { toast.error('상품명을 입력해주세요'); return; }
     const timer = Number(timerMinutes) || 10;
     if (timer < 1) { toast.error('타이머를 1분 이상으로 설정해주세요'); return; }
     setSubmitting(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/auction`, {
+      const res = await fetch(`${AAPI}/auction`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -819,6 +857,8 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
           prize,
           boxCondition,
           gameId: selectedGame?.id,
+          hostUserId: hostUserId || undefined,
+          hostNickname: hostNickname || undefined,
         }),
       });
       const d = await res.json();
@@ -1046,6 +1086,43 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
                 {scheduleAfterMinutes > 0 && (
                   <p className="text-xs text-blue-500 mt-1.5 font-medium">예고 배너 표시 후 {scheduleAfterMinutes}분 뒤 경매 시작</p>
                 )}
+              </div>
+              {/* 경매 주체 (카드 수령인) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">경매 주체 (낙찰 카드 수령인)</label>
+                {hostUserId ? (
+                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                    <span className="text-sm font-semibold text-emerald-700">{hostNickname}</span>
+                    <button onClick={() => { setHostUserId(''); setHostNickname(''); }} className="text-xs text-gray-400 hover:text-red-500 transition-colors">변경</button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <input
+                        value={hostSearchQ}
+                        onChange={e => searchHost(e.target.value)}
+                        placeholder="닉네임으로 검색..."
+                        className="w-full h-10 pl-9 pr-4 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+                      />
+                      {hostSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />}
+                    </div>
+                    {hostResults.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                        {hostResults.map((u, i) => (
+                          <button key={i} onClick={() => selectHost(u)}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{u.name || u.username || u.nickname || '—'}</p>
+                              <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">선택하지 않으면 카드가 지급되지 않아요</p>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">

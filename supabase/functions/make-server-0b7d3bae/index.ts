@@ -9610,16 +9610,33 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
     const bids = (await kv.get(`auction_bids_${activeId}`) as any[] | null) || [];
     const bidderIds = [...new Set((bids as any[]).map((b: any) => b.userId))];
 
-    // 자동 종료 시 resultExpiresAt 설정 + 아카이브
+    // 자동 종료 시 resultExpiresAt 설정 + 아카이브 + 카드 처리
     if (updated && auction.status === 'ended' && !auction.resultExpiresAt) {
       auction.resultExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       if (!auction.archived) {
         auction.archived = true;
+        // 낙찰자 카드 차감 + 호스트 지급
+        if (auction.winnerUserId) {
+          const winnerBids = (bids as any[]).filter((b: any) => b.userId === auction.winnerUserId).sort((a: any, b: any) => b.amount - a.amount);
+          const winningBid = winnerBids[0];
+          if (winningBid?.email) {
+            const wCards = await readCardCountByEmail(winningBid.email, auction.winnerUserId);
+            await writeCardCountByEmail(winningBid.email, Math.max(0, wCards - auction.currentBid));
+          }
+          if (auction.hostUserId) {
+            const hostEntry = await kv.get(`beta_user_${auction.hostUserId}`).catch(() => null) as any;
+            if (hostEntry?.email) {
+              const hCards = await readCardCountByEmail(hostEntry.email, auction.hostUserId);
+              await writeCardCountByEmail(hostEntry.email, hCards + auction.currentBid);
+            }
+          }
+        }
         const results = (await kv.get('auction_results') as any[] | null) || [];
         results.unshift({
           auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
           prize: auction.prize, boxCondition: auction.boxCondition,
           winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+          hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
           finalBid: auction.currentBid, startPrice: auction.startPrice,
           participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
         });
@@ -9655,7 +9672,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
   if (error) return error;
   try {
     const body = await c.req.json();
-    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId, hostUserId, hostNickname } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     if (!startPrice || Number(startPrice) < 1) return c.json({ error: '시작가를 입력해주세요' }, 400);
     if (!bidUnit || Number(bidUnit) < 1) return c.json({ error: '입찰 단위를 입력해주세요' }, 400);
@@ -9702,6 +9719,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
       prize: prize?.trim() || '', boxCondition: boxCondition || '',
       gameId: gameId || '', type: 'admin',
       winnerUserId: null, winnerNickname: null, createdAt: now,
+      hostUserId: hostUserId || null, hostNickname: hostNickname || null,
     };
 
     await kv.set(`auction_${auctionId}`, auction);
@@ -9845,7 +9863,16 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
       if (winningBid?.email) {
         const winnerCards = await readCardCountByEmail(winningBid.email, auction.currentBidder);
         await writeCardCountByEmail(winningBid.email, Math.max(0, winnerCards - auction.currentBid));
-        console.log(`[경매낙찰] ${winningBid.email} -${auction.currentBid}장`);
+        console.log(`[경매낙찰] 차감 ${winningBid.email} -${auction.currentBid}장`);
+      }
+      // 호스트에게 카드 지급
+      if (auction.hostUserId) {
+        const hostEntry = await kv.get(`beta_user_${auction.hostUserId}`).catch(() => null) as any;
+        if (hostEntry?.email) {
+          const hostCards = await readCardCountByEmail(hostEntry.email, auction.hostUserId);
+          await writeCardCountByEmail(hostEntry.email, hostCards + auction.currentBid);
+          console.log(`[경매낙찰] 지급 ${hostEntry.email} +${auction.currentBid}장`);
+        }
       }
     }
 
@@ -9857,6 +9884,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
         auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
         prize: auction.prize, boxCondition: auction.boxCondition,
         winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+        hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
         finalBid: auction.currentBid, startPrice: auction.startPrice,
         participantCount: endParticipants.length, endedAt: endedNow, createdAt: auction.createdAt,
       });
