@@ -1622,6 +1622,17 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-xs text-gray-400 mt-0.5">입찰 단위 {auction.bidUnit}장{(auction as any).hostNickname ? ` · 주체: ${(auction as any).hostNickname}` : ''}</p>
             </div>
           </div>
+          {/* 실물 사진 */}
+          {(auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (
+            <div className="flex gap-2 overflow-x-auto mb-3">
+              {auction.imageUrls!.filter(Boolean).map((url, idx) => (
+                <button key={idx} onClick={() => setLightboxIdx(idx)}
+                  className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/60 hover:border-orange-300 transition-all active:scale-95">
+                  <img src={url} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
           <div className="bg-white/70 rounded-xl px-4 py-3 mb-3">
             <div className="flex justify-between items-center">
               <div>
@@ -1638,17 +1649,6 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               </div>
             </div>
           </div>
-          {/* 실물 사진 */}
-          {(auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (
-            <div className="flex gap-2 overflow-x-auto mb-3">
-              {auction.imageUrls!.filter(Boolean).map((url, idx) => (
-                <button key={idx} onClick={() => setLightboxIdx(idx)}
-                  className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/60 hover:border-orange-300 transition-all active:scale-95">
-                  <img src={url} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
           {accessToken && (
             <p className="text-xs text-gray-400 mb-2 text-right">내 카드 {cardCount}장</p>
           )}
