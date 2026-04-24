@@ -1330,7 +1330,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
 
@@ -1467,7 +1467,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         const d = await r.json();
         setChatMessages(d.messages || []);
         setChatInput('');
-        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        setTimeout(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, 50);
       }
     } catch {}
     setSendingChat(false);
@@ -1884,7 +1884,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction && accessToken && (
         <div className="border-t border-orange-100 px-5 pt-3 pb-4">
           <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
-          <div className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
+          <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
             {chatMessages.length === 0 ? (
               <p className="text-[11px] text-gray-300 text-center pt-8">첫 메시지를 남겨보세요</p>
             ) : (
@@ -1908,7 +1908,6 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                 </div>
               ))
             )}
-            <div ref={chatBottomRef} />
           </div>
           <div className="flex gap-2">
             <input
