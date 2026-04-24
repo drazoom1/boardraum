@@ -69,6 +69,7 @@ interface Auction {
 
 function maskName(str: string): string {
   if (!str) return str;
+  if (str.includes('@')) return str.split('@')[0];
   if (/^[가-힣]{2,4}$/.test(str)) {
     if (str.length === 2) return str[0] + 'X';
     if (str.length === 3) return str[0] + 'X' + str[2];

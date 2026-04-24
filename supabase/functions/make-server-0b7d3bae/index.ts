@@ -9767,9 +9767,10 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     });
     await kv.set(`auction_bids_${auctionId}`, bids);
 
-    // 프로필 닉네임 조회
+    // 프로필 닉네임 조회 (이메일 형식 값은 건너뜀)
+    const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
     const bidProfile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
-    const bidNickname = bidProfile?.username || bidProfile?.userName || bidProfile?.nickname || bidProfile?.name || nickname || user.email?.split('@')[0] || '';
+    const bidNickname = noEmail(bidProfile?.username) || noEmail(bidProfile?.userName) || noEmail(bidProfile?.nickname) || noEmail(bidProfile?.name) || noEmail(nickname) || user.email?.split('@')[0] || '';
 
     const newEndAt = new Date(Date.now() + (auction.timerMinutes || 10) * 60 * 1000).toISOString();
     auction.currentBid = bidAmount;
@@ -9804,8 +9805,9 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
     if (auction.status === 'ended') return c.json({ error: '종료된 경매예요' }, 400);
 
     const { nickname } = await c.req.json();
+    const noEmail2 = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
     const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
-    const resolvedNickname = profile?.username || profile?.userName || profile?.nickname || profile?.name || nickname || user.email?.split('@')[0] || '';
+    const resolvedNickname = noEmail2(profile?.username) || noEmail2(profile?.userName) || noEmail2(profile?.nickname) || noEmail2(profile?.name) || noEmail2(nickname) || user.email?.split('@')[0] || '';
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
     if (!participants.find((p: any) => p.userId === user.id)) {
       participants.push({ userId: user.id, nickname: resolvedNickname, joinedAt: new Date().toISOString() });
