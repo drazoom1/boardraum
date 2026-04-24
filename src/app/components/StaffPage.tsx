@@ -76,6 +76,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [tab, setTab] = useState<StaffTab>('status');
   const [checking, setChecking] = useState(true);
   const [member, setMember] = useState<StaffMember | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const [revenues, setRevenues] = useState<RevenueEntry[]>([]);
   const [revLoading, setRevLoading] = useState(false);
@@ -489,87 +490,93 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
         {/* ── 활동 ── */}
         {tab === 'activity' && (
           <>
-            {/* 활동 가이드 */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4">활동 가이드</h3>
-
-              {/* 의무 달성 기준 */}
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
-                <p className="text-xs font-bold text-amber-700 mb-2">📋 월간 의무 달성 기준</p>
-                <div className="space-y-1">
-                  {[
-                    { label: '태그 매기기 + 제목 작성', target: '20건 이상' },
-                    { label: '보드위키 등록', target: '5건 이상' },
-                    { label: '회의 참석', target: '1회 이상' },
-                    { label: '월 합계 점수', target: '50점 이상' },
-                  ].map(item => (
-                    <div key={item.label} className="flex justify-between text-xs">
-                      <span className="text-amber-700">{item.label}</span>
-                      <span className="font-semibold text-amber-800">{item.target}</span>
-                    </div>
-                  ))}
+            {/* 진행중 항목 — 참석 가능한 회의 */}
+            {meetings.filter(m => m.status === 'open' && !(m.attendees ?? []).includes(userId)).length > 0 && (
+              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                <p className="text-xs font-bold text-blue-700 mb-2">🔔 지금 참석 가능한 회의</p>
+                <div className="space-y-2">
+                  {meetings
+                    .filter(m => m.status === 'open' && !(m.attendees ?? []).includes(userId))
+                    .map(m => (
+                      <div key={m.id} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{m.title}</p>
+                          <p className="text-xs text-gray-400">{m.date ?? ''} · 참석 {(m.attendees ?? []).length}명 · +10점</p>
+                        </div>
+                        <button
+                          onClick={() => handleAttend(m.id)}
+                          disabled={attendingId === m.id}
+                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                          {attendingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '참석'}
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </div>
+            )}
 
-              {/* 항목별 설명 */}
-              <div className="space-y-3">
-                {[
-                  {
-                    label: '태그 매기기', points: 2, unit: '건', wip: false,
-                    desc: '게시물에 게임 태그가 없을 경우 직접 게임을 검색해 태그를 추가합니다.',
-                  },
-                  {
-                    label: '제목 작성', points: 3, unit: '건', wip: true,
-                    desc: '준비중',
-                  },
-                  {
-                    label: '보드위키 등록', points: 5, unit: '건', wip: false,
-                    desc: '보드위키에 게임 정보를 직접 등록합니다.',
-                  },
-                  {
-                    label: '신고 처리', points: 10, unit: '건', wip: true,
-                    desc: '준비중',
-                  },
-                  {
-                    label: '분쟁 중재', points: 15, unit: '건', wip: true,
-                    desc: '준비중',
-                  },
-                  {
-                    label: '신규 회원 유입', points: 20, unit: '명', wip: false,
-                    desc: '자신의 추천인 코드로 신규 회원이 가입하면 자동 적립됩니다.',
-                  },
-                  {
-                    label: '이벤트 기획', points: 30, unit: '건', wip: false,
-                    desc: '운영진 페이지에서 의제를 제안하고, 과반수 동의를 얻어 이벤트·숙제가 실제로 진행될 때 적립됩니다.',
-                  },
-                  {
-                    label: '회의 참석', points: 10, unit: '회', wip: false,
-                    desc: '관리자가 생성한 회의에 참석 버튼을 누르면 자동 적립됩니다.',
-                  },
-                ].map(item => (
-                  <div key={item.label} className={`flex gap-3 ${item.wip ? 'opacity-40' : ''}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-semibold text-gray-800">{item.label}</span>
-                        {item.wip && (
-                          <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">준비중</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <span className="text-sm font-black text-blue-600">+{item.points}점</span>
-                      <p className="text-[10px] text-gray-400">/{item.unit}</p>
+            {/* 활동 가이드 — 접기/펼치기 */}
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <button
+                onClick={() => setGuideOpen(v => !v)}
+                className="w-full flex items-center justify-between px-5 py-4 text-left">
+                <span className="text-sm font-bold text-gray-800">활동 가이드</span>
+                <span className="text-gray-400 text-xs">{guideOpen ? '▲ 접기' : '▼ 펼치기'}</span>
+              </button>
+              {guideOpen && (
+                <div className="px-5 pb-5 border-t border-gray-100">
+                  {/* 의무 달성 기준 */}
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 mb-4">
+                    <p className="text-xs font-bold text-amber-700 mb-2">📋 월간 의무 달성 기준</p>
+                    <div className="space-y-1">
+                      {[
+                        { label: '태그 매기기 + 제목 작성', target: '20건 이상' },
+                        { label: '보드위키 등록', target: '5건 이상' },
+                        { label: '회의 참석', target: '1회 이상' },
+                        { label: '월 합계 점수', target: '50점 이상' },
+                      ].map(item => (
+                        <div key={item.label} className="flex justify-between text-xs">
+                          <span className="text-amber-700">{item.label}</span>
+                          <span className="font-semibold text-amber-800">{item.target}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
+                  {/* 항목별 설명 */}
+                  <div className="space-y-3">
+                    {[
+                      { label: '태그 매기기',    points: 2,  unit: '건', wip: false, desc: '게시물에 게임 태그가 없을 경우 직접 게임을 검색해 태그를 추가합니다.' },
+                      { label: '제목 작성',      points: 3,  unit: '건', wip: true,  desc: '준비중' },
+                      { label: '보드위키 등록',  points: 5,  unit: '건', wip: false, desc: '보드위키에 게임 정보를 직접 등록합니다.' },
+                      { label: '신고 처리',      points: 10, unit: '건', wip: true,  desc: '준비중' },
+                      { label: '분쟁 중재',      points: 15, unit: '건', wip: true,  desc: '준비중' },
+                      { label: '신규 회원 유입', points: 20, unit: '명', wip: false, desc: '자신의 추천인 코드로 신규 회원이 가입하면 자동 적립됩니다.' },
+                      { label: '이벤트 기획',    points: 30, unit: '건', wip: false, desc: '의제를 제안하고 과반수 동의를 얻어 이벤트·숙제가 실제로 진행될 때 적립됩니다.' },
+                      { label: '회의 참석',      points: 10, unit: '회', wip: false, desc: '관리자가 생성한 회의에 참석 버튼을 누르면 자동 적립됩니다.' },
+                    ].map(item => (
+                      <div key={item.label} className={`flex gap-3 ${item.wip ? 'opacity-40' : ''}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-semibold text-gray-800">{item.label}</span>
+                            {item.wip && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">준비중</span>}
+                          </div>
+                          <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <span className="text-sm font-black text-blue-600">+{item.points}점</span>
+                          <p className="text-[10px] text-gray-400">/{item.unit}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* 회의 목록 */}
+            {/* 전체 회의 목록 */}
             {meetings.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 p-5">
-                <h3 className="text-sm font-bold text-gray-800 mb-3">회의 참석 (+10점)</h3>
+                <h3 className="text-sm font-bold text-gray-800 mb-3">회의 목록</h3>
                 <div className="space-y-2">
                   {meetings.map(m => {
                     const attended = (m.attendees ?? []).includes(userId);
