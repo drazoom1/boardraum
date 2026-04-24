@@ -1304,8 +1304,8 @@ function AuctionRequestModal({ accessToken, userNickname, onClose }: {
 }
 
 // ===== 경매 배너 섹션 =====
-function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames = [] }: {
-  accessToken?: string; userId?: string; userNickname?: string; isAdmin?: boolean; ownedGames?: BoardGame[];
+function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames = [], onGoToMyAuctions }: {
+  accessToken?: string; userId?: string; userNickname?: string; isAdmin?: boolean; ownedGames?: BoardGame[]; onGoToMyAuctions?: () => void;
 }) {
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participants, setParticipants] = useState<{ userId: string; nickname: string }[]>([]);
@@ -1702,96 +1702,14 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
             )}
           </div>
-          {/* 배송지/송장 섹션: 낙찰자·주체자·관리자만 표시 */}
-          {auction.winnerNickname && (() => {
-            const isWinner = !!userId && auction.winnerUserId === userId;
-            const isHost = !!userId && (auction as any).hostUserId === userId;
-            if (!isWinner && !isHost && !isAdmin) return null;
-            const addr = deliveryInfo?.address;
-            const tracking = deliveryInfo?.trackingNumber;
-            const escrowStatus = deliveryInfo?.escrowStatus;
-            return (
-              <div className="mt-3 bg-white/80 rounded-xl px-4 py-3 space-y-2">
-                <div className="flex items-center gap-1.5 mb-1 pb-2 border-b border-gray-100">
-                  <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                  </svg>
-                  <p className="text-[10px] text-gray-400">배송 정보는 낙찰자·주체자·관리자에게만 공개됩니다</p>
-                </div>
-                {/* 낙찰자: 배송지 입력/수정 */}
-                {isWinner && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">📦 배송지</p>
-                    {addr && !addressSubmitted ? (
-                      <div className="flex items-center gap-2">
-                        <p className="flex-1 text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
-                        <button onClick={() => { setAddressInput(addr); setAddressSubmitted(true); }}
-                          className="text-xs text-orange-500 hover:text-orange-700 font-semibold shrink-0">수정</button>
-                      </div>
-                    ) : addressSubmitted ? (
-                      <div className="flex gap-2">
-                        <input
-                          value={addressInput}
-                          onChange={e => setAddressInput(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && submitAddress()}
-                          placeholder="받으실 주소를 입력해주세요"
-                          className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                          autoFocus
-                        />
-                        <button onClick={submitAddress} disabled={submittingAddress || !addressInput.trim()}
-                          className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-                          {submittingAddress ? '...' : addr ? '수정' : '등록'}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <input
-                          value={addressInput}
-                          onChange={e => setAddressInput(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && submitAddress()}
-                          placeholder="받으실 주소를 입력해주세요"
-                          className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                        />
-                        <button onClick={submitAddress} disabled={submittingAddress || !addressInput.trim()}
-                          className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-                          {submittingAddress ? '...' : '등록'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* 주체자·관리자: 배송지 + 송장 입력 */}
-                {(isHost || (!isWinner && isAdmin)) && (
-                  <>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1">📦 낙찰자 배송지</p>
-                      {addr ? (
-                        <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
-                      ) : (
-                        <p className="text-xs text-gray-400 italic">아직 배송지 미입력</p>
-                      )}
-                    </div>
-                    <TrackingInput
-                      auctionId={auction.auctionId}
-                      accessToken={accessToken!}
-                      currentTracking={tracking}
-                      escrowStatus={escrowStatus}
-                      onSubmitted={() => loadDeliveryInfo(auction.auctionId)}
-                    />
-                  </>
-                )}
-                {/* 에스크로 상태 표시 */}
-                {escrowStatus && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                    <span className="text-[11px] text-gray-400">에스크로:</span>
-                    <span className={`text-[11px] font-bold ${escrowStatus === 'released' ? 'text-emerald-600' : 'text-orange-500'}`}>
-                      {escrowStatus === 'released' ? '✓ 완료' : escrowStatus === 'tracking_submitted' ? '송장 접수 · 2일 대기중' : '보유 중'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {/* 낙찰자에게만 '내 경매'로 이동 버튼 */}
+          {auction.winnerNickname && !!userId && auction.winnerUserId === userId && onGoToMyAuctions && (
+            <button
+              onClick={onGoToMyAuctions}
+              className="w-full mt-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5">
+              📦 배송지 입력하기
+            </button>
+          )}
           <div className="flex items-center justify-between mt-2">
             {auction.resultExpiresAt ? (
               <p className="text-[11px] text-gray-400">
@@ -2185,6 +2103,12 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
   const [showMyAuctions, setShowMyAuctions] = useState(false);
   const [search, setSearch] = useState('');
   const [showMyGamesModal, setShowMyGamesModal] = useState(false);
+  const myAuctionsSectionRef = useRef<HTMLDivElement | null>(null);
+
+  function goToMyAuctions() {
+    setShowMyAuctions(true);
+    setTimeout(() => myAuctionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }
   const [selectedListingGame, setSelectedListingGame] = useState<BoardGame | null>(null);
   const [gameSearch, setGameSearch] = useState('');
 
@@ -2231,6 +2155,7 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
         userNickname={userNickname}
         isAdmin={isAdmin}
         ownedGames={ownedGames}
+        onGoToMyAuctions={accessToken ? goToMyAuctions : undefined}
       />
 
       {/* 헤더 + 검색 + 필터 */}
@@ -2263,9 +2188,11 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
       </div>
 
       {/* 내 경매 거래 섹션 */}
-      {showMyAuctions && accessToken && (
-        <MyAuctionTrades accessToken={accessToken} userId={userId} isAdmin={isAdmin} />
-      )}
+      <div ref={myAuctionsSectionRef}>
+        {showMyAuctions && accessToken && (
+          <MyAuctionTrades accessToken={accessToken} userId={userId} isAdmin={isAdmin} />
+        )}
+      </div>
 
       {/* 내 게임 방출 및 판매 버튼 */}
       {accessToken && ownedGames.length > 0 && (
