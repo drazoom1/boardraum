@@ -9606,11 +9606,46 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
       }
       updated = true;
     }
-    if (updated) await kv.set(`auction_${activeId}`, auction);
     const participants = (await kv.get(`auction_participants_${activeId}`) as any[] | null) || [];
     const bids = (await kv.get(`auction_bids_${activeId}`) as any[] | null) || [];
     const bidderIds = [...new Set((bids as any[]).map((b: any) => b.userId))];
+
+    // 자동 종료 시 resultExpiresAt 설정 + 아카이브
+    if (updated && auction.status === 'ended' && !auction.resultExpiresAt) {
+      auction.resultExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      if (!auction.archived) {
+        auction.archived = true;
+        const results = (await kv.get('auction_results') as any[] | null) || [];
+        results.unshift({
+          auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
+          prize: auction.prize, boxCondition: auction.boxCondition,
+          winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+          finalBid: auction.currentBid, startPrice: auction.startPrice,
+          participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
+        });
+        await kv.set('auction_results', results);
+      }
+      await kv.set(`auction_${activeId}`, auction);
+    } else if (updated) {
+      await kv.set(`auction_${activeId}`, auction);
+    }
+
+    // 결과 배너 만료 시 빈 응답
+    if (auction.status === 'ended' && auction.resultExpiresAt && now > auction.resultExpiresAt) {
+      return c.json({ auction: null });
+    }
+
     return c.json({ auction, participants, bidderIds });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// GET /auction/results — 경매 결과 목록 (관리자)
+app.get("/make-server-0b7d3bae/auction/results", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const results = (await kv.get('auction_results') as any[] | null) || [];
+    return c.json({ results });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
@@ -9788,8 +9823,12 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
     if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
     if (auction.status === 'ended') return c.json({ error: '이미 종료된 경매예요' }, 400);
 
+    const endedNow = new Date().toISOString();
     auction.status = 'ended';
-    auction.endAt = new Date().toISOString();
+    auction.endAt = endedNow;
+    auction.resultExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    const endParticipants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
 
     if (auction.currentBidder) {
       auction.winnerUserId = auction.currentBidder;
@@ -9806,8 +9845,37 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
       }
     }
 
+    // 아카이브
+    if (!auction.archived) {
+      auction.archived = true;
+      const results = (await kv.get('auction_results') as any[] | null) || [];
+      results.unshift({
+        auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
+        prize: auction.prize, boxCondition: auction.boxCondition,
+        winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+        finalBid: auction.currentBid, startPrice: auction.startPrice,
+        participantCount: endParticipants.length, endedAt: endedNow, createdAt: auction.createdAt,
+      });
+      await kv.set('auction_results', results);
+    }
+
     await kv.set(`auction_${auctionId}`, auction);
     return c.json({ success: true, auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:auctionId/dismiss-banner — 낙찰 배너 즉시 종료 (관리자)
+app.post("/make-server-0b7d3bae/auction/:auctionId/dismiss-banner", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    if (auction.status !== 'ended') return c.json({ error: '종료된 경매가 아니에요' }, 400);
+    auction.resultExpiresAt = new Date(Date.now() - 1000).toISOString();
+    await kv.set(`auction_${auctionId}`, auction);
+    return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

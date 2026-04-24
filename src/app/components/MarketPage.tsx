@@ -64,6 +64,7 @@ interface Auction {
   winnerUserId: string | null;
   winnerNickname: string | null;
   createdAt: string;
+  resultExpiresAt?: string;
 }
 
 function formatCountdown(ms: number): string {
@@ -1169,6 +1170,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [dismissingBanner, setDismissingBanner] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
@@ -1218,12 +1220,16 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         const ms = new Date(auction.endAt).getTime() - now;
         setTimeDisplay(formatCountdown(ms));
         if (ms <= 0) loadAuction();
+      } else if (auction.status === 'ended' && auction.resultExpiresAt) {
+        const ms = new Date(auction.resultExpiresAt).getTime() - now;
+        setTimeDisplay(formatCountdown(Math.max(0, ms)));
+        if (ms <= 0) { setAuction(null); setParticipants([]); setBidderIds([]); }
       }
     };
     tick();
     timerRef.current = setInterval(tick, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [auction?.endAt, auction?.startAt, auction?.status]);
+  }, [auction?.endAt, auction?.startAt, auction?.status, auction?.resultExpiresAt]);
 
   async function handleBid() {
     if (!accessToken || !auction) return;
@@ -1270,6 +1276,21 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       } else toast.error(d.error || '참여 실패');
     } catch { toast.error('네트워크 오류'); }
     setJoining(false);
+  }
+
+  async function handleDismissBanner() {
+    if (!accessToken || !auction) return;
+    setDismissingBanner(true);
+    try {
+      const res = await fetch(`${API}/auction/${auction.auctionId}/dismiss-banner`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      });
+      const d = await res.json();
+      if (d.success) { toast.success('배너가 종료됐어요'); setAuction(null); }
+      else toast.error(d.error || '실패');
+    } catch { toast.error('네트워크 오류'); }
+    setDismissingBanner(false);
   }
 
   async function handleEnd() {
@@ -1433,6 +1454,20 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
             )}
           </div>
+          {auction.resultExpiresAt && (
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-[11px] text-gray-400">
+                배너 종료까지 <span className="font-mono font-semibold text-gray-500">{timeDisplay}</span>
+              </p>
+              {isAdmin && (
+                <button onClick={handleDismissBanner} disabled={dismissingBanner}
+                  className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
+                  {dismissingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  배너 종료
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
