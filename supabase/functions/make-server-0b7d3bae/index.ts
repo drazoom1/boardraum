@@ -9720,9 +9720,11 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     await kv.set(`auction_${auctionId}`, auction);
 
     // 입찰 시 자동 참여 등록
+    const bidProfile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const bidNickname = bidProfile?.username || bidProfile?.userName || bidProfile?.nickname || bidProfile?.name || nickname || user.email?.split('@')[0] || '';
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
     if (!participants.find((p: any) => p.userId === user.id)) {
-      participants.push({ userId: user.id, nickname: nickname || '', joinedAt: now });
+      participants.push({ userId: user.id, nickname: bidNickname, joinedAt: now });
       await kv.set(`auction_participants_${auctionId}`, participants);
     }
 
@@ -9744,9 +9746,11 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
     if (auction.status === 'ended') return c.json({ error: '종료된 경매예요' }, 400);
 
     const { nickname } = await c.req.json();
+    const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
+    const resolvedNickname = profile?.username || profile?.userName || profile?.nickname || profile?.name || nickname || user.email?.split('@')[0] || '';
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
     if (!participants.find((p: any) => p.userId === user.id)) {
-      participants.push({ userId: user.id, nickname: nickname || '', joinedAt: new Date().toISOString() });
+      participants.push({ userId: user.id, nickname: resolvedNickname, joinedAt: new Date().toISOString() });
       await kv.set(`auction_participants_${auctionId}`, participants);
     }
     return c.json({ success: true, participants });
