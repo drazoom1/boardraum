@@ -9617,25 +9617,27 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
   if (error) return error;
   try {
     const body = await c.req.json();
-    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, scheduledAt, startAt, endAt, bidExtendMinutes, prize, boxCondition, gameId } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, timerMinutes, scheduleAfterMinutes, prize, boxCondition, gameId } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     if (!startPrice || Number(startPrice) < 1) return c.json({ error: '시작가를 입력해주세요' }, 400);
     if (!bidUnit || Number(bidUnit) < 1) return c.json({ error: '입찰 단위를 입력해주세요' }, 400);
-    if (!startAt) return c.json({ error: '경매 시작 시간을 입력해주세요' }, 400);
-    if (!endAt) return c.json({ error: '경매 종료 시간을 입력해주세요' }, 400);
 
     const auctionId = `auction_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const now = new Date().toISOString();
-    const effScheduled = scheduledAt || startAt;
-    const status: 'scheduled' | 'active' = now < effScheduled ? 'scheduled' : 'active';
+    const nowMs = Date.now();
+    const schedAfter = Math.max(0, Number(scheduleAfterMinutes) || 0);
+    const timer = Math.max(1, Number(timerMinutes) || 10);
+    const startAt = new Date(nowMs + schedAfter * 60 * 1000).toISOString();
+    const endAt = new Date(nowMs + schedAfter * 60 * 1000 + timer * 60 * 1000).toISOString();
+    const status: 'scheduled' | 'active' = schedAfter > 0 ? 'scheduled' : 'active';
     const resolvedImageUrls: string[] = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : (imageUrl ? [imageUrl] : []);
+    const now = new Date(nowMs).toISOString();
 
     const auction = {
       auctionId, title: title.trim(), description: description?.trim() || '',
       imageUrl: resolvedImageUrls[0] || '', imageUrls: resolvedImageUrls,
       startPrice: Number(startPrice), bidUnit: Number(bidUnit),
-      status, scheduledAt: scheduledAt || '', startAt, endAt,
-      bidExtendMinutes: Number(bidExtendMinutes) || 5,
+      status, scheduledAt: startAt, startAt, endAt,
+      timerMinutes: timer, scheduleAfterMinutes: schedAfter,
       createdBy: user.id, currentBid: Number(startPrice),
       currentBidder: null, currentBidderNickname: null,
       prize: prize?.trim() || '', boxCondition: boxCondition || '',
@@ -9706,10 +9708,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     });
     await kv.set(`auction_bids_${auctionId}`, bids);
 
-    const newEndAt = new Date(Math.max(
-      new Date(auction.endAt).getTime(),
-      Date.now() + auction.bidExtendMinutes * 60 * 1000
-    )).toISOString();
+    const newEndAt = new Date(Date.now() + (auction.timerMinutes || 10) * 60 * 1000).toISOString();
     auction.currentBid = bidAmount;
     auction.currentBidder = user.id;
     auction.currentBidderNickname = nickname || '';

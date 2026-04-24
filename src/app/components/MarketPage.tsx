@@ -53,7 +53,7 @@ interface Auction {
   scheduledAt?: string;
   startAt: string;
   endAt: string;
-  bidExtendMinutes: number;
+  timerMinutes: number;
   createdBy: string;
   currentBid: number;
   currentBidder: string | null;
@@ -741,10 +741,9 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [startPrice, setStartPrice] = useState('1');
   const [bidUnit, setBidUnit] = useState('1');
-  const [bidExtendMinutes, setBidExtendMinutes] = useState('5');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [startAt, setStartAt] = useState('');
-  const [endAt, setEndAt] = useState('');
+  const [timerMinutes, setTimerMinutes] = useState('10');
+  const [schedulePreset, setSchedulePreset] = useState<'now' | '10' | '30' | '60' | 'custom'>('now');
+  const [scheduleCustom, setScheduleCustom] = useState('');
   const [prize, setPrize] = useState('');
   const [boxCondition, setBoxCondition] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -784,10 +783,14 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
     setImageUrls(prev => prev.filter((_, i) => i !== idx));
   }
 
+  const scheduleAfterMinutes = schedulePreset === 'now' ? 0
+    : schedulePreset === 'custom' ? (Number(scheduleCustom) || 0)
+    : Number(schedulePreset);
+
   async function handleSubmit() {
     if (!title.trim()) { toast.error('상품명을 입력해주세요'); return; }
-    if (!startAt) { toast.error('경매 시작 시간을 입력해주세요'); return; }
-    if (!endAt) { toast.error('경매 종료 시간을 입력해주세요'); return; }
+    const timer = Number(timerMinutes) || 10;
+    if (timer < 1) { toast.error('타이머를 1분 이상으로 설정해주세요'); return; }
     setSubmitting(true);
     try {
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/auction`, {
@@ -799,10 +802,8 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
           imageUrls: imageUrls.length > 0 ? imageUrls : (selectedGame?.imageUrl ? [selectedGame.imageUrl] : []),
           startPrice: Number(startPrice) || 1,
           bidUnit: Number(bidUnit) || 1,
-          bidExtendMinutes: Number(bidExtendMinutes) || 5,
-          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : '',
-          startAt: new Date(startAt).toISOString(),
-          endAt: new Date(endAt).toISOString(),
+          timerMinutes: timer,
+          scheduleAfterMinutes,
           prize,
           boxCondition,
           gameId: selectedGame?.id,
@@ -992,26 +993,47 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
                 </div>
               </div>
 
-              {/* 타이머 연장 */}
+              {/* 경매 타이머 */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5">입찰 시 타이머 연장 (분)</label>
-                <input type="number" min="1" value={bidExtendMinutes} onChange={e => setBidExtendMinutes(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">경매 타이머 (분) *</label>
+                <p className="text-[11px] text-gray-400 mb-2">입찰 시마다 타이머가 이 시간으로 초기화돼요</p>
+                <div className="flex gap-2 mb-2">
+                  {[5, 10, 15, 30].map(m => (
+                    <button key={m} type="button"
+                      onClick={() => setTimerMinutes(String(m))}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-colors ${timerMinutes === String(m) ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}>
+                      {m}분
+                    </button>
+                  ))}
+                </div>
+                <input type="number" min="1" value={timerMinutes} onChange={e => setTimerMinutes(e.target.value)}
+                  placeholder="직접 입력 (분)"
+                  className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
               </div>
 
-              {/* 시간 설정 */}
+              {/* 경매 시작 시점 */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5">예고 시작 시간 (선택)</label>
-                <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">경매 시작 시간 *</label>
-                  <input type="datetime-local" value={startAt} onChange={e => setStartAt(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">경매 시작 시점</label>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {([['now', '즉시 시작'], ['10', '10분 후'], ['30', '30분 후'], ['60', '1시간 후'], ['custom', '직접 입력']] as const).map(([v, label]) => (
+                    <button key={v} type="button"
+                      onClick={() => setSchedulePreset(v)}
+                      className={`py-2 rounded-xl border text-xs font-bold transition-colors ${schedulePreset === v ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">기본 종료 시간 *</label>
-                  <input type="datetime-local" value={endAt} onChange={e => setEndAt(e.target.value)} className="w-full h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
-                </div>
+                {schedulePreset === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <input type="number" min="1" value={scheduleCustom} onChange={e => setScheduleCustom(e.target.value)}
+                      placeholder="분 입력"
+                      className="flex-1 h-10 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">분 후 시작</span>
+                  </div>
+                )}
+                {scheduleAfterMinutes > 0 && (
+                  <p className="text-xs text-blue-500 mt-1.5 font-medium">예고 배너 표시 후 {scheduleAfterMinutes}분 뒤 경매 시작</p>
+                )}
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
