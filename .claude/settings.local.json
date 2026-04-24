@@ -53,7 +53,8 @@
       "Read(//usr/local/bin/**)",
       "Read(//Users/drazoom/.npm/bin/**)",
       "Read(//usr/local/**)",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(awk -F: '$2 <= 185 && $2 >= 100')"
     ]
   }
 }

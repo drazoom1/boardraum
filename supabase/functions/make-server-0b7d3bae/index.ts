@@ -9748,7 +9748,7 @@ app.post("/make-server-0b7d3bae/auction/request", async (c) => {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json();
-    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, prize, boxCondition, nickname } = body;
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, prize, boxCondition, nickname, gameId } = body;
     if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
     const requestId = `auc_req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const profile = await kv.get(`user_profile_${user.id}`).catch(() => null) as any;
@@ -9763,6 +9763,7 @@ app.post("/make-server-0b7d3bae/auction/request", async (c) => {
       bidUnit: Number(bidUnit) || 1,
       prize: prize?.trim() || '',
       boxCondition: boxCondition || '',
+      gameId: gameId || '',
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
@@ -9821,9 +9822,27 @@ app.post("/make-server-0b7d3bae/auction/request/:requestId/launch", async (c) =>
     const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
     const hostNickname = noEmail(profile?.username) || noEmail(profile?.userName) || noEmail(profile?.nickname) || req.nickname || user.email?.split('@')[0] || '';
 
+    // BoardWiki 이미지 조회 (관리자 경매 생성과 동일한 로직)
+    let resolvedImageUrl = req.imageUrl || '';
+    const reqGameId = req.gameId || '';
+    if (reqGameId) {
+      const idOverride = await kv.get(`game_image_id_${reqGameId}`).catch(() => null) as any;
+      if (idOverride?.imageUrl) {
+        resolvedImageUrl = idOverride.imageUrl;
+      } else {
+        const siteGame = await kv.get(`site_game_${reqGameId}`).catch(() => null) as any;
+        if (siteGame?.imageUrl) {
+          resolvedImageUrl = siteGame.imageUrl;
+        } else if (siteGame?.bggId) {
+          const bggOverride = await kv.get(`game_image_bgg_${siteGame.bggId}`).catch(() => null) as any;
+          if (bggOverride?.imageUrl) resolvedImageUrl = bggOverride.imageUrl;
+        }
+      }
+    }
+
     const auction = {
       auctionId, title: req.title, description: req.description || '',
-      imageUrl: req.imageUrl || '', imageUrls: req.imageUrls || [],
+      imageUrl: resolvedImageUrl, imageUrls: req.imageUrls || [],
       startPrice: req.startPrice, bidUnit: req.bidUnit,
       status: 'scheduled' as const,
       scheduledAt: startAt, startAt, endAt,
@@ -9831,7 +9850,7 @@ app.post("/make-server-0b7d3bae/auction/request/:requestId/launch", async (c) =>
       createdBy: user.id, currentBid: req.startPrice,
       currentBidder: null, currentBidderNickname: null,
       prize: req.prize || '', boxCondition: req.boxCondition || '',
-      gameId: '', type: 'user',
+      gameId: reqGameId, type: 'user',
       winnerUserId: null, winnerNickname: null, createdAt: now,
       hostUserId: user.id, hostNickname,
       tags: [], entryFee: Math.max(0, Number(req.entryFee) || 0),
@@ -9866,6 +9885,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     const now = new Date().toISOString();
     if (auction.status === 'ended' || now >= auction.endAt) return c.json({ error: '종료된 경매예요' }, 400);
     if (auction.status === 'scheduled' && now < auction.startAt) return c.json({ error: '아직 경매가 시작되지 않았어요' }, 400);
+    if (auction.hostUserId && auction.hostUserId === user.id) return c.json({ error: '경매 주체자는 입찰할 수 없어요' }, 403);
     if (auction.currentBidder === user.id) return c.json({ error: '이미 최고 입찰자예요' }, 400);
 
     const { nickname, amount } = await c.req.json();
@@ -9920,6 +9940,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
     const auction = await kv.get(`auction_${auctionId}`) as any | null;
     if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
     if (auction.status === 'ended') return c.json({ error: '종료된 경매예요' }, 400);
+    if (auction.hostUserId && auction.hostUserId === user.id) return c.json({ error: '경매 주체자는 참여할 수 없어요' }, 403);
 
     const { nickname } = await c.req.json();
     const noEmail2 = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;

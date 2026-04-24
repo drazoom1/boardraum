@@ -1263,6 +1263,7 @@ function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClo
           title, description,
           imageUrl: imageUrls[0] || selectedGame?.imageUrl || '',
           imageUrls,
+          gameId: selectedGame?.id || '',
           startPrice: Number(startPrice) || 1,
           bidUnit: Number(bidUnit) || 1,
           prize, boxCondition,
@@ -1719,7 +1720,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   const nextBid = auction ? auction.currentBid + auction.bidUnit : 0;
   const isMyBid = auction?.currentBidder === userId;
-  const canBid = !!accessToken && auction?.status === 'active' && !isMyBid && cardCount >= nextBid;
+  const isHost = !!userId && userId === (auction as any)?.hostUserId;
+  const canBid = !!accessToken && auction?.status === 'active' && !isMyBid && !isHost && cardCount >= nextBid;
 
   return (
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
@@ -1868,7 +1870,9 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           {accessToken && (
             <p className="text-xs text-gray-400 mb-2 text-right">내 카드 {cardCount}장</p>
           )}
-          {accessToken ? (
+          {isHost ? (
+            <p className="text-center text-xs text-orange-400 font-semibold py-2">내가 올린 경매예요 · 입찰할 수 없어요</p>
+          ) : accessToken ? (
             showConfirm ? (
               <div className="bg-orange-100 rounded-xl p-3 flex items-center gap-2">
                 <p className="flex-1 text-sm font-semibold text-orange-800">{nextBid}장으로 입찰할까요?</p>
@@ -2002,7 +2006,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {/* 참여자 섹션 */}
       {auction && auction.status !== 'ended' && (
         <div className="px-5 pb-4 border-t border-orange-100 pt-3">
-          {accessToken && !joined && (
+          {isHost && (
+            <p className="text-xs text-center text-orange-400 font-semibold mb-3">내가 올린 경매예요 · 참여할 수 없어요</p>
+          )}
+          {accessToken && !joined && !isHost && (
             <button onClick={handleJoin} disabled={joining}
               className="w-full h-9 mb-3 rounded-xl border-2 border-orange-200 text-orange-600 text-sm font-semibold hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 bg-white">
               {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (
