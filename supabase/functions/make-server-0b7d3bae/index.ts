@@ -12047,6 +12047,27 @@ app.post('/make-server-0b7d3bae/staff/meeting/:id/attend', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 회의 완료 + 회의록 저장 (관리자)
+app.post('/make-server-0b7d3bae/staff/meeting/:id/close', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const id = c.req.param('id');
+    const { minutes } = await c.req.json().catch(() => ({}));
+    const meetings: any[] = (await kv.get('staff_meetings') as any[]) ?? [];
+    const idx = meetings.findIndex((m: any) => m.id === id);
+    if (idx === -1) return c.json({ error: '회의를 찾을 수 없습니다' }, 404);
+    meetings[idx] = {
+      ...meetings[idx],
+      status: 'closed',
+      closedAt: new Date().toISOString(),
+      minutes: minutes ?? '',
+    };
+    await kv.set('staff_meetings', meetings.slice(0, 100));
+    return c.json({ success: true, meeting: meetings[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 회의 안건 제출 (운영진/관리자)
 app.post('/make-server-0b7d3bae/staff/meeting/:id/agenda', async (c) => {
   try {

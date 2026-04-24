@@ -94,6 +94,11 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [newMeetingDate, setNewMeetingDate] = useState('');
   const [creatingMeeting, setCreatingMeeting] = useState(false);
 
+  // 회의 완료 (관리자)
+  const [closeFormId, setCloseFormId] = useState<string | null>(null);
+  const [minutesText, setMinutesText] = useState('');
+  const [closingMeeting, setClosingMeeting] = useState(false);
+
   const [actLogs, setActLogs] = useState<ActivityLog[]>([]);
   const [actLoading, setActLoading] = useState(false);
   const [actLoaded, setActLoaded] = useState(false);
@@ -206,6 +211,23 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       toast.success('회의가 생성됐습니다.');
     } catch (e: any) { toast.error(e.message); }
     setCreatingMeeting(false);
+  };
+
+  const handleCloseMeeting = async (meetingId: string) => {
+    setClosingMeeting(true);
+    try {
+      const r = await fetch(`${API}/staff/meeting/${meetingId}/close`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ minutes: minutesText.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? '완료 처리 실패');
+      setMeetings(prev => prev.map(m => m.id === meetingId ? d.meeting : m));
+      setCloseFormId(null);
+      setMinutesText('');
+      toast.success('회의가 완료 처리됐습니다.');
+    } catch (e: any) { toast.error(e.message); }
+    setClosingMeeting(false);
   };
 
   const handleSubmitAgenda = async (meetingId: string) => {
@@ -484,7 +506,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                       </p>
 
                       {/* 액션 버튼 */}
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         {isOpen && (
                           attended ? (
                             <span className="text-[11px] font-bold bg-green-100 text-green-700 px-3 py-1.5 rounded-xl">✓ 참석완료</span>
@@ -501,14 +523,44 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                           <button
                             onClick={() => {
                               if (isFormOpen) { setAgendaFormId(null); setAgendaTitle(''); setAgendaDesc(''); }
-                              else setAgendaFormId(m.id);
+                              else { setAgendaFormId(m.id); setCloseFormId(null); }
                             }}
                             className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-xl hover:bg-gray-700">
                             {isFormOpen ? '취소' : '📋 의제 제출'}
                           </button>
                         )}
+                        {isOpen && isAdmin && (
+                          <button
+                            onClick={() => {
+                              if (closeFormId === m.id) { setCloseFormId(null); setMinutesText(''); }
+                              else { setCloseFormId(m.id); setAgendaFormId(null); }
+                            }}
+                            className="text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-xl hover:bg-red-100">
+                            {closeFormId === m.id ? '취소' : '회의완료'}
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* 회의완료 + 회의록 폼 */}
+                    {closeFormId === m.id && (
+                      <div className="px-5 pb-5 border-t border-gray-100 pt-4 bg-red-50">
+                        <p className="text-xs font-bold text-red-700 mb-3">회의 완료 처리</p>
+                        <textarea
+                          value={minutesText}
+                          onChange={e => setMinutesText(e.target.value)}
+                          placeholder="회의록 내용 (결정사항, 논의내용 등)"
+                          rows={4}
+                          className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm mb-3 bg-white focus:outline-none focus:border-red-400 resize-none"
+                        />
+                        <button
+                          onClick={() => handleCloseMeeting(m.id)}
+                          disabled={closingMeeting}
+                          className="w-full py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 disabled:opacity-50">
+                          {closingMeeting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '회의 완료 확정'}
+                        </button>
+                      </div>
+                    )}
 
                     {/* 의제 제출 인라인 폼 */}
                     {isFormOpen && (
@@ -533,6 +585,15 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                           className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
                           {submittingAgenda ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '제출'}
                         </button>
+                      </div>
+                    )}
+
+                    {/* 회의록 (종료된 회의) */}
+                    {!isOpen && m.minutes && (
+                      <div className="border-t border-gray-100 px-5 py-4 bg-gray-50">
+                        <p className="text-[11px] font-semibold text-gray-500 mb-2">📝 회의록</p>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{m.minutes}</p>
+                        {m.closedAt && <p className="text-[10px] text-gray-300 mt-2">{m.closedAt.slice(0, 10)} 완료</p>}
                       </div>
                     )}
 
