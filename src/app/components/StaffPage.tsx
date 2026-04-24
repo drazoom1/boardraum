@@ -90,6 +90,15 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [actLoading, setActLoading] = useState(false);
   const [actLoaded, setActLoaded] = useState(false);
 
+  // 이달 점수 + 성과 지분
+  const [monthlyScore, setMonthlyScore] = useState(0);
+  const [perfEquity, setPerfEquity] = useState(0);
+
+  // 회의
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [meetingsLoaded, setMeetingsLoaded] = useState(false);
+  const [attendingId, setAttendingId] = useState<string | null>(null);
+
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
 
   useEffect(() => {
@@ -98,6 +107,18 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .then(d => {
         if (!d.member) { onExit(); return; }
         setMember(d.member);
+        // 월간 점수 로드
+        const month = new Date().toISOString().slice(0, 7);
+        fetch(`${API}/staff/monthly-scores?month=${month}`, { headers })
+          .then(r2 => r2.json())
+          .then(d2 => {
+            const scores: Record<string, number> = d2.scores ?? {};
+            const myScore = scores[d.member.userId] ?? 0;
+            const total = Object.values(scores).reduce((s: number, p: any) => s + p, 0);
+            setMonthlyScore(myScore);
+            setPerfEquity(total > 0 ? 19 * myScore / total : 0);
+          })
+          .catch(() => {});
       })
       .catch(() => onExit())
       .finally(() => setChecking(false));
@@ -131,7 +152,29 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .then(d => { setActLogs(d.logs ?? []); setActLoaded(true); })
       .catch(() => toast.error('활동 내역 불러오기 실패'))
       .finally(() => setActLoading(false));
+    if (!meetingsLoaded) {
+      fetch(`${API}/staff/meetings`, { headers })
+        .then(r => r.json())
+        .then(d => { setMeetings(d.meetings ?? []); setMeetingsLoaded(true); })
+        .catch(() => {});
+    }
   }, [tab, member]);
+
+  const handleAttend = async (meetingId: string) => {
+    setAttendingId(meetingId);
+    try {
+      const r = await fetch(`${API}/staff/meeting/${meetingId}/attend`, {
+        method: 'POST', headers,
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? '참석 처리 실패');
+      setMeetings(prev => prev.map(m => m.id === meetingId ? d.meeting : m));
+      toast.success('참석 완료! +10점 적립됐습니다.');
+      // 월간 점수 갱신
+      setMonthlyScore(s => s + 10);
+    } catch (e: any) { toast.error(e.message); }
+    setAttendingId(null);
+  };
 
   const handleVote = async (agendaId: string, vote: 'yes' | 'no') => {
     setVotingId(agendaId);
@@ -208,18 +251,47 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
               </div>
             </div>
 
+            {/* 이달 활동 점수 */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">이달 활동 점수</h3>
+              <div className="flex items-baseline gap-1 mb-1">
+                <span className="text-4xl font-black text-gray-900">{monthlyScore}</span>
+                <span className="text-lg font-bold text-gray-400">점</span>
+              </div>
+              <div className="mt-2 flex gap-1.5 flex-wrap">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${monthlyScore >= 50 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                  {monthlyScore >= 50 ? '✓ 의무 달성' : '⚠ 50점 미달'}
+                </span>
+              </div>
+            </div>
+
             {/* 지분 현황 */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <h3 className="text-sm font-bold text-gray-800 mb-3">내 지분</h3>
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-black text-gray-900">{grade.baseEquity}</span>
-                <span className="text-xl font-bold text-gray-400">%</span>
-              </div>
-              <p className="text-xs text-gray-400">기본 지분 · 등급 상승 시 자동 증가</p>
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-xs text-gray-400">
-                  성과 지분 <span className="text-gray-300">—</span> 활동점수 기반, 추후 반영
-                </p>
+              <div className="space-y-0">
+                <div className="flex justify-between items-baseline py-2 border-b border-gray-50">
+                  <span className="text-sm text-gray-600">기본 지분</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-gray-900">{grade.baseEquity}</span>
+                    <span className="text-sm font-bold text-gray-400">%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-baseline py-2">
+                  <span className="text-sm text-gray-600">성과 지분 <span className="text-[10px] text-gray-400">(이달 활동점수 기반)</span></span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black" style={{ color: perfEquity > 0 ? '#3B82F6' : '#d1d5db' }}>
+                      {perfEquity.toFixed(1)}
+                    </span>
+                    <span className="text-sm font-bold text-gray-400">%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-baseline py-2 border-t border-gray-100 mt-1">
+                  <span className="text-sm font-bold text-gray-700">이달 총 지분</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-gray-900">{(grade.baseEquity + perfEquity).toFixed(1)}</span>
+                    <span className="text-sm font-bold text-gray-400">%</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -416,28 +488,64 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
 
         {/* ── 활동 ── */}
         {tab === 'activity' && (
-          actLoading ? (
-            <div className="py-20 flex justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
-            </div>
-          ) : actLogs.length === 0 ? (
-            <div className="py-20 text-center text-gray-300 text-sm">활동 내역이 없습니다.</div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50">
-              {actLogs.map((log, i) => (
-                <div key={i} className="flex items-start gap-3 px-5 py-3.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 leading-snug">{log.action}</p>
-                    {log.detail && <p className="text-xs text-gray-400 mt-0.5">{log.detail}</p>}
-                  </div>
-                  <span className="text-[10px] text-gray-300 whitespace-nowrap mt-0.5">
-                    {timeAgo(log.recordedAt ?? '')}
-                  </span>
+          <>
+            {/* 회의 목록 */}
+            {meetings.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                <h3 className="text-sm font-bold text-gray-800 mb-3">회의 참석 (+10점)</h3>
+                <div className="space-y-2">
+                  {meetings.map(m => {
+                    const attended = (m.attendees ?? []).includes(userId);
+                    const isOpen = m.status === 'open';
+                    return (
+                      <div key={m.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{m.title}</p>
+                          <p className="text-xs text-gray-400">{m.date ?? ''} · 참석 {(m.attendees ?? []).length}명</p>
+                        </div>
+                        {attended ? (
+                          <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-lg">✓ 참석완료</span>
+                        ) : isOpen ? (
+                          <button
+                            onClick={() => handleAttend(m.id)}
+                            disabled={attendingId === m.id}
+                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                            {attendingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '참석'}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-gray-300">종료</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )
+              </div>
+            )}
+
+            {/* 활동 로그 */}
+            {actLoading ? (
+              <div className="py-20 flex justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+              </div>
+            ) : actLogs.length === 0 ? (
+              <div className="py-12 text-center text-gray-300 text-sm">활동 내역이 없습니다.</div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50">
+                {actLogs.map((log, i) => (
+                  <div key={i} className="flex items-start gap-3 px-5 py-3.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 leading-snug">{log.action}</p>
+                      {log.detail && <p className="text-xs text-gray-400 mt-0.5">{log.detail}</p>}
+                    </div>
+                    <span className="text-[10px] text-gray-300 whitespace-nowrap mt-0.5">
+                      {timeAgo(log.recordedAt ?? '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
       </div>

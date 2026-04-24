@@ -6862,7 +6862,16 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
 type OperatorTab = 'staff-list' | 'activity' | 'revenue';
 
-const STAFF_ACTIVITY_CATEGORIES = ['콘텐츠 제작', '이벤트 진행', '커뮤니티 관리', '기타'] as const;
+const STAFF_ACTIVITY_CATEGORIES = [
+  { key: 'tag',     label: '태그 매기기',    points: 2,  unit: '건', wip: false },
+  { key: 'title',   label: '제목 작성',      points: 3,  unit: '건', wip: true  },
+  { key: 'wiki',    label: '보드위키 등록',  points: 5,  unit: '건', wip: false },
+  { key: 'report',  label: '신고 처리',      points: 10, unit: '건', wip: true  },
+  { key: 'mediate', label: '분쟁 중재',      points: 15, unit: '건', wip: true  },
+  { key: 'recruit', label: '신규 회원 유입', points: 20, unit: '명', wip: false },
+  { key: 'event',   label: '이벤트 기획',    points: 30, unit: '건', wip: false },
+  { key: 'meeting', label: '회의 참석',      points: 10, unit: '회', wip: false },
+];
 
 const STAFF_GRADES = [
   { level: 1, name: '노랑 당근', color: '#FACC15', baseEquity: 1.0 },
@@ -6932,6 +6941,15 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   const [revLoading, setRevLoading] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
 
+  // 회의
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [meetingsLoading, setMeetingsLoading] = useState(false);
+  const [newMeetingTitle, setNewMeetingTitle] = useState('');
+  const [newMeetingDate, setNewMeetingDate] = useState('');
+  const [savingMeeting, setSavingMeeting] = useState(false);
+  // 이달 활동 점수 (수익 배분용)
+  const [monthlyScores, setMonthlyScores] = useState<Record<string, number>>({});
+
   const loadStaff = async () => {
     setStaffLoading(true);
     try {
@@ -6977,8 +6995,44 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     finally { setActLogsLoading(false); }
   };
 
+  const loadMeetings = async () => {
+    setMeetingsLoading(true);
+    try {
+      const r = await fetch(`${API}/staff/meetings`, { headers: authHeaders });
+      if (r.ok) { const d = await r.json(); setMeetings(d.meetings ?? []); }
+    } catch { }
+    finally { setMeetingsLoading(false); }
+  };
+
+  const handleCreateMeeting = async () => {
+    if (!newMeetingTitle.trim()) { toast.error('회의 제목을 입력하세요'); return; }
+    setSavingMeeting(true);
+    try {
+      const r = await fetch(`${API}/staff/meeting`, {
+        method: 'POST', headers: authHeaders,
+        body: JSON.stringify({ title: newMeetingTitle, date: newMeetingDate }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? '생성 실패');
+      setMeetings(d.meetings ?? []);
+      setNewMeetingTitle('');
+      setNewMeetingDate('');
+      toast.success('회의가 생성됐습니다.');
+    } catch (e: any) { toast.error(e.message); }
+    setSavingMeeting(false);
+  };
+
+  const loadMonthlyScores = async () => {
+    try {
+      const month = new Date().toISOString().slice(0, 7);
+      const r = await fetch(`${API}/staff/monthly-scores?month=${month}`, { headers: authHeaders });
+      if (r.ok) { const d = await r.json(); setMonthlyScores(d.scores ?? {}); }
+    } catch { }
+  };
+
   useEffect(() => { loadStaff(); }, []);
-  useEffect(() => { if (opTab === 'revenue') loadRevList(); }, [opTab]);
+  useEffect(() => { if (opTab === 'revenue') { loadRevList(); loadMonthlyScores(); } }, [opTab]);
+  useEffect(() => { if (opTab === 'activity') loadMeetings(); }, [opTab]);
   useEffect(() => { if (actUserId) loadActLogs(actUserId); }, [actUserId]);
   useEffect(() => { if (showSearch) loadAllUsers(); }, [showSearch]);
 
@@ -7039,17 +7093,25 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
 
   const handleSaveActivity = async () => {
     if (!actUserId) { toast.error('운영진을 선택하세요'); return; }
-    const lines = STAFF_ACTIVITY_CATEGORIES
-      .filter(k => actScores[k])
-      .map(k => `${k}: ${actScores[k]}점`);
-    if (lines.length === 0) { toast.error('점수를 하나 이상 입력하세요'); return; }
+    const entries = STAFF_ACTIVITY_CATEGORIES
+      .filter(cat => !cat.wip && (parseInt(actScores[cat.key] ?? '0') || 0) > 0)
+      .map(cat => {
+        const count = parseInt(actScores[cat.key] ?? '0') || 0;
+        return { key: cat.key, label: cat.label, unit: cat.unit, count, earned: count * cat.points };
+      });
+    if (entries.length === 0) { toast.error('건수를 하나 이상 입력하세요'); return; }
+    const totalPoints = entries.reduce((s, e) => s + e.earned, 0);
+    const detail = [
+      entries.map(e => `${e.label} ${e.count}${e.unit}(+${e.earned}점)`).join(' | '),
+      actNote,
+    ].filter(Boolean).join(' | ');
+    const scores: Record<string, number> = {};
+    entries.forEach(e => { scores[e.key] = e.count; });
     setSavingAct(true);
     try {
-      const total = STAFF_ACTIVITY_CATEGORIES.reduce((s, k) => s + (parseFloat(actScores[k] ?? '0') || 0), 0);
-      const detailParts = [...lines, actNote ? `메모: ${actNote}` : ''].filter(Boolean);
       const r = await fetch(`${API}/staff/activity`, {
         method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ userId: actUserId, action: `활동점수 합계 ${total}점`, detail: detailParts.join(' | ') }),
+        body: JSON.stringify({ userId: actUserId, action: `활동점수 합계 ${totalPoints}점`, detail, totalPoints, scores }),
       });
       if (!r.ok) throw new Error('저장 실패');
       toast.success('활동 점수가 기록됐습니다.');
@@ -7305,19 +7367,57 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
               </select>
             </div>
             <div className="space-y-2 mb-3">
-              {STAFF_ACTIVITY_CATEGORIES.map(cat => (
-                <div key={cat} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-700 flex-1">{cat}</span>
-                  <input
-                    type="number" min="0" placeholder="0"
-                    value={actScores[cat] ?? ''}
-                    onChange={e => setActScores(prev => ({ ...prev, [cat]: e.target.value }))}
-                    className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right"
-                  />
-                  <span className="text-sm text-gray-500 w-4">점</span>
-                </div>
-              ))}
+              {STAFF_ACTIVITY_CATEGORIES.map(cat => {
+                const count = parseInt(actScores[cat.key] ?? '0') || 0;
+                return (
+                  <div key={cat.key} className={`flex items-center gap-2 ${cat.wip ? 'opacity-40' : ''}`}>
+                    <span className="text-sm text-gray-700 flex-1">{cat.label}</span>
+                    {cat.wip ? (
+                      <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">준비중</span>
+                    ) : (
+                      <>
+                        <input
+                          type="number" min="0" placeholder="0"
+                          value={actScores[cat.key] ?? ''}
+                          onChange={e => setActScores(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                          className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right"
+                        />
+                        <span className="text-xs text-gray-400 w-5">{cat.unit}</span>
+                        <span className={`text-xs font-semibold w-14 text-right ${count > 0 ? 'text-blue-600' : 'text-gray-300'}`}>
+                          {count > 0 ? `+${count * cat.points}점` : `${cat.points}점/${cat.unit}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
+            {/* 입력 합계 + 의무 달성 미리보기 */}
+            {(() => {
+              const total = STAFF_ACTIVITY_CATEGORIES
+                .filter(c => !c.wip)
+                .reduce((s, c) => s + ((parseInt(actScores[c.key] ?? '0') || 0) * c.points), 0);
+              if (total === 0) return null;
+              const tagTitle = (parseInt(actScores['tag'] ?? '0') || 0) + (parseInt(actScores['title'] ?? '0') || 0);
+              const wiki = parseInt(actScores['wiki'] ?? '0') || 0;
+              const meeting = parseInt(actScores['meeting'] ?? '0') || 0;
+              return (
+                <div className="bg-blue-50 rounded-xl p-3 mb-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-semibold text-blue-700">이번 입력 합계</span>
+                    <span className="text-sm font-black text-blue-700">+{total}점</span>
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tagTitle >= 20 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>태그/제목 {tagTitle}/20건</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${wiki >= 5 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>위키 {wiki}/5건</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${meeting >= 1 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>회의 {meeting}/1회</span>
+                    {total < 50 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">⚠ 50점 미만</span>}
+                  </div>
+                </div>
+              );
+            })()}
+
             <input
               value={actNote}
               onChange={e => setActNote(e.target.value)}
@@ -7355,6 +7455,53 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
               )}
             </div>
           )}
+
+          {/* 회의 관리 */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">회의 관리</h3>
+              <button onClick={loadMeetings} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 mb-4">
+              <input
+                value={newMeetingTitle}
+                onChange={e => setNewMeetingTitle(e.target.value)}
+                placeholder="회의 제목"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+              />
+              <input
+                type="date"
+                value={newMeetingDate}
+                onChange={e => setNewMeetingDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700"
+              />
+              <button onClick={handleCreateMeeting} disabled={savingMeeting || !newMeetingTitle.trim()}
+                className="w-full bg-gray-900 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-700 disabled:opacity-50">
+                {savingMeeting ? '생성 중...' : '회의 생성'}
+              </button>
+            </div>
+            {meetingsLoading ? (
+              <div className="py-4 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+            ) : meetings.length === 0 ? (
+              <div className="py-4 text-center text-gray-300 text-sm">등록된 회의가 없습니다.</div>
+            ) : (
+              <div className="space-y-2">
+                {meetings.map((m: any) => (
+                  <div key={m.id} className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{m.title}</p>
+                      <p className="text-xs text-gray-400">{m.date ?? ''} · 참석 {(m.attendees ?? []).length}명</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${m.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {m.status === 'open' ? '참석 가능' : '종료'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -7391,19 +7538,33 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
                 <p className="text-xs text-gray-500 mb-2 font-medium">배분 미리보기 (부가세 10% 차감 후)</p>
                 {(() => {
                   const net = Math.round(Number(revAmount) * 0.9);
+                  const companyAmt = Math.round(net * 0.51);
+                  const totalPts = Object.values(monthlyScores).reduce((s, p) => s + p, 0);
                   return (
                     <>
                       <div className="flex justify-between text-xs py-1 border-b border-gray-200 mb-1">
                         <span className="text-gray-400">순수익 (VAT 차감)</span>
                         <span className="text-gray-600">{net.toLocaleString()}원</span>
                       </div>
+                      <div className="flex justify-between text-xs py-1.5 border-b border-gray-100">
+                        <span className="text-gray-500 font-medium">운영사 (프린스캣) 51%</span>
+                        <span className="font-semibold text-gray-700">{companyAmt.toLocaleString()}원</span>
+                      </div>
                       {staffList.map(m => {
                         const grade = STAFF_GRADES.find(g => g.level === (m.level ?? 1)) ?? STAFF_GRADES[0];
-                        const share = Math.round(net * grade.baseEquity / 100);
+                        const baseAmt = Math.round(net * grade.baseEquity / 100);
+                        const myPts = monthlyScores[m.userId] ?? 0;
+                        const perfPct = totalPts > 0 ? 19 * myPts / totalPts : 0;
+                        const perfAmt = Math.round(net * perfPct / 100);
                         return (
                           <div key={m.userId} className="flex justify-between text-xs py-1">
-                            <span className="text-gray-600">{m.nickname} ({grade.baseEquity}%)</span>
-                            <span className="font-semibold text-gray-800">{share.toLocaleString()}원</span>
+                            <span className="text-gray-600">
+                              {m.nickname}
+                              <span className="text-gray-400 ml-1">
+                                기본{grade.baseEquity}%{totalPts > 0 ? `+성과${perfPct.toFixed(1)}%` : ''}
+                              </span>
+                            </span>
+                            <span className="font-semibold text-gray-800">{(baseAmt + perfAmt).toLocaleString()}원</span>
                           </div>
                         );
                       })}

@@ -11728,10 +11728,16 @@ app.post('/make-server-0b7d3bae/staff/activity', async (c) => {
   try {
     const auth = await requireStaffAdmin(c);
     if (auth instanceof Response) return auth;
-    const { userId, action, detail } = await c.req.json();
+    const { userId, action, detail, totalPoints, scores } = await c.req.json();
     if (!userId || !action) return c.json({ error: 'userId and action required' }, 400);
     const logs: any[] = (await kv.get(`staff_activity_${userId}`) as any[]) ?? [];
-    logs.unshift({ action, detail: detail ?? null, recordedAt: new Date().toISOString(), recordedBy: (auth as any).user.id });
+    logs.unshift({
+      action, detail: detail ?? null,
+      totalPoints: totalPoints ?? null,
+      scores: scores ?? null,
+      recordedAt: new Date().toISOString(),
+      recordedBy: (auth as any).user.id,
+    });
     await kv.set(`staff_activity_${userId}`, logs.slice(0, 200));
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
@@ -11880,6 +11886,86 @@ app.post('/make-server-0b7d3bae/staff/agenda/:id/vote', async (c) => {
     agendas[idx] = { ...agendas[idx], votes: { ...agendas[idx].votes, [userId]: vote } };
     await kv.set('staff_agenda_list', agendas);
     return c.json({ success: true, agenda: agendas[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 이달 활동 점수 합계
+app.get('/make-server-0b7d3bae/staff/monthly-scores', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const month = (c.req.query('month') ?? new Date().toISOString().slice(0, 7));
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const scores: Record<string, number> = {};
+    await Promise.all(members.map(async (m: any) => {
+      const logs: any[] = (await kv.get(`staff_activity_${m.userId}`) as any[]) ?? [];
+      const total = logs
+        .filter((l: any) => (l.recordedAt ?? '').startsWith(month) && l.totalPoints)
+        .reduce((s: number, l: any) => s + (l.totalPoints ?? 0), 0);
+      if (total > 0) scores[m.userId] = total;
+    }));
+    return c.json({ scores });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 회의 생성 (어드민)
+app.post('/make-server-0b7d3bae/staff/meeting', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const { title, date } = await c.req.json();
+    if (!title) return c.json({ error: 'title required' }, 400);
+    const meetings: any[] = (await kv.get('staff_meetings') as any[]) ?? [];
+    const meeting = {
+      id: crypto.randomUUID(),
+      title, date: date ?? '',
+      status: 'open',
+      attendees: [],
+      createdAt: new Date().toISOString(),
+      createdBy: (auth as any).user.id,
+    };
+    meetings.unshift(meeting);
+    await kv.set('staff_meetings', meetings.slice(0, 100));
+    return c.json({ success: true, meetings });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 회의 목록 조회
+app.get('/make-server-0b7d3bae/staff/meetings', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const meetings = (await kv.get('staff_meetings')) ?? [];
+    return c.json({ meetings });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 회의 참석 (자동 +10점)
+app.post('/make-server-0b7d3bae/staff/meeting/:id/attend', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const userId = (auth as any).user.id;
+    const id = c.req.param('id');
+    const meetings: any[] = (await kv.get('staff_meetings') as any[]) ?? [];
+    const idx = meetings.findIndex((m: any) => m.id === id);
+    if (idx === -1) return c.json({ error: '회의를 찾을 수 없습니다' }, 404);
+    if (meetings[idx].status !== 'open') return c.json({ error: '종료된 회의입니다' }, 400);
+    if ((meetings[idx].attendees ?? []).includes(userId)) return c.json({ error: '이미 참석했습니다' }, 400);
+    meetings[idx] = { ...meetings[idx], attendees: [...(meetings[idx].attendees ?? []), userId] };
+    await kv.set('staff_meetings', meetings);
+    // 활동 점수 자동 적립 (+10점)
+    const logs: any[] = (await kv.get(`staff_activity_${userId}`) as any[]) ?? [];
+    logs.unshift({
+      action: '활동점수 합계 10점',
+      detail: `회의 참석 1회(+10점) | ${meetings[idx].title}`,
+      totalPoints: 10,
+      scores: { meeting: 1 },
+      recordedAt: new Date().toISOString(),
+      recordedBy: userId,
+    });
+    await kv.set(`staff_activity_${userId}`, logs.slice(0, 200));
+    return c.json({ success: true, meeting: meetings[idx] });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
