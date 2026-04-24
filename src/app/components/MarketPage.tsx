@@ -1271,8 +1271,8 @@ function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClo
         }),
       });
       const d = await res.json();
-      if (d.success) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onSuccess?.(d.request); onClose(); }
-      else toast.error(d.error || '요청 실패');
+      if (d.success && d.request) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onSuccess?.(d.request); onClose(); }
+      else { toast.error(d.error || `요청 실패 (${JSON.stringify(d)})`); }
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
   }
@@ -1730,7 +1730,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
 
       {/* 승인 대기 배너 */}
-      {pendingRequest && !approvedRequest && !isAdmin && (
+      {pendingRequest && !isAdmin && (
         <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <span className="text-xl shrink-0">⏳</span>
           <div className="flex-1 min-w-0">
