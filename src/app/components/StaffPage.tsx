@@ -77,12 +77,45 @@ const TABS: { key: StaffTab; label: string }[] = [
   { key: 'activity', label: '활동' },
 ];
 
+function AgreementForm({ agreementScrolled, agreementChecked, setAgreementChecked, submittingAgreement, handleAgree, mobileHint }: {
+  agreementScrolled: boolean; agreementChecked: boolean; setAgreementChecked: (v: boolean) => void;
+  submittingAgreement: boolean; handleAgree: () => void; mobileHint?: string;
+}) {
+  return (
+    <div className="px-5 py-5 bg-gray-50 border-t border-gray-100 shrink-0">
+      {!agreementScrolled && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4">
+          <span className="text-base">⬇</span>
+          <p className="text-xs text-amber-700 font-medium">{mobileHint ?? 'PDF 전체 내용을 확인해주세요'}</p>
+        </div>
+      )}
+      <label className={`flex items-start gap-3 cursor-pointer mb-4 ${!agreementScrolled ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div
+          onClick={() => agreementScrolled && setAgreementChecked(!agreementChecked)}
+          className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+            agreementChecked ? 'bg-gray-900 border-gray-900' : 'border-gray-300'
+          }`}>
+          {agreementChecked && <span className="text-white text-[10px] font-black">✓</span>}
+        </div>
+        <span className="text-sm text-gray-700 leading-snug">동의서 내용을 모두 읽었으며 이에 동의합니다</span>
+      </label>
+      <button
+        onClick={handleAgree}
+        disabled={!agreementChecked || submittingAgreement}
+        className="w-full py-3.5 bg-gray-900 text-white text-sm font-bold rounded-2xl disabled:opacity-40 active:scale-95 transition-all">
+        {submittingAgreement ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '동의합니다'}
+      </button>
+    </div>
+  );
+}
+
 export default function StaffPage({ accessToken, userId, onExit }: StaffPageProps) {
   const [tab, setTab] = useState<StaffTab>('status');
   const [checking, setChecking] = useState(true);
   const [member, setMember] = useState<StaffMember | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  // 가이드 모달 PDF
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
   const [pdfRendering, setPdfRendering] = useState(false);
@@ -98,54 +131,91 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [submittingAgreement, setSubmittingAgreement] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // 동의서 모달 PDF (모바일 전용)
+  const [agPdfPage, setAgPdfPage] = useState(1);
+  const [agPdfTotalPages, setAgPdfTotalPages] = useState(0);
+  const [agPdfRendering, setAgPdfRendering] = useState(false);
+  const agCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const agPdfDocRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (!showGuideModal || !isMobile) return;
-    setPdfPage(1);
-    setPdfTotalPages(0);
-    pdfDocRef.current = null;
-    async function loadPdf() {
-      setPdfRendering(true);
-      try {
-        let pdfjsLib = (window as any).pdfjsLib;
-        if (!pdfjsLib) {
-          await new Promise<void>((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            s.onload = () => resolve(); s.onerror = reject;
-            document.head.appendChild(s);
-          });
-          pdfjsLib = (window as any).pdfjsLib;
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        }
-        const doc = await pdfjsLib.getDocument('/staff-agreement.pdf').promise;
-        pdfDocRef.current = doc;
-        setPdfTotalPages(doc.numPages);
-        await renderPdfPage(doc, 1);
-      } catch {}
-      setPdfRendering(false);
+  async function ensurePdfjsLib(): Promise<any> {
+    let pdfjsLib = (window as any).pdfjsLib;
+    if (!pdfjsLib) {
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload = () => resolve(); s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    loadPdf();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showGuideModal]);
+    return pdfjsLib;
+  }
 
-  async function renderPdfPage(doc: any, pageNum: number) {
-    const canvas = canvasRef.current;
-    if (!canvas || !doc) return;
-    setPdfRendering(true);
+  async function renderOnCanvas(canvas: HTMLCanvasElement, doc: any, pageNum: number, setRendering: (v: boolean) => void) {
+    setRendering(true);
     const page = await doc.getPage(pageNum);
-    const scale = (canvas.parentElement?.clientWidth || window.innerWidth) / page.getViewport({ scale: 1 }).width;
+    const dpr = window.devicePixelRatio || 1;
+    const containerWidth = canvas.parentElement?.clientWidth || window.innerWidth;
+    const scale = (containerWidth / page.getViewport({ scale: 1 }).width) * dpr;
     const viewport = page.getViewport({ scale });
     canvas.width = viewport.width;
     canvas.height = viewport.height;
+    canvas.style.width = `${viewport.width / dpr}px`;
+    canvas.style.height = `${viewport.height / dpr}px`;
     await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
-    setPdfRendering(false);
+    setRendering(false);
   }
 
+  // 가이드 모달 PDF 로드
+  useEffect(() => {
+    if (!showGuideModal || !isMobile) return;
+    setPdfPage(1); setPdfTotalPages(0); pdfDocRef.current = null;
+    (async () => {
+      setPdfRendering(true);
+      try {
+        const pdfjsLib = await ensurePdfjsLib();
+        const doc = await pdfjsLib.getDocument('/staff-agreement.pdf').promise;
+        pdfDocRef.current = doc;
+        setPdfTotalPages(doc.numPages);
+        if (canvasRef.current) await renderOnCanvas(canvasRef.current, doc, 1, setPdfRendering);
+        else setPdfRendering(false);
+      } catch { setPdfRendering(false); }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGuideModal]);
+
+  // 동의서 모달 PDF 로드
+  useEffect(() => {
+    if (!showAgreement || !isMobile) return;
+    setAgPdfPage(1); setAgPdfTotalPages(0); agPdfDocRef.current = null;
+    (async () => {
+      setAgPdfRendering(true);
+      try {
+        const pdfjsLib = await ensurePdfjsLib();
+        const doc = await pdfjsLib.getDocument('/staff-agreement.pdf').promise;
+        agPdfDocRef.current = doc;
+        setAgPdfTotalPages(doc.numPages);
+        if (agCanvasRef.current) await renderOnCanvas(agCanvasRef.current, doc, 1, setAgPdfRendering);
+        else setAgPdfRendering(false);
+        if (doc.numPages === 1) setAgreementScrolled(true);
+      } catch { setAgPdfRendering(false); }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAgreement]);
+
   async function goToPdfPage(pageNum: number) {
-    if (!pdfDocRef.current || pdfRendering) return;
+    if (!pdfDocRef.current || pdfRendering || !canvasRef.current) return;
     setPdfPage(pageNum);
-    await renderPdfPage(pdfDocRef.current, pageNum);
+    await renderOnCanvas(canvasRef.current, pdfDocRef.current, pageNum, setPdfRendering);
+  }
+
+  async function goToAgPdfPage(pageNum: number) {
+    if (!agPdfDocRef.current || agPdfRendering || !agCanvasRef.current) return;
+    setAgPdfPage(pageNum);
+    await renderOnCanvas(agCanvasRef.current, agPdfDocRef.current, pageNum, setAgPdfRendering);
+    if (pageNum >= agPdfTotalPages) setAgreementScrolled(true);
   }
 
   const [revenues, setRevenues] = useState<RevenueEntry[]>([]);
@@ -231,9 +301,9 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .finally(() => setRevLoading(false));
   }, [tab]);
 
-  // 동의서 모달 스크롤 끝 감지
+  // 동의서 모달 스크롤 끝 감지 (PC: iframe 스크롤, 모바일: 마지막 페이지 도달)
   useEffect(() => {
-    if (!showAgreement || !sentinelRef.current) return;
+    if (!showAgreement || isMobile || !sentinelRef.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setAgreementScrolled(true); },
       { threshold: 0.1 }
@@ -400,43 +470,76 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
           </div>
         </div>
 
-        {/* 스크롤 영역: iframe + 동의 폼 */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <iframe
-            src="/staff-agreement.pdf"
-            className="w-full border-0 block"
-            style={{ height: '72vh' }}
-            title="운영진 동의서"
-          />
-          {/* 센티넬: 여기까지 스크롤하면 체크박스 활성화 */}
-          <div ref={sentinelRef} className="h-px" />
-
-          {/* 동의 폼 */}
-          <div className="px-5 py-5 bg-gray-50 border-t border-gray-100">
-            {!agreementScrolled && (
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4">
-                <span className="text-base">⬇</span>
-                <p className="text-xs text-amber-700 font-medium">위로 스크롤하여 PDF 전체 내용을 확인해주세요</p>
-              </div>
-            )}
-            <label className={`flex items-start gap-3 cursor-pointer mb-4 ${!agreementScrolled ? 'opacity-40 pointer-events-none' : ''}`}>
-              <div
-                onClick={() => agreementScrolled && setAgreementChecked(v => !v)}
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-                  agreementChecked ? 'bg-gray-900 border-gray-900' : 'border-gray-300'
-                }`}>
-                {agreementChecked && <span className="text-white text-[10px] font-black">✓</span>}
-              </div>
-              <span className="text-sm text-gray-700 leading-snug">동의서 내용을 모두 읽었으며 이에 동의합니다</span>
-            </label>
-            <button
-              onClick={handleAgree}
-              disabled={!agreementChecked || submittingAgreement}
-              className="w-full py-3.5 bg-gray-900 text-white text-sm font-bold rounded-2xl disabled:opacity-40 active:scale-95 transition-all">
-              {submittingAgreement ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '동의합니다'}
-            </button>
+        {/* 헤더 우측: 모바일 페이지 표시 */}
+        {isMobile && agPdfTotalPages > 0 && (
+          <div className="shrink-0 px-4 pb-1 -mt-1">
+            <p className="text-[11px] text-gray-400 text-right">{agPdfPage} / {agPdfTotalPages} 페이지</p>
           </div>
-        </div>
+        )}
+
+        {/* PC: iframe + 스크롤 센티넬 */}
+        {!isMobile && (
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <iframe
+              src="/staff-agreement.pdf"
+              className="w-full border-0 block"
+              style={{ height: '72vh' }}
+              title="운영진 동의서"
+            />
+            <div ref={sentinelRef} className="h-px" />
+            <AgreementForm
+              agreementScrolled={agreementScrolled}
+              agreementChecked={agreementChecked}
+              setAgreementChecked={setAgreementChecked}
+              submittingAgreement={submittingAgreement}
+              handleAgree={handleAgree}
+            />
+          </div>
+        )}
+
+        {/* 모바일: canvas 페이지 뷰 */}
+        {isMobile && (
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 캔버스 영역 */}
+            <div className="flex-1 overflow-y-auto bg-gray-100 relative min-h-0">
+              {agPdfRendering && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              )}
+              <canvas ref={agCanvasRef} className="block mx-auto" style={{ maxWidth: '100%' }} />
+            </div>
+
+            {/* 페이지 네비 */}
+            <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-white">
+              <button
+                onClick={() => goToAgPdfPage(agPdfPage - 1)}
+                disabled={agPdfPage <= 1 || agPdfRendering}
+                className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all">
+                <ChevronLeft className="w-4 h-4" /> 이전
+              </button>
+              <span className="text-sm font-bold text-gray-700">
+                {agPdfTotalPages > 0 ? `${agPdfPage} / ${agPdfTotalPages}` : '불러오는 중...'}
+              </span>
+              <button
+                onClick={() => goToAgPdfPage(agPdfPage + 1)}
+                disabled={agPdfPage >= agPdfTotalPages || agPdfRendering}
+                className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all">
+                다음 <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 동의 폼 */}
+            <AgreementForm
+              agreementScrolled={agreementScrolled}
+              agreementChecked={agreementChecked}
+              setAgreementChecked={setAgreementChecked}
+              submittingAgreement={submittingAgreement}
+              handleAgree={handleAgree}
+              mobileHint={!agreementScrolled ? `마지막 페이지(${agPdfTotalPages || '?'}페이지)까지 확인해주세요` : undefined}
+            />
+          </div>
+        )}
       </div>
     );
   }
