@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
@@ -78,6 +78,13 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [member, setMember] = useState<StaffMember | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
 
+  // 동의서 모달
+  const [showAgreement, setShowAgreement] = useState(false);
+  const [agreementScrolled, setAgreementScrolled] = useState(false);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [submittingAgreement, setSubmittingAgreement] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   const [revenues, setRevenues] = useState<RevenueEntry[]>([]);
   const [revLoading, setRevLoading] = useState(false);
   const [revLoaded, setRevLoaded] = useState(false);
@@ -133,11 +140,14 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   useEffect(() => {
     fetch(`${API}/staff/me`, { headers })
       .then(r => r.json())
-      .then(d => {
+      .then(async d => {
         if (!d.member) { onExit(); return; }
         setMember(d.member);
         setIsAdmin(!!d.member.isAdmin);
         loadMonthlyScores(d.member.userId);
+        // 동의서 확인
+        const ag = await fetch(`${API}/staff/agreement-status`, { headers }).then(r => r.json()).catch(() => ({ agreed: false }));
+        if (!ag.agreed) setShowAgreement(true);
       })
       .catch(() => onExit())
       .finally(() => setChecking(false));
@@ -157,6 +167,27 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .catch(() => toast.error('수익 내역 불러오기 실패'))
       .finally(() => setRevLoading(false));
   }, [tab]);
+
+  // 동의서 모달 스크롤 끝 감지
+  useEffect(() => {
+    if (!showAgreement || !sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setAgreementScrolled(true); },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [showAgreement]);
+
+  const handleAgree = async () => {
+    setSubmittingAgreement(true);
+    try {
+      const r = await fetch(`${API}/staff/agreement`, { method: 'POST', headers });
+      if (!r.ok) throw new Error('저장 실패');
+      setShowAgreement(false);
+    } catch (e: any) { toast.error(e.message); }
+    setSubmittingAgreement(false);
+  };
 
   const loadMeetings = () => {
     fetch(`${API}/staff/meetings`, { headers })
@@ -279,6 +310,57 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
 
   const grade = STAFF_GRADES.find(g => g.level === (member.level ?? 1)) ?? STAFF_GRADES[0];
 
+  // ── 동의서 모달 ──
+  if (showAgreement) {
+    return (
+      <div className="min-h-screen bg-gray-900/80 fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl flex flex-col" style={{ maxHeight: '100dvh' }}>
+          {/* 헤더 */}
+          <div className="px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
+            <h2 className="text-base font-bold text-gray-900">운영진 동의서</h2>
+            <p className="text-xs text-gray-400 mt-0.5">내용을 끝까지 읽고 동의해주세요</p>
+          </div>
+
+          {/* PDF 뷰어 + 스크롤 감지 */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <iframe
+              src="/보드라움_운영진_안내서.pdf"
+              className="w-full border-0"
+              style={{ height: '60vh' }}
+              title="운영진 동의서"
+            />
+            {/* 센티넬: 스크롤이 여기까지 오면 체크박스 활성화 */}
+            <div ref={sentinelRef} className="h-1" />
+            <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
+              <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                위 동의서의 내용을 모두 확인하셨나요? 동의 후에는 운영진 페이지에 접근할 수 있습니다.
+              </p>
+              <label className={`flex items-center gap-3 cursor-pointer mb-4 ${!agreementScrolled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div
+                  onClick={() => agreementScrolled && setAgreementChecked(v => !v)}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                    agreementChecked ? 'bg-gray-900 border-gray-900' : 'border-gray-300'
+                  }`}>
+                  {agreementChecked && <span className="text-white text-[10px] font-black">✓</span>}
+                </div>
+                <span className="text-sm text-gray-700 font-medium">동의서 내용을 모두 읽고 이에 동의합니다</span>
+              </label>
+              {!agreementScrolled && (
+                <p className="text-[11px] text-amber-600 mb-3">⬇ PDF를 끝까지 스크롤하면 동의 체크박스가 활성화됩니다</p>
+              )}
+              <button
+                onClick={handleAgree}
+                disabled={!agreementChecked || submittingAgreement}
+                className="w-full py-3 bg-gray-900 text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:bg-gray-700 transition-colors">
+                {submittingAgreement ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '동의합니다'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -311,9 +393,14 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
             {/* 프로필 카드 */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-black text-white shrink-0"
-                  style={{ backgroundColor: grade.color }}>
-                  {(member.nickname ?? '?')[0]}
+                <div className="relative shrink-0">
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-black text-white"
+                    style={{ backgroundColor: grade.color }}>
+                    {(member.nickname ?? '?')[0]}
+                  </div>
+                  <img src={`/staff-grade-${member.level ?? 1}.webp`} alt={grade.name}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-md object-cover border-2 border-white"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -381,10 +468,12 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                   return (
                     <div key={g.level}
                       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                        isCurrent ? 'bg-opacity-10' : 'opacity-40'
+                        isCurrent ? 'ring-2 ring-offset-1' : 'opacity-40'
                       }`}
                       style={isCurrent ? { backgroundColor: g.color + '18', outline: `1.5px solid ${g.color}` } : {}}>
-                      <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                      <img src={`/staff-grade-${g.level}.webp`} alt={g.name}
+                        className="w-8 h-8 rounded-lg object-cover shrink-0"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       <div className="flex-1">
                         <span className="text-sm font-semibold text-gray-800">Lv.{g.level} {g.name}</span>
                       </div>

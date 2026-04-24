@@ -12116,6 +12116,28 @@ app.post('/make-server-0b7d3bae/staff/meeting/:id/agenda', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 동의서 확인 여부 조회
+app.get('/make-server-0b7d3bae/staff/agreement-status', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const userId = (auth as any).user.id;
+    const agreed = await kv.get(`staff_agreement_${userId}`);
+    return c.json({ agreed: !!agreed });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 동의서 동의 저장
+app.post('/make-server-0b7d3bae/staff/agreement', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const userId = (auth as any).user.id;
+    await kv.set(`staff_agreement_${userId}`, { agreedAt: new Date().toISOString(), userId });
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 app.post('/make-server-0b7d3bae/staff/update-level', async (c) => {
   try {
     const auth = await requireStaffAdmin(c);
