@@ -10016,6 +10016,44 @@ app.delete("/make-server-0b7d3bae/auction/result/:auctionId", async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// GET /auction/requests — 관리자: 경매 요청 목록 조회
+app.get("/make-server-0b7d3bae/auction/requests", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    return c.json({ requests });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// PATCH /auction/request/:requestId — 관리자: 경매 요청 상태 변경 (approve/reject)
+app.patch("/make-server-0b7d3bae/auction/request/:requestId", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const requestId = c.req.param('requestId');
+    const { status, rejectReason } = await c.req.json();
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    const idx = requests.findIndex((r: any) => r.requestId === requestId);
+    if (idx === -1) return c.json({ error: '요청을 찾을 수 없어요' }, 404);
+    requests[idx] = { ...requests[idx], status, rejectReason: rejectReason || '', reviewedAt: new Date().toISOString() };
+    await kv.set('auction_requests', requests);
+    return c.json({ success: true, request: requests[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// DELETE /auction/request/:requestId — 관리자: 경매 요청 삭제
+app.delete("/make-server-0b7d3bae/auction/request/:requestId", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const requestId = c.req.param('requestId');
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    await kv.set('auction_requests', requests.filter((r: any) => r.requestId !== requestId));
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // GET /my/auction-trades — 내가 낙찰자 또는 주체인 경매 거래 목록
 app.get("/make-server-0b7d3bae/my/auction-trades", async (c) => {
   try {

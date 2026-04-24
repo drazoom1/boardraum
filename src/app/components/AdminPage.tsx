@@ -4227,7 +4227,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'bulk-mail', label: '단체 메일', icon: <span className="text-base leading-none">📧</span>, desc: '전체 회원 메일 발송' },
     { id: 'site-games', label: '게임 DB 관리', icon: <span className="text-base leading-none">🎲</span>, desc: '등록 게임 수정·삭제·통합' },
     { id: 'operator', label: '운영자 페이지', icon: <span className="text-base leading-none">🛠</span>, desc: '운영진 관리 및 수익 정산' },
-    { id: 'auction-results', label: '경매 결과', icon: <span className="text-base leading-none">🔨</span>, desc: '낙찰 결과 보관함' },
+    { id: 'auction-results', label: '경매 관리', icon: <span className="text-base leading-none">🔨</span>, desc: '경매 요청 검토 및 낙찰 결과' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -6909,84 +6909,227 @@ interface StaffRevenueEntry {
 function AuctionResultsSection({ accessToken }: { accessToken: string }) {
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const [tab, setTab] = useState<'requests' | 'results'>('requests');
+
+  // 경매 요청
+  const [requests, setRequests] = useState<any[]>([]);
+  const [reqLoading, setReqLoading] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [rejectInputId, setRejectInputId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [deletingReqId, setDeletingReqId] = useState<string | null>(null);
+
+  // 경매 결과
+  const [results, setResults] = useState<any[]>([]);
+  const [resLoading, setResLoading] = useState(false);
+
+  const loadRequests = async () => {
+    setReqLoading(true);
+    try {
+      const r = await fetch(`${API}/auction/requests`, { headers: authHeaders });
+      if (r.ok) { const d = await r.json(); setRequests(d.requests ?? []); }
+    } catch { /* silent */ }
+    finally { setReqLoading(false); }
+  };
+
+  const loadResults = async () => {
+    setResLoading(true);
     try {
       const r = await fetch(`${API}/auction/results`, { headers: authHeaders });
       if (r.ok) { const d = await r.json(); setResults(d.results ?? []); }
     } catch { /* silent */ }
-    finally { setLoading(false); }
+    finally { setResLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadRequests(); }, []);
+  useEffect(() => { if (tab === 'results' && results.length === 0) loadResults(); }, [tab]);
+
+  async function reviewRequest(requestId: string, status: 'approved' | 'rejected', reason?: string) {
+    setReviewingId(requestId);
+    try {
+      const r = await fetch(`${API}/auction/request/${requestId}`, {
+        method: 'PATCH', headers: authHeaders,
+        body: JSON.stringify({ status, rejectReason: reason || '' }),
+      });
+      if (r.ok) {
+        setRequests(prev => prev.map(req => req.requestId === requestId ? { ...req, status, rejectReason: reason || '', reviewedAt: new Date().toISOString() } : req));
+        setRejectInputId(null); setRejectReason('');
+        toast.success(status === 'approved' ? '승인됐어요' : '거절됐어요');
+      } else toast.error('처리 실패');
+    } catch { toast.error('네트워크 오류'); }
+    setReviewingId(null);
+  }
+
+  async function deleteRequest(requestId: string) {
+    setDeletingReqId(requestId);
+    try {
+      const r = await fetch(`${API}/auction/request/${requestId}`, { method: 'DELETE', headers: authHeaders });
+      if (r.ok) { setRequests(prev => prev.filter(req => req.requestId !== requestId)); toast.success('삭제됐어요'); }
+      else toast.error('삭제 실패');
+    } catch { toast.error('네트워크 오류'); }
+    setDeletingReqId(null);
+  }
+
+  const pendingCount = requests.filter(r => r.status === 'pending').length;
+
+  const statusBadge = (status: string) => {
+    if (status === 'approved') return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">승인</span>;
+    if (status === 'rejected') return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">거절</span>;
+    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">검토 대기</span>;
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-bold text-gray-800">경매 결과 보관함</h3>
-          <p className="text-[11px] text-gray-400 mt-0.5">종료된 경매 낙찰 결과 전체 기록</p>
+          <h3 className="text-sm font-bold text-gray-800">경매 관리</h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">회원 요청 검토 및 낙찰 결과 기록</p>
         </div>
-        <button onClick={load} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+        <button onClick={tab === 'requests' ? loadRequests : loadResults} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
-      {loading ? (
-        <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
-      ) : results.length === 0 ? (
-        <div className="py-8 text-center text-gray-300 text-sm">경매 결과가 없습니다.</div>
-      ) : (
-        <div className="space-y-3 max-h-[560px] overflow-y-auto">
-          {[...results].reverse().map((r, i) => (
-            <div key={r.id ?? i} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-              <div className="flex items-start gap-3">
-                {r.imageUrl && (
-                  <img src={r.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-gray-100" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-gray-900">{r.title ?? r.gameName ?? '게임명 없음'}</span>
-                    {r.boxCondition && (
-                      <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-semibold">{r.boxCondition}</span>
+
+      {/* 탭 */}
+      <div className="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1">
+        <button onClick={() => setTab('requests')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${tab === 'requests' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+          경매 요청
+          {pendingCount > 0 && <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{pendingCount}</span>}
+        </button>
+        <button onClick={() => setTab('results')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === 'results' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+          경매 결과
+        </button>
+      </div>
+
+      {/* 경매 요청 탭 */}
+      {tab === 'requests' && (
+        reqLoading ? (
+          <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+        ) : requests.length === 0 ? (
+          <div className="py-8 text-center text-gray-300 text-sm">경매 요청이 없습니다.</div>
+        ) : (
+          <div className="space-y-3 max-h-[560px] overflow-y-auto">
+            {[...requests].reverse().map((req) => (
+              <div key={req.requestId} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  {req.imageUrl && <img src={req.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-gray-100" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900">{req.title}</span>
+                      {statusBadge(req.status)}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">요청자: <span className="font-semibold">{req.nickname || req.userId}</span></p>
+                    {req.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{req.description}</p>}
+                    <div className="flex items-center gap-3 mt-0.5 text-[11px] text-gray-400">
+                      <span>시작가 {req.startPrice}장</span>
+                      <span>입찰단위 {req.bidUnit}장</span>
+                      <span>{new Date(req.createdAt).toLocaleDateString('ko-KR')}</span>
+                    </div>
+                    {req.status === 'rejected' && req.rejectReason && (
+                      <p className="text-[11px] text-red-400 mt-1">거절 사유: {req.rejectReason}</p>
+                    )}
+
+                    {/* 거절 사유 입력 */}
+                    {rejectInputId === req.requestId && (
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                          placeholder="거절 사유 (선택)"
+                          className="flex-1 h-8 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-200"
+                        />
+                        <button onClick={() => reviewRequest(req.requestId, 'rejected', rejectReason)} disabled={reviewingId === req.requestId}
+                          className="h-8 px-3 bg-red-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-red-600">
+                          {reviewingId === req.requestId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
+                        </button>
+                        <button onClick={() => { setRejectInputId(null); setRejectReason(''); }} className="h-8 px-2 text-xs text-gray-400 hover:text-gray-600">취소</button>
+                      </div>
+                    )}
+
+                    {/* 액션 버튼 */}
+                    {req.status === 'pending' && rejectInputId !== req.requestId && (
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => reviewRequest(req.requestId, 'approved')} disabled={reviewingId === req.requestId}
+                          className="h-7 px-3 bg-emerald-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-emerald-600 flex items-center gap-1">
+                          {reviewingId === req.requestId ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" /> 승인</>}
+                        </button>
+                        <button onClick={() => setRejectInputId(req.requestId)}
+                          className="h-7 px-3 bg-red-100 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-200 flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> 거절
+                        </button>
+                      </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-xs text-gray-500">낙찰자:</span>
-                    <span className="text-xs font-semibold text-emerald-600">{r.winnerNickname ?? r.winnerId ?? '유찰'}</span>
-                    <span className="text-xs text-gray-400">|</span>
-                    <span className="text-xs text-gray-500">낙찰가:</span>
-                    <span className="text-xs font-bold text-gray-800">{(r.finalBid ?? r.currentBid)?.toLocaleString() ?? '—'}장</span>
-                  </div>
-                  {r.endedAt && (
-                    <p className="text-[11px] text-gray-400 mt-1">
-                      {new Date(r.endedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
-                    </p>
-                  )}
-                  {(r.participantCount ?? 0) > 0 && (
-                    <p className="text-[11px] text-gray-400 mt-1">참여자 {r.participantCount}명</p>
-                  )}
-                  {r.escrowAmount && (
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        r.escrowStatus === 'released' ? 'bg-emerald-100 text-emerald-700' :
-                        r.escrowStatus === 'tracking_submitted' ? 'bg-blue-100 text-blue-600' :
-                        'bg-orange-100 text-orange-600'
-                      }`}>
-                        {r.escrowStatus === 'released' ? `✓ 완료 (${r.escrowAmount}장)` :
-                         r.escrowStatus === 'tracking_submitted' ? `배송중 · ${r.escrowAmount}장 보유 중` :
-                         `보유 중 ${r.escrowAmount}장`}
-                      </span>
-                      {r.winnerNickname && <span className="text-[11px] text-gray-400">낙찰: {r.winnerNickname}</span>}
-                    </div>
-                  )}
+
+                  {/* 삭제 버튼 */}
+                  <button onClick={() => deleteRequest(req.requestId)} disabled={deletingReqId === req.requestId}
+                    className="p-1 text-gray-300 hover:text-red-400 transition-colors shrink-0">
+                    {deletingReqId === req.requestId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* 경매 결과 탭 */}
+      {tab === 'results' && (
+        resLoading ? (
+          <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+        ) : results.length === 0 ? (
+          <div className="py-8 text-center text-gray-300 text-sm">경매 결과가 없습니다.</div>
+        ) : (
+          <div className="space-y-3 max-h-[560px] overflow-y-auto">
+            {[...results].reverse().map((r, i) => (
+              <div key={r.id ?? i} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  {r.imageUrl && (
+                    <img src={r.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-gray-100" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-gray-900">{r.title ?? r.gameName ?? '게임명 없음'}</span>
+                      {r.boxCondition && (
+                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-semibold">{r.boxCondition}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-xs text-gray-500">낙찰자:</span>
+                      <span className="text-xs font-semibold text-emerald-600">{r.winnerNickname ?? r.winnerId ?? '유찰'}</span>
+                      <span className="text-xs text-gray-400">|</span>
+                      <span className="text-xs text-gray-500">낙찰가:</span>
+                      <span className="text-xs font-bold text-gray-800">{(r.finalBid ?? r.currentBid)?.toLocaleString() ?? '—'}장</span>
+                    </div>
+                    {r.endedAt && (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        {new Date(r.endedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                      </p>
+                    )}
+                    {(r.participantCount ?? 0) > 0 && (
+                      <p className="text-[11px] text-gray-400 mt-1">참여자 {r.participantCount}명</p>
+                    )}
+                    {r.escrowAmount && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          r.escrowStatus === 'released' ? 'bg-emerald-100 text-emerald-700' :
+                          r.escrowStatus === 'tracking_submitted' ? 'bg-blue-100 text-blue-600' :
+                          'bg-orange-100 text-orange-600'
+                        }`}>
+                          {r.escrowStatus === 'released' ? `✓ 완료 (${r.escrowAmount}장)` :
+                           r.escrowStatus === 'tracking_submitted' ? `배송중 · ${r.escrowAmount}장 보유 중` :
+                           `보유 중 ${r.escrowAmount}장`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
