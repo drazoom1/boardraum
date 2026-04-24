@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
 
@@ -78,6 +78,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [member, setMember] = useState<StaffMember | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showGradeModal, setShowGradeModal] = useState(false);
 
   // 동의서 모달
   const [showAgreement, setShowAgreement] = useState(false);
@@ -398,6 +399,47 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
           />
         </div>
       )}
+      {/* ── 당근 등급표 모달 ── */}
+      {showGradeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900">당근 등급표</h2>
+              <button onClick={() => setShowGradeModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-1.5">
+              {STAFF_GRADES.map(g => {
+                const isCurrent = g.level === (member.level ?? 1);
+                return (
+                  <div key={g.level}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                      isCurrent ? '' : 'opacity-50'
+                    }`}
+                    style={isCurrent ? { backgroundColor: g.color + '15', outline: `1.5px solid ${g.color}` } : {}}>
+                    <img src={`/staff-grade-${g.level}.webp`} alt={g.name}
+                      className="w-8 h-8 rounded-lg object-cover shrink-0"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Lv.{g.level} {g.name}</p>
+                    </div>
+                    <span className="text-sm font-bold" style={{ color: isCurrent ? g.color : '#9ca3af' }}>
+                      기본 {g.baseEquity}%
+                    </span>
+                    {isCurrent && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white shrink-0"
+                        style={{ backgroundColor: g.color }}>현재</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
@@ -431,27 +473,34 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
             {/* 프로필 카드 */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center gap-4">
-                <div className="relative shrink-0">
+                <div className="shrink-0">
                   <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-black text-white"
                     style={{ backgroundColor: grade.color }}>
                     {(member.nickname ?? '?')[0]}
                   </div>
-                  <img src={`/staff-grade-${member.level ?? 1}.webp`} alt={grade.name}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-md object-cover border-2 border-white"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-base font-bold text-gray-900">{member.nickname}</span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: grade.color }}>
+                  <p className="text-base font-bold text-gray-900 mb-2">{member.nickname}</p>
+                  {/* 당근 등급 */}
+                  <div className="flex items-center gap-1.5">
+                    <img src={`/staff-grade-${member.level ?? 1}.webp`} alt={grade.name}
+                      className="rounded object-cover shrink-0"
+                      style={{ width: '1.25rem', height: '1.25rem' }}
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <span className="text-sm font-bold" style={{ color: grade.color }}>
                       Lv.{member.level ?? 1} {grade.name}
                     </span>
+                    <button
+                      onClick={() => setShowGradeModal(true)}
+                      className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors shrink-0"
+                      title="등급표 보기">
+                      <span className="text-[10px] font-black text-gray-500">?</span>
+                    </button>
                   </div>
-                  <p className="text-xs text-gray-400">합류일 · {(member.joinedAt ?? '').slice(0, 10)}</p>
+                  <p className="text-xs text-gray-400 mt-1.5">합류일 · {(member.joinedAt ?? '').slice(0, 10)}</p>
                   {isAdmin && (
                     <button onClick={handleResetAgreement}
-                      className="mt-1.5 text-[11px] text-gray-400 hover:text-red-500 underline underline-offset-2 transition-colors">
+                      className="mt-1 text-[11px] text-gray-400 hover:text-red-500 underline underline-offset-2 transition-colors">
                       동의서 초기화
                     </button>
                   )}
@@ -503,36 +552,6 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
               </div>
             </div>
 
-            {/* 등급 로드맵 */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h3 className="text-sm font-bold text-gray-800 mb-4">등급 로드맵</h3>
-              <div className="space-y-2">
-                {STAFF_GRADES.map(g => {
-                  const isCurrent = g.level === (member.level ?? 1);
-                  return (
-                    <div key={g.level}
-                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                        isCurrent ? 'ring-2 ring-offset-1' : 'opacity-40'
-                      }`}
-                      style={isCurrent ? { backgroundColor: g.color + '18', outline: `1.5px solid ${g.color}` } : {}}>
-                      <img src={`/staff-grade-${g.level}.webp`} alt={g.name}
-                        className="w-8 h-8 rounded-lg object-cover shrink-0"
-                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      <div className="flex-1">
-                        <span className="text-sm font-semibold text-gray-800">Lv.{g.level} {g.name}</span>
-                      </div>
-                      <span className="text-sm font-bold" style={{ color: isCurrent ? g.color : '#9ca3af' }}>
-                        {g.baseEquity}%
-                      </span>
-                      {isCurrent && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                          style={{ backgroundColor: g.color }}>현재</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </>
         )}
 
