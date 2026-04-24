@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { toast } from 'sonner';
-import { Loader2, MessageSquare, Lock, Send, Package, X, ChevronDown, ChevronUp, Search, ChevronRight, Plus } from 'lucide-react';
+import { Loader2, MessageSquare, Lock, Send, Package, X, ChevronDown, ChevronUp, Search, ChevronRight, Plus, Info } from 'lucide-react';
 import type { BoardGame } from '../App';
 
 export interface MarketListing {
@@ -1460,6 +1460,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [approvedRequest, setApprovedRequest] = useState<any>(null);
   const [pendingRequest, setPendingRequest] = useState<any>(null);
   const [launching, setLaunching] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
   const [addressInput, setAddressInput] = useState('');
   const [submittingAddress, setSubmittingAddress] = useState(false);
@@ -1753,6 +1754,11 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         <div className="flex items-center gap-2">
           <span className="text-lg">🥕</span>
           <span className="text-sm font-bold text-orange-700">보너스카드 경매</span>
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="w-5 h-5 rounded-full bg-orange-200 text-orange-600 flex items-center justify-center hover:bg-orange-300 transition-colors shrink-0">
+            <Info className="w-3 h-3" />
+          </button>
           {auction && (
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
               auction.status === 'active' ? 'bg-green-100 text-green-700' :
@@ -2076,6 +2082,41 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
             )}
           </div>
         </div>
+      )}
+
+      {showInfoModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[9998]" onClick={() => setShowInfoModal(false)} />
+          <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
+              <div className="px-5 pt-5 pb-3 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🥕</span>
+                  <h3 className="text-base font-bold text-gray-900">보너스카드 경매란?</h3>
+                </div>
+                <button onClick={() => setShowInfoModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              <div className="overflow-y-auto flex-1 px-5 pb-6 space-y-4 text-sm text-gray-700 leading-relaxed">
+                <p>보드라움 커뮤니티에서 지급된 <span className="font-bold text-orange-600">보너스카드</span>를 입찰해 진행하는 경매예요.</p>
+
+                <div className="bg-orange-50 rounded-xl p-4 space-y-2">
+                  <p className="font-bold text-orange-700 text-xs uppercase tracking-wide">구매자 입장</p>
+                  <p className="text-sm">활동으로 모은 보너스카드를 입찰에 사용해 게임을 낙찰받을 수 있어요. 현금 없이 커뮤니티 활동만으로 게임을 얻는 방법이에요 🎲</p>
+                </div>
+
+                <div className="bg-emerald-50 rounded-xl p-4 space-y-2">
+                  <p className="font-bold text-emerald-700 text-xs uppercase tracking-wide">판매자 입장</p>
+                  <p className="text-sm">갖고 있는 게임을 경매에 올려 보너스카드로 받을 수 있어요. 받은 카드는 이벤트·혜택에 활용할 수 있답니다 💳</p>
+                </div>
+
+                <div className="bg-blue-50 rounded-xl p-4 space-y-2">
+                  <p className="font-bold text-blue-700 text-xs uppercase tracking-wide">💡 이런 게임 어때요?</p>
+                  <p className="text-sm">자주 안 꺼내는 파티게임, 간단한 카드게임처럼 가볍게 방출할 게임이 있다면 경매에 올려보세요. 새 주인을 찾아주면서 보너스카드도 챙길 수 있어요!</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {showCreateModal && (
