@@ -1454,20 +1454,20 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
             )}
           </div>
-          {auction.resultExpiresAt && (
-            <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center justify-between mt-2">
+            {auction.resultExpiresAt ? (
               <p className="text-[11px] text-gray-400">
                 배너 종료까지 <span className="font-mono font-semibold text-gray-500">{timeDisplay}</span>
               </p>
-              {isAdmin && (
-                <button onClick={handleDismissBanner} disabled={dismissingBanner}
-                  className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
-                  {dismissingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  배너 종료
-                </button>
-              )}
-            </div>
-          )}
+            ) : <span />}
+            {isAdmin && (
+              <button onClick={handleDismissBanner} disabled={dismissingBanner}
+                className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
+                {dismissingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                배너 종료
+              </button>
+            )}
+          </div>
         </div>
       )}
 
