@@ -1212,7 +1212,7 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
 
 // ===== 경매 요청 모달 (일반 회원) =====
 function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClose, onSuccess }: {
-  accessToken: string; userNickname?: string; ownedGames?: BoardGame[]; onClose: () => void; onSuccess?: () => void;
+  accessToken: string; userNickname?: string; ownedGames?: BoardGame[]; onClose: () => void; onSuccess?: (request: any) => void;
 }) {
   const AAPI = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
   const [step, setStep] = useState<'game' | 'form'>('game');
@@ -1270,7 +1270,7 @@ function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClo
         }),
       });
       const d = await res.json();
-      if (d.success) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onSuccess?.(); onClose(); }
+      if (d.success) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onSuccess?.(d.request); onClose(); }
       else toast.error(d.error || '요청 실패');
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
@@ -2086,7 +2086,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           userNickname={userNickname}
           ownedGames={ownedGames}
           onClose={() => setShowRequestModal(false)}
-          onSuccess={() => loadMyApprovedRequest()}
+          onSuccess={(req) => setPendingRequest(req)}
         />
       )}
     </div>
