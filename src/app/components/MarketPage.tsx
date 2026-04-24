@@ -1885,8 +1885,13 @@ function TrackingInput({ auctionId, accessToken, currentTracking, escrowStatus, 
   auctionId: string; accessToken: string; currentTracking?: string; escrowStatus?: string; onSubmitted: () => void;
 }) {
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const [editing, setEditing] = useState(!currentTracking);
   const [trackingInput, setTrackingInput] = useState(currentTracking || '');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (currentTracking) { setTrackingInput(currentTracking); setEditing(false); }
+  }, [currentTracking]);
 
   async function submitTracking() {
     if (!trackingInput.trim()) return;
@@ -1897,24 +1902,30 @@ function TrackingInput({ auctionId, accessToken, currentTracking, escrowStatus, 
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ trackingNumber: trackingInput.trim() }),
       });
-      if (r.ok) { toast.success('송장번호가 등록됐어요. 2일 후 카드가 지급됩니다.'); onSubmitted(); }
-      else { const d = await r.json(); toast.error(d.error || '실패'); }
+      if (r.ok) {
+        toast.success(currentTracking ? '송장번호가 수정됐어요.' : '송장번호가 등록됐어요. 2일 후 카드가 지급됩니다.');
+        setEditing(false);
+        onSubmitted();
+      } else { const d = await r.json(); toast.error(d.error || '실패'); }
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
   }
 
-  if (currentTracking || escrowStatus === 'tracking_submitted' || escrowStatus === 'released') {
+  if (!editing) {
     return (
       <div>
         <p className="text-xs font-semibold text-gray-500 mb-1">🚚 송장번호</p>
-        <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{currentTracking || trackingInput || '등록됨'}</p>
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{currentTracking || trackingInput || '등록됨'}</p>
+          <button onClick={() => setEditing(true)} className="text-xs text-orange-500 hover:text-orange-700 font-semibold shrink-0">수정</button>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-500 mb-1.5">🚚 송장번호 입력</p>
+      <p className="text-xs font-semibold text-gray-500 mb-1.5">🚚 송장번호 {currentTracking ? '수정' : '입력'}</p>
       <div className="flex gap-2">
         <input
           value={trackingInput}
@@ -1922,11 +1933,18 @@ function TrackingInput({ auctionId, accessToken, currentTracking, escrowStatus, 
           onKeyDown={e => e.key === 'Enter' && submitTracking()}
           placeholder="운송장 번호"
           className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+          autoFocus
         />
         <button onClick={submitTracking} disabled={submitting || !trackingInput.trim()}
           className="text-sm font-semibold text-white bg-teal-500 hover:bg-teal-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
-          {submitting ? '...' : '등록'}
+          {submitting ? '...' : currentTracking ? '수정' : '등록'}
         </button>
+        {currentTracking && (
+          <button onClick={() => { setTrackingInput(currentTracking); setEditing(false); }}
+            className="text-xs text-gray-400 hover:text-gray-600 px-2 rounded-lg border border-gray-200 transition-colors">
+            취소
+          </button>
+        )}
       </div>
     </div>
   );
