@@ -9834,7 +9834,7 @@ app.post("/make-server-0b7d3bae/auction/request/:requestId/launch", async (c) =>
       gameId: '', type: 'user',
       winnerUserId: null, winnerNickname: null, createdAt: now,
       hostUserId: user.id, hostNickname,
-      tags: [], entryFee: 0,
+      tags: [], entryFee: Math.max(0, Number(req.entryFee) || 0),
       fromRequestId: requestId,
     };
 
@@ -10119,11 +10119,15 @@ app.patch("/make-server-0b7d3bae/auction/request/:requestId", async (c) => {
   if (error) return error;
   try {
     const requestId = c.req.param('requestId');
-    const { status, rejectReason } = await c.req.json();
+    const { status, rejectReason, entryFee } = await c.req.json();
     const requests = (await kv.get('auction_requests') as any[] | null) || [];
     const idx = requests.findIndex((r: any) => r.requestId === requestId);
     if (idx === -1) return c.json({ error: '요청을 찾을 수 없어요' }, 404);
-    requests[idx] = { ...requests[idx], status, rejectReason: rejectReason || '', reviewedAt: new Date().toISOString() };
+    requests[idx] = {
+      ...requests[idx], status, rejectReason: rejectReason || '',
+      reviewedAt: new Date().toISOString(),
+      ...(entryFee !== undefined ? { entryFee: Math.max(0, Number(entryFee) || 0) } : {}),
+    };
     await kv.set('auction_requests', requests);
     return c.json({ success: true, request: requests[idx] });
   } catch (e) { return c.json({ error: String(e) }, 500); }

@@ -6915,6 +6915,8 @@ function AuctionResultsSection({ accessToken }: { accessToken: string }) {
   // 경매 요청
   const [requests, setRequests] = useState<any[]>([]);
   const [reqLoading, setReqLoading] = useState(false);
+  const [expandedReqId, setExpandedReqId] = useState<string | null>(null);
+  const [entryFeeMap, setEntryFeeMap] = useState<Record<string, string>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [rejectInputId, setRejectInputId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -6947,13 +6949,16 @@ function AuctionResultsSection({ accessToken }: { accessToken: string }) {
 
   async function reviewRequest(requestId: string, status: 'approved' | 'rejected', reason?: string) {
     setReviewingId(requestId);
+    const entryFee = Number(entryFeeMap[requestId] || '0') || 0;
     try {
       const r = await fetch(`${API}/auction/request/${requestId}`, {
         method: 'PATCH', headers: authHeaders,
-        body: JSON.stringify({ status, rejectReason: reason || '' }),
+        body: JSON.stringify({ status, rejectReason: reason || '', entryFee }),
       });
       if (r.ok) {
-        setRequests(prev => prev.map(req => req.requestId === requestId ? { ...req, status, rejectReason: reason || '', reviewedAt: new Date().toISOString() } : req));
+        setRequests(prev => prev.map(req => req.requestId === requestId
+          ? { ...req, status, rejectReason: reason || '', entryFee, reviewedAt: new Date().toISOString() }
+          : req));
         setRejectInputId(null); setRejectReason('');
         toast.success(status === 'approved' ? '승인됐어요' : '거절됐어요');
       } else toast.error('처리 실패');
@@ -7012,65 +7017,113 @@ function AuctionResultsSection({ accessToken }: { accessToken: string }) {
           <div className="py-8 text-center text-gray-300 text-sm">경매 요청이 없습니다.</div>
         ) : (
           <div className="space-y-3 max-h-[560px] overflow-y-auto">
-            {[...requests].reverse().map((req) => (
-              <div key={req.requestId} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                <div className="flex items-start gap-3">
-                  {req.imageUrl && <img src={req.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-gray-100" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-gray-900">{req.title}</span>
-                      {statusBadge(req.status)}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">요청자: <span className="font-semibold">{req.nickname || req.userId}</span></p>
-                    {req.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{req.description}</p>}
-                    <div className="flex items-center gap-3 mt-0.5 text-[11px] text-gray-400">
-                      <span>시작가 {req.startPrice}장</span>
-                      <span>입찰단위 {req.bidUnit}장</span>
-                      <span>{new Date(req.createdAt).toLocaleDateString('ko-KR')}</span>
-                    </div>
-                    {req.status === 'rejected' && req.rejectReason && (
-                      <p className="text-[11px] text-red-400 mt-1">거절 사유: {req.rejectReason}</p>
-                    )}
-
-                    {/* 거절 사유 입력 */}
-                    {rejectInputId === req.requestId && (
-                      <div className="mt-2 flex gap-2">
-                        <input
-                          value={rejectReason} onChange={e => setRejectReason(e.target.value)}
-                          placeholder="거절 사유 (선택)"
-                          className="flex-1 h-8 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-200"
-                        />
-                        <button onClick={() => reviewRequest(req.requestId, 'rejected', rejectReason)} disabled={reviewingId === req.requestId}
-                          className="h-8 px-3 bg-red-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-red-600">
-                          {reviewingId === req.requestId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
-                        </button>
-                        <button onClick={() => { setRejectInputId(null); setRejectReason(''); }} className="h-8 px-2 text-xs text-gray-400 hover:text-gray-600">취소</button>
+            {[...requests].reverse().map((req) => {
+              const isExpanded = expandedReqId === req.requestId;
+              return (
+                <div key={req.requestId} className="rounded-xl border border-gray-100 bg-gray-50 overflow-hidden">
+                  {/* 요약 헤더 (클릭으로 펼치기) */}
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpandedReqId(isExpanded ? null : req.requestId)}>
+                    {req.imageUrl
+                      ? <img src={req.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 border border-gray-100" />
+                      : <div className="w-10 h-10 rounded-lg bg-gray-200 shrink-0 flex items-center justify-center text-base">🎲</div>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-gray-900 truncate">{req.title}</span>
+                        {statusBadge(req.status)}
+                        {req.entryFee > 0 && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-semibold">입장료 {req.entryFee}장</span>}
                       </div>
-                    )}
-
-                    {/* 액션 버튼 */}
-                    {req.status === 'pending' && rejectInputId !== req.requestId && (
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={() => reviewRequest(req.requestId, 'approved')} disabled={reviewingId === req.requestId}
-                          className="h-7 px-3 bg-emerald-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-emerald-600 flex items-center gap-1">
-                          {reviewingId === req.requestId ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" /> 승인</>}
-                        </button>
-                        <button onClick={() => setRejectInputId(req.requestId)}
-                          className="h-7 px-3 bg-red-100 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-200 flex items-center gap-1">
-                          <XCircle className="w-3 h-3" /> 거절
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 삭제 버튼 */}
-                  <button onClick={() => deleteRequest(req.requestId)} disabled={deletingReqId === req.requestId}
-                    className="p-1 text-gray-300 hover:text-red-400 transition-colors shrink-0">
-                    {deletingReqId === req.requestId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      <p className="text-[11px] text-gray-400 mt-0.5">{req.nickname || req.userId} · {new Date(req.createdAt).toLocaleDateString('ko-KR')}</p>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
+
+                  {/* 펼쳐진 상세 내용 */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 px-4 py-4 space-y-3 bg-white">
+                      {/* 실물 사진 */}
+                      {(req.imageUrls?.length > 0 || req.imageUrl) && (
+                        <div>
+                          <p className="text-[11px] font-semibold text-gray-400 mb-1.5">실물 사진</p>
+                          <div className="flex gap-2 flex-wrap">
+                            {(req.imageUrls?.length > 0 ? req.imageUrls : [req.imageUrl]).map((url: string, i: number) => (
+                              <img key={i} src={url} className="w-16 h-16 rounded-lg object-cover border border-gray-100" />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 기본 정보 */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                        <div><span className="text-gray-400">상품명</span><p className="font-semibold text-gray-800 mt-0.5">{req.title}</p></div>
+                        {req.boxCondition && <div><span className="text-gray-400">게임 상태</span><p className="font-semibold text-gray-800 mt-0.5">{req.boxCondition}급</p></div>}
+                        <div><span className="text-gray-400">시작가</span><p className="font-semibold text-gray-800 mt-0.5">{req.startPrice}장</p></div>
+                        <div><span className="text-gray-400">입찰 단위</span><p className="font-semibold text-gray-800 mt-0.5">{req.bidUnit}장</p></div>
+                        {req.prize && <div className="col-span-2"><span className="text-gray-400">상품 내용</span><p className="font-semibold text-gray-800 mt-0.5">{req.prize}</p></div>}
+                        {req.description && <div className="col-span-2"><span className="text-gray-400">설명</span><p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{req.description}</p></div>}
+                      </div>
+
+                      {/* 입장료 설정 (대기/승인 상태에서만) */}
+                      {req.status !== 'rejected' && req.status !== 'launched' && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-500 mb-1">입장료 설정 (카드 수, 0 = 무료)</label>
+                          <input
+                            type="number" min="0"
+                            value={entryFeeMap[req.requestId] ?? String(req.entryFee ?? 0)}
+                            onChange={e => setEntryFeeMap(prev => ({ ...prev, [req.requestId]: e.target.value }))}
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300"
+                            placeholder="0"
+                          />
+                        </div>
+                      )}
+                      {req.status === 'approved' && req.entryFee > 0 && (
+                        <p className="text-[11px] text-purple-600 font-semibold">✓ 입장료 {req.entryFee}장으로 승인됨</p>
+                      )}
+
+                      {req.status === 'rejected' && req.rejectReason && (
+                        <p className="text-[11px] text-red-400">거절 사유: {req.rejectReason}</p>
+                      )}
+
+                      {/* 거절 사유 입력 */}
+                      {rejectInputId === req.requestId && (
+                        <div className="flex gap-2">
+                          <input value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                            placeholder="거절 사유 (선택)"
+                            className="flex-1 h-8 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-200" />
+                          <button onClick={() => reviewRequest(req.requestId, 'rejected', rejectReason)} disabled={reviewingId === req.requestId}
+                            className="h-8 px-3 bg-red-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-red-600">
+                            {reviewingId === req.requestId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
+                          </button>
+                          <button onClick={() => { setRejectInputId(null); setRejectReason(''); }} className="h-8 px-2 text-xs text-gray-400 hover:text-gray-600">취소</button>
+                        </div>
+                      )}
+
+                      {/* 액션 버튼 */}
+                      <div className="flex items-center justify-between">
+                        {req.status === 'pending' && rejectInputId !== req.requestId && (
+                          <div className="flex gap-2">
+                            <button onClick={() => reviewRequest(req.requestId, 'approved')} disabled={reviewingId === req.requestId}
+                              className="h-8 px-4 bg-emerald-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 hover:bg-emerald-600 flex items-center gap-1">
+                              {reviewingId === req.requestId ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" /> 승인</>}
+                            </button>
+                            <button onClick={() => setRejectInputId(req.requestId)}
+                              className="h-8 px-3 bg-red-100 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-200 flex items-center gap-1">
+                              <XCircle className="w-3 h-3" /> 거절
+                            </button>
+                          </div>
+                        )}
+                        {req.status !== 'pending' && <div />}
+                        <button onClick={() => deleteRequest(req.requestId)} disabled={deletingReqId === req.requestId}
+                          className="p-1.5 text-gray-300 hover:text-red-400 transition-colors">
+                          {deletingReqId === req.requestId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
