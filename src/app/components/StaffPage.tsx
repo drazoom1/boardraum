@@ -88,6 +88,12 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [agendaDesc, setAgendaDesc] = useState('');
   const [submittingAgenda, setSubmittingAgenda] = useState(false);
 
+  // 회의 생성 (관리자)
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [newMeetingTitle, setNewMeetingTitle] = useState('');
+  const [newMeetingDate, setNewMeetingDate] = useState('');
+  const [creatingMeeting, setCreatingMeeting] = useState(false);
+
   const [actLogs, setActLogs] = useState<ActivityLog[]>([]);
   const [actLoading, setActLoading] = useState(false);
   const [actLoaded, setActLoaded] = useState(false);
@@ -123,6 +129,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .then(d => {
         if (!d.member) { onExit(); return; }
         setMember(d.member);
+        setIsAdmin(!!d.member.isAdmin);
         loadMonthlyScores(d.member.userId);
       })
       .catch(() => onExit())
@@ -181,6 +188,24 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       setMonthlyScore(s => s + 10);
     } catch (e: any) { toast.error(e.message); }
     setAttendingId(null);
+  };
+
+  const handleCreateMeeting = async () => {
+    if (!newMeetingTitle.trim()) { toast.error('회의 제목을 입력해주세요'); return; }
+    setCreatingMeeting(true);
+    try {
+      const r = await fetch(`${API}/staff/meeting`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ title: newMeetingTitle.trim(), date: newMeetingDate }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? '생성 실패');
+      setMeetings(d.meetings ?? []);
+      setNewMeetingTitle('');
+      setNewMeetingDate('');
+      toast.success('회의가 생성됐습니다.');
+    } catch (e: any) { toast.error(e.message); }
+    setCreatingMeeting(false);
   };
 
   const handleSubmitAgenda = async (meetingId: string) => {
@@ -407,7 +432,35 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
 
         {/* ── 회의 ── */}
         {tab === 'meeting' && (
-          meetings.length === 0 ? (
+          <>
+          {/* 관리자 전용: 회의 생성 */}
+          {isAdmin && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">회의 생성</h3>
+              <div className="space-y-2">
+                <input
+                  value={newMeetingTitle}
+                  onChange={e => setNewMeetingTitle(e.target.value)}
+                  placeholder="회의 제목 *"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gray-400"
+                />
+                <input
+                  type="date"
+                  value={newMeetingDate}
+                  onChange={e => setNewMeetingDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-gray-400"
+                />
+                <button
+                  onClick={handleCreateMeeting}
+                  disabled={creatingMeeting || !newMeetingTitle.trim()}
+                  className="w-full bg-gray-900 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-700 disabled:opacity-50">
+                  {creatingMeeting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '회의 생성'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {meetings.length === 0 ? (
             <div className="py-20 text-center text-gray-300 text-sm">등록된 회의가 없습니다.</div>
           ) : (
             <div className="space-y-3">
@@ -504,7 +557,8 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                 );
               })}
             </div>
-          )
+          )}
+          </>
         )}
 
         {/* ── 활동 ── */}
