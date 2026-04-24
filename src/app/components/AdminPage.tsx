@@ -6860,7 +6860,7 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
 // ─── 운영자 페이지 ─────────────────────────────────────────────────────────────
 
-type OperatorTab = 'staff-list' | 'activity' | 'revenue';
+type OperatorTab = 'staff-list' | 'activity' | 'revenue' | 'agreements';
 
 const STAFF_ACTIVITY_CATEGORIES = [
   { key: 'tag',     label: '태그 매기기',    points: 2,  unit: '건', wip: false },
@@ -6950,6 +6950,12 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   // 이달 활동 점수 (수익 배분용)
   const [monthlyScores, setMonthlyScores] = useState<Record<string, number>>({});
 
+  // 동의 현황
+  const [agreementsLog, setAgreementsLog] = useState<any[]>([]);
+  const [agreementsActiveIds, setAgreementsActiveIds] = useState<string[]>([]);
+  const [agreementsLoading, setAgreementsLoading] = useState(false);
+  const [resettingAgreementId, setResettingAgreementId] = useState<string | null>(null);
+
   const loadStaff = async () => {
     setStaffLoading(true);
     try {
@@ -7030,9 +7036,34 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     } catch { }
   };
 
+  const loadAgreements = async () => {
+    setAgreementsLoading(true);
+    try {
+      const r = await fetch(`${API}/staff/agreements`, { headers: authHeaders });
+      if (r.ok) {
+        const d = await r.json();
+        setAgreementsLog(d.log ?? []);
+        setAgreementsActiveIds(d.activeIds ?? []);
+      }
+    } catch { /* silent */ }
+    finally { setAgreementsLoading(false); }
+  };
+
+  const handleResetAgreement = async (userId: string) => {
+    setResettingAgreementId(userId);
+    try {
+      const r = await fetch(`${API}/staff/agreement/${userId}`, { method: 'DELETE', headers: authHeaders });
+      if (!r.ok) throw new Error('초기화 실패');
+      setAgreementsActiveIds(prev => prev.filter(id => id !== userId));
+      toast.success('동의서가 초기화됐습니다.');
+    } catch (e: any) { toast.error(e.message); }
+    setResettingAgreementId(null);
+  };
+
   useEffect(() => { loadStaff(); }, []);
   useEffect(() => { if (opTab === 'revenue') { loadRevList(); loadMonthlyScores(); } }, [opTab]);
   useEffect(() => { if (opTab === 'activity') loadMeetings(); }, [opTab]);
+  useEffect(() => { if (opTab === 'agreements') loadAgreements(); }, [opTab]);
   useEffect(() => { if (actUserId) loadActLogs(actUserId); }, [actUserId]);
   useEffect(() => { if (showSearch) loadAllUsers(); }, [showSearch]);
 
@@ -7185,9 +7216,10 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   });
 
   const opTabs: { id: OperatorTab; label: string }[] = [
-    { id: 'staff-list', label: '운영진 목록' },
-    { id: 'activity',   label: '활동 점수' },
-    { id: 'revenue',    label: '수익 등록' },
+    { id: 'staff-list',  label: '운영진 목록' },
+    { id: 'activity',    label: '활동 점수' },
+    { id: 'revenue',     label: '수익 등록' },
+    { id: 'agreements',  label: '동의 현황' },
   ];
 
   return (
@@ -7619,6 +7651,60 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── 동의 현황 ── */}
+      {opTab === 'agreements' && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">동의 현황</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">운영진 동의서 법적 기록 · 동의 시각, IP, 기기 포함</p>
+            </div>
+            <button onClick={loadAgreements} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+          {agreementsLoading ? (
+            <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+          ) : agreementsLog.length === 0 ? (
+            <div className="py-8 text-center text-gray-300 text-sm">동의 기록이 없습니다.</div>
+          ) : (
+            <div className="space-y-2 max-h-[480px] overflow-y-auto">
+              {agreementsLog.map((entry, i) => {
+                const isActive = agreementsActiveIds.includes(entry.userId);
+                return (
+                  <div key={i} className={`rounded-xl border px-4 py-3 ${isActive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-gray-900">{entry.nickname}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+                            {isActive ? '✓ 동의 유효' : '초기화됨'}
+                          </span>
+                          <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">{entry.documentVersion ?? 'v1'}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-1 font-mono">
+                          {new Date(entry.agreedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">IP: {entry.ip}</p>
+                        <p className="text-[10px] text-gray-300 mt-0.5 truncate">{entry.userAgent}</p>
+                      </div>
+                      {isActive && (
+                        <button
+                          onClick={() => handleResetAgreement(entry.userId)}
+                          disabled={resettingAgreementId === entry.userId}
+                          className="shrink-0 text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-1 rounded-lg transition-colors disabled:opacity-40">
+                          {resettingAgreementId === entry.userId ? <Loader2 className="w-3 h-3 animate-spin inline" /> : '초기화'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

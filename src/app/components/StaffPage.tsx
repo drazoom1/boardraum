@@ -77,6 +77,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [checking, setChecking] = useState(true);
   const [member, setMember] = useState<StaffMember | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   // 동의서 모달
   const [showAgreement, setShowAgreement] = useState(false);
@@ -187,6 +188,18 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       setShowAgreement(false);
     } catch (e: any) { toast.error(e.message); }
     setSubmittingAgreement(false);
+  };
+
+  const handleResetAgreement = async () => {
+    if (!member) return;
+    try {
+      const r = await fetch(`${API}/staff/agreement/${member.userId}`, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error('초기화 실패');
+      setAgreementScrolled(false);
+      setAgreementChecked(false);
+      setShowAgreement(true);
+      toast.success('동의서가 초기화됐습니다.');
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const loadMeetings = () => {
@@ -313,48 +326,53 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   // ── 동의서 모달 ──
   if (showAgreement) {
     return (
-      <div className="min-h-screen bg-gray-900/80 fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl flex flex-col" style={{ maxHeight: '100dvh' }}>
-          {/* 헤더 */}
-          <div className="px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
-            <h2 className="text-base font-bold text-gray-900">운영진 동의서</h2>
-            <p className="text-xs text-gray-400 mt-0.5">내용을 끝까지 읽고 동의해주세요</p>
+      <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{ height: '100dvh' }}>
+        {/* 헤더 */}
+        <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-white">
+          <button onClick={onExit} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-gray-900 text-sm">운영진 동의서</p>
+            <p className="text-[11px] text-gray-400">끝까지 스크롤 후 동의해주세요</p>
           </div>
+        </div>
 
-          {/* PDF 뷰어 + 스크롤 감지 */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <iframe
-              src="/보드라움_운영진_안내서.pdf"
-              className="w-full border-0"
-              style={{ height: '60vh' }}
-              title="운영진 동의서"
-            />
-            {/* 센티넬: 스크롤이 여기까지 오면 체크박스 활성화 */}
-            <div ref={sentinelRef} className="h-1" />
-            <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
-              <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                위 동의서의 내용을 모두 확인하셨나요? 동의 후에는 운영진 페이지에 접근할 수 있습니다.
-              </p>
-              <label className={`flex items-center gap-3 cursor-pointer mb-4 ${!agreementScrolled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <div
-                  onClick={() => agreementScrolled && setAgreementChecked(v => !v)}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                    agreementChecked ? 'bg-gray-900 border-gray-900' : 'border-gray-300'
-                  }`}>
-                  {agreementChecked && <span className="text-white text-[10px] font-black">✓</span>}
-                </div>
-                <span className="text-sm text-gray-700 font-medium">동의서 내용을 모두 읽고 이에 동의합니다</span>
-              </label>
-              {!agreementScrolled && (
-                <p className="text-[11px] text-amber-600 mb-3">⬇ PDF를 끝까지 스크롤하면 동의 체크박스가 활성화됩니다</p>
-              )}
-              <button
-                onClick={handleAgree}
-                disabled={!agreementChecked || submittingAgreement}
-                className="w-full py-3 bg-gray-900 text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:bg-gray-700 transition-colors">
-                {submittingAgreement ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '동의합니다'}
-              </button>
-            </div>
+        {/* 스크롤 영역: iframe + 동의 폼 */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <iframe
+            src="/staff-agreement.pdf"
+            className="w-full border-0 block"
+            style={{ height: '72vh' }}
+            title="운영진 동의서"
+          />
+          {/* 센티넬: 여기까지 스크롤하면 체크박스 활성화 */}
+          <div ref={sentinelRef} className="h-px" />
+
+          {/* 동의 폼 */}
+          <div className="px-5 py-5 bg-gray-50 border-t border-gray-100">
+            {!agreementScrolled && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4">
+                <span className="text-base">⬇</span>
+                <p className="text-xs text-amber-700 font-medium">위로 스크롤하여 PDF 전체 내용을 확인해주세요</p>
+              </div>
+            )}
+            <label className={`flex items-start gap-3 cursor-pointer mb-4 ${!agreementScrolled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div
+                onClick={() => agreementScrolled && setAgreementChecked(v => !v)}
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                  agreementChecked ? 'bg-gray-900 border-gray-900' : 'border-gray-300'
+                }`}>
+                {agreementChecked && <span className="text-white text-[10px] font-black">✓</span>}
+              </div>
+              <span className="text-sm text-gray-700 leading-snug">동의서 내용을 모두 읽었으며 이에 동의합니다</span>
+            </label>
+            <button
+              onClick={handleAgree}
+              disabled={!agreementChecked || submittingAgreement}
+              className="w-full py-3.5 bg-gray-900 text-white text-sm font-bold rounded-2xl disabled:opacity-40 active:scale-95 transition-all">
+              {submittingAgreement ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '동의합니다'}
+            </button>
           </div>
         </div>
       </div>
@@ -363,6 +381,23 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 운영진 가이드 PDF 모달 — 풀스크린 */}
+      {showGuideModal && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{ height: '100dvh' }}>
+          <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-white">
+            <button onClick={() => setShowGuideModal(false)}
+              className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="font-bold text-gray-900 flex-1 text-sm">운영진 가이드</span>
+          </div>
+          <iframe
+            src="/staff-agreement.pdf"
+            className="flex-1 w-full border-0"
+            title="운영진 가이드"
+          />
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
@@ -371,7 +406,10 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
             <ArrowLeft className="w-5 h-5" />
           </button>
           <span className="font-bold text-gray-900 flex-1">운영진 페이지</span>
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: grade.color }} />
+          <button onClick={() => setShowGuideModal(true)}
+            className="text-xs text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors font-medium">
+            📋 운영진 가이드
+          </button>
         </div>
         <div className="max-w-lg mx-auto px-4 flex border-t border-gray-100">
           {TABS.map(t => (
@@ -411,6 +449,12 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                     </span>
                   </div>
                   <p className="text-xs text-gray-400">합류일 · {(member.joinedAt ?? '').slice(0, 10)}</p>
+                  {isAdmin && (
+                    <button onClick={handleResetAgreement}
+                      className="mt-1.5 text-[11px] text-gray-400 hover:text-red-500 underline underline-offset-2 transition-colors">
+                      동의서 초기화
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
