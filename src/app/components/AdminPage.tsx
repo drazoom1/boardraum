@@ -6968,6 +6968,20 @@ function AuctionResultsSection({ accessToken }: { accessToken: string }) {
                   {(r.participantCount ?? 0) > 0 && (
                     <p className="text-[11px] text-gray-400 mt-1">참여자 {r.participantCount}명</p>
                   )}
+                  {r.escrowAmount && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                        r.escrowStatus === 'released' ? 'bg-emerald-100 text-emerald-700' :
+                        r.escrowStatus === 'tracking_submitted' ? 'bg-blue-100 text-blue-600' :
+                        'bg-orange-100 text-orange-600'
+                      }`}>
+                        {r.escrowStatus === 'released' ? `✓ 완료 (${r.escrowAmount}장)` :
+                         r.escrowStatus === 'tracking_submitted' ? `배송중 · ${r.escrowAmount}장 보유 중` :
+                         `보유 중 ${r.escrowAmount}장`}
+                      </span>
+                      {r.winnerNickname && <span className="text-[11px] text-gray-400">낙찰: {r.winnerNickname}</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

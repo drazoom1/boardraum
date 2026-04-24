@@ -1321,9 +1321,13 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
+  const [addressInput, setAddressInput] = useState('');
+  const [submittingAddress, setSubmittingAddress] = useState(false);
+  const [addressSubmitted, setAddressSubmitted] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
+  const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -1469,6 +1473,38 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     setSendingChat(false);
   }
 
+  async function submitAddress() {
+    if (!accessToken || !auction || !addressInput.trim()) return;
+    setSubmittingAddress(true);
+    try {
+      const r = await fetch(`${API}/auction/${auction.auctionId}/winner-address`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: addressInput.trim() }),
+      });
+      if (r.ok) { toast.success('배송지가 등록됐어요'); setAddressSubmitted(true); loadDeliveryInfo(auction.auctionId); }
+      else { const d = await r.json(); toast.error(d.error || '실패'); }
+    } catch { toast.error('네트워크 오류'); }
+    setSubmittingAddress(false);
+  }
+
+  async function loadDeliveryInfo(auctionId: string) {
+    if (!accessToken) return;
+    try {
+      const r = await fetch(`${API}/auction/${auctionId}/delivery-info`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) { const d = await r.json(); setDeliveryInfo(d); }
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (auction?.status === 'ended' && auction.auctionId && accessToken) {
+      loadDeliveryInfo(auction.auctionId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auction?.auctionId, auction?.status, accessToken]);
+
   async function handleDismissBanner() {
     if (!accessToken || !auction) return;
     setDismissingBanner(true);
@@ -1583,7 +1619,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                 </div>
               )}
               {auction.prize && <p className="text-xs text-gray-500 mt-0.5">{auction.prize}</p>}
-              <p className="text-xs text-gray-400 mt-0.5">입찰 단위 {auction.bidUnit}장</p>
+              <p className="text-xs text-gray-400 mt-0.5">입찰 단위 {auction.bidUnit}장{(auction as any).hostNickname ? ` · 주체: ${(auction as any).hostNickname}` : ''}</p>
             </div>
           </div>
           <div className="bg-white/70 rounded-xl px-4 py-3 mb-3">
@@ -1663,6 +1699,73 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
             )}
           </div>
+          {/* 배송지/송장 섹션: 낙찰자·주체자·관리자만 표시 */}
+          {auction.winnerNickname && (() => {
+            const isWinner = !!userId && auction.winnerUserId === userId;
+            const isHost = !!userId && (auction as any).hostUserId === userId;
+            if (!isWinner && !isHost && !isAdmin) return null;
+            const addr = deliveryInfo?.address;
+            const tracking = deliveryInfo?.trackingNumber;
+            const escrowStatus = deliveryInfo?.escrowStatus;
+            return (
+              <div className="mt-3 bg-white/80 rounded-xl px-4 py-3 space-y-2">
+                {/* 낙찰자: 배송지 입력 */}
+                {isWinner && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">📦 배송지 입력</p>
+                    {addr ? (
+                      <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
+                    ) : addressSubmitted ? (
+                      <p className="text-xs text-emerald-600 font-semibold">✓ 배송지 등록 완료</p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          value={addressInput}
+                          onChange={e => setAddressInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && submitAddress()}
+                          placeholder="받으실 주소를 입력해주세요"
+                          className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                        />
+                        <button onClick={submitAddress} disabled={submittingAddress || !addressInput.trim()}
+                          className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+                          {submittingAddress ? '...' : '등록'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* 주체자·관리자: 배송지 + 송장 입력 */}
+                {(isHost || (!isWinner && isAdmin)) && (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">📦 낙찰자 배송지</p>
+                      {addr ? (
+                        <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{addr}</p>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">아직 배송지 미입력</p>
+                      )}
+                    </div>
+                    <TrackingInput
+                      auctionId={auction.auctionId}
+                      accessToken={accessToken!}
+                      currentTracking={tracking}
+                      escrowStatus={escrowStatus}
+                      onSubmitted={() => loadDeliveryInfo(auction.auctionId)}
+                    />
+                  </>
+                )}
+                {/* 에스크로 상태 표시 */}
+                {escrowStatus && (
+                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                    <span className="text-[11px] text-gray-400">에스크로:</span>
+                    <span className={`text-[11px] font-bold ${escrowStatus === 'released' ? 'text-emerald-600' : 'text-orange-500'}`}>
+                      {escrowStatus === 'released' ? '✓ 완료' : escrowStatus === 'tracking_submitted' ? '송장 접수 · 2일 대기중' : '보유 중'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div className="flex items-center justify-between mt-2">
             {auction.resultExpiresAt ? (
               <p className="text-[11px] text-gray-400">
@@ -1831,6 +1934,190 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   );
 }
 
+function TrackingInput({ auctionId, accessToken, currentTracking, escrowStatus, onSubmitted }: {
+  auctionId: string; accessToken: string; currentTracking?: string; escrowStatus?: string; onSubmitted: () => void;
+}) {
+  const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const [trackingInput, setTrackingInput] = useState(currentTracking || '');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitTracking() {
+    if (!trackingInput.trim()) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`${API}/auction/${auctionId}/submit-tracking`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingNumber: trackingInput.trim() }),
+      });
+      if (r.ok) { toast.success('송장번호가 등록됐어요. 2일 후 카드가 지급됩니다.'); onSubmitted(); }
+      else { const d = await r.json(); toast.error(d.error || '실패'); }
+    } catch { toast.error('네트워크 오류'); }
+    setSubmitting(false);
+  }
+
+  if (currentTracking || escrowStatus === 'tracking_submitted' || escrowStatus === 'released') {
+    return (
+      <div>
+        <p className="text-xs font-semibold text-gray-500 mb-1">🚚 송장번호</p>
+        <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{currentTracking || trackingInput || '등록됨'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-500 mb-1.5">🚚 송장번호 입력</p>
+      <div className="flex gap-2">
+        <input
+          value={trackingInput}
+          onChange={e => setTrackingInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submitTracking()}
+          placeholder="운송장 번호"
+          className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+        />
+        <button onClick={submitTracking} disabled={submitting || !trackingInput.trim()}
+          className="text-sm font-semibold text-white bg-teal-500 hover:bg-teal-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+          {submitting ? '...' : '등록'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MyAuctionTrades({ accessToken, userId, isAdmin }: {
+  accessToken: string; userId?: string; isAdmin?: boolean;
+}) {
+  const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const [trades, setTrades] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadTrades() {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/my/auction-trades`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) { const d = await r.json(); setTrades(d.trades || []); }
+    } catch {}
+    setLoading(false);
+  }
+
+  useEffect(() => { loadTrades(); }, [accessToken]);
+
+  if (loading) return (
+    <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-orange-400" /></div>
+  );
+
+  if (trades.length === 0) return (
+    <div className="text-center py-10 text-sm text-gray-400 bg-white rounded-2xl shadow-sm">참여한 경매 거래가 없어요</div>
+  );
+
+  return (
+    <div className="space-y-3 mb-4">
+      {trades.map((t: any) => {
+        const isWinner = userId && t.winnerUserId === userId;
+        const isHost = userId && t.hostUserId === userId;
+        const escrowStatus: string = t.escrowStatus || 'pending';
+        return (
+          <div key={t.auctionId} className="bg-white rounded-2xl shadow-sm border border-orange-100 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              {t.imageUrl && <img src={t.imageUrl} className="w-12 h-12 rounded-xl object-cover shrink-0 bg-gray-100" />}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 text-sm truncate">{t.title ?? t.gameName ?? '게임명 없음'}</p>
+                <p className="text-xs text-orange-500 font-semibold mt-0.5">{t.finalBid ?? t.currentBid}장 낙찰</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  낙찰: {t.winnerNickname || '—'} · 주체: {t.hostNickname || '관리자'}
+                </p>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                escrowStatus === 'released' ? 'bg-emerald-100 text-emerald-700' :
+                escrowStatus === 'tracking_submitted' ? 'bg-blue-100 text-blue-600' :
+                'bg-orange-100 text-orange-600'
+              }`}>
+                {escrowStatus === 'released' ? '완료' : escrowStatus === 'tracking_submitted' ? '배송중' : '대기중'}
+              </span>
+            </div>
+            {/* 배송지: 낙찰자·주체자·관리자 */}
+            {(isWinner || isHost || isAdmin) && (
+              <div className="border-t border-gray-50 pt-3 space-y-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-400 mb-1">배송지</p>
+                  {t.address ? (
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{t.address}</p>
+                  ) : isWinner ? (
+                    <WinnerAddressInput auctionId={t.auctionId} accessToken={accessToken} onSubmitted={loadTrades} />
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">낙찰자 미입력</p>
+                  )}
+                </div>
+                {(isHost || isAdmin) && (
+                  <TrackingInput
+                    auctionId={t.auctionId}
+                    accessToken={accessToken}
+                    currentTracking={t.trackingNumber}
+                    escrowStatus={escrowStatus}
+                    onSubmitted={loadTrades}
+                  />
+                )}
+                {t.escrowAmount && (
+                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                    <span className="text-[11px] text-gray-400">에스크로:</span>
+                    <span className={`text-[11px] font-bold ${escrowStatus === 'released' ? 'text-emerald-600' : 'text-orange-500'}`}>
+                      {escrowStatus === 'released' ? `✓ 완료 (${t.escrowAmount}장 지급됨)` :
+                       escrowStatus === 'tracking_submitted' ? `보유 ${t.escrowAmount}장 · 2일 후 지급` :
+                       `보유 ${t.escrowAmount}장`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WinnerAddressInput({ auctionId, accessToken, onSubmitted }: {
+  auctionId: string; accessToken: string; onSubmitted: () => void;
+}) {
+  const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const [addressInput, setAddressInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit() {
+    if (!addressInput.trim()) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`${API}/auction/${auctionId}/winner-address`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: addressInput.trim() }),
+      });
+      if (r.ok) { toast.success('배송지가 등록됐어요'); onSubmitted(); }
+      else { const d = await r.json(); toast.error(d.error || '실패'); }
+    } catch { toast.error('네트워크 오류'); }
+    setSubmitting(false);
+  }
+
+  return (
+    <div className="flex gap-2">
+      <input
+        value={addressInput}
+        onChange={e => setAddressInput(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+        placeholder="받으실 주소를 입력해주세요"
+        className="flex-1 text-sm rounded-lg border border-gray-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+      />
+      <button onClick={submit} disabled={submitting || !addressInput.trim()}
+        className="text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors">
+        {submitting ? '...' : '등록'}
+      </button>
+    </div>
+  );
+}
+
 export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCancelListing, ownedGames = [] }: {
   accessToken?: string; userId?: string; userNickname?: string; isAdmin?: boolean;
   onCancelListing?: (gameId: string) => void;
@@ -1839,6 +2126,7 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'active' | 'sold' | 'all' | 'mine'>('active');
+  const [showMyAuctions, setShowMyAuctions] = useState(false);
   const [search, setSearch] = useState('');
   const [showMyGamesModal, setShowMyGamesModal] = useState(false);
   const [selectedListingGame, setSelectedListingGame] = useState<BoardGame | null>(null);
@@ -1903,14 +2191,25 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
         {/* 필터 탭 */}
         <div className="flex items-center gap-2 flex-wrap">
           {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key as any)}
-              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${filter === f.key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            <button key={f.key} onClick={() => { setFilter(f.key as any); setShowMyAuctions(false); }}
+              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${filter === f.key && !showMyAuctions ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               {f.label}
             </button>
           ))}
-          <span className="ml-auto text-sm text-gray-400">{filtered.length}개</span>
+          {accessToken && (
+            <button onClick={() => setShowMyAuctions(v => !v)}
+              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${showMyAuctions ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>
+              내 경매
+            </button>
+          )}
+          <span className="ml-auto text-sm text-gray-400">{!showMyAuctions ? filtered.length : ''}개</span>
         </div>
       </div>
+
+      {/* 내 경매 거래 섹션 */}
+      {showMyAuctions && accessToken && (
+        <MyAuctionTrades accessToken={accessToken} userId={userId} isAdmin={isAdmin} />
+      )}
 
       {/* 내 게임 방출 및 판매 버튼 */}
       {accessToken && ownedGames.length > 0 && (

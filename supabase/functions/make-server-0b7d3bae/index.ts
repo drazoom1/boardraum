@@ -9585,6 +9585,20 @@ async function requireAdmin(c: any): Promise<{ user: any; error?: Response }> {
 // 🎯 경매 시스템 API
 // ============================================================
 
+// 헬퍼: auction_results 특정 항목 업데이트
+async function updateAuctionResult(auctionId: string, updates: any) {
+  try {
+    const results = (await kv.get('auction_results') as any[] | null) || [];
+    const idx = results.findIndex((r: any) => r.auctionId === auctionId);
+    if (idx >= 0) { results[idx] = { ...results[idx], ...updates }; await kv.set('auction_results', results); }
+  } catch {}
+}
+
+// 헬퍼: userId가 관리자인지 soft 체크
+async function checkIsAdmin(userId: string): Promise<boolean> {
+  try { const role = await getUserRole(userId); return role === 'admin'; } catch { return false; }
+}
+
 // GET /auction/active — 현재/최근 경매 조회 (공개)
 app.get("/make-server-0b7d3bae/auction/active", async (c) => {
   try {
@@ -9615,7 +9629,7 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
       auction.resultExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       if (!auction.archived) {
         auction.archived = true;
-        // 낙찰자 카드 차감 + 호스트 지급
+        // 낙찰자 카드 차감 (지급은 송장 등록 후 2일 뒤 지연 지급)
         if (auction.winnerUserId) {
           const winnerBids = (bids as any[]).filter((b: any) => b.userId === auction.winnerUserId).sort((a: any, b: any) => b.amount - a.amount);
           const winningBid = winnerBids[0];
@@ -9623,13 +9637,8 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
             const wCards = await readCardCountByEmail(winningBid.email, auction.winnerUserId);
             await writeCardCountByEmail(winningBid.email, Math.max(0, wCards - auction.currentBid));
           }
-          if (auction.hostUserId) {
-            const hostEntry = await kv.get(`beta_user_${auction.hostUserId}`).catch(() => null) as any;
-            if (hostEntry?.email) {
-              const hCards = await readCardCountByEmail(hostEntry.email, auction.hostUserId);
-              await writeCardCountByEmail(hostEntry.email, hCards + auction.currentBid);
-            }
-          }
+          auction.escrowAmount = auction.currentBid;
+          auction.escrowStatus = 'pending';
         }
         const results = (await kv.get('auction_results') as any[] | null) || [];
         results.unshift({
@@ -9639,6 +9648,7 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
           hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
           finalBid: auction.currentBid, startPrice: auction.startPrice,
           participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
+          escrowAmount: auction.escrowAmount ?? auction.currentBid, escrowStatus: 'pending',
         });
         await kv.set('auction_results', results);
       }
@@ -9866,15 +9876,8 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
         await writeCardCountByEmail(winningBid.email, Math.max(0, winnerCards - auction.currentBid));
         console.log(`[경매낙찰] 차감 ${winningBid.email} -${auction.currentBid}장`);
       }
-      // 호스트에게 카드 지급
-      if (auction.hostUserId) {
-        const hostEntry = await kv.get(`beta_user_${auction.hostUserId}`).catch(() => null) as any;
-        if (hostEntry?.email) {
-          const hostCards = await readCardCountByEmail(hostEntry.email, auction.hostUserId);
-          await writeCardCountByEmail(hostEntry.email, hostCards + auction.currentBid);
-          console.log(`[경매낙찰] 지급 ${hostEntry.email} +${auction.currentBid}장`);
-        }
-      }
+      auction.escrowAmount = auction.currentBid;
+      auction.escrowStatus = 'pending';
     }
 
     // 아카이브
@@ -9909,6 +9912,144 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/dismiss-banner", async (c) =>
     auction.resultExpiresAt = new Date(Date.now() - 1000).toISOString();
     await kv.set(`auction_${auctionId}`, auction);
     return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ─── 경매 배달 / 에스크로 ─────────────────────────────────────
+
+// POST /auction/:id/winner-address — 낙찰자 배송지 입력
+app.post("/make-server-0b7d3bae/auction/:auctionId/winner-address", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    const isAdmin = await checkIsAdmin(user.id);
+    if (user.id !== auction.winnerUserId && !isAdmin) return c.json({ error: '낙찰자만 배송지를 입력할 수 있어요' }, 403);
+    const { address } = await c.req.json();
+    if (!address?.trim()) return c.json({ error: '배송지를 입력해주세요' }, 400);
+    const delivery = { address: address.trim(), submittedAt: new Date().toISOString(), winnerUserId: user.id };
+    await kv.set(`auction_delivery_${auctionId}`, delivery);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// GET /auction/:id/delivery-info — 배달 정보 조회 (낙찰자/주체/관리자)
+app.get("/make-server-0b7d3bae/auction/:auctionId/delivery-info", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    const isAdmin = await checkIsAdmin(user.id);
+    if (user.id !== auction.winnerUserId && user.id !== auction.hostUserId && !isAdmin)
+      return c.json({ error: '권한이 없어요' }, 403);
+    const delivery = await kv.get(`auction_delivery_${auctionId}`) as any | null;
+    return c.json({
+      address: delivery?.address || null,
+      addressSubmittedAt: delivery?.submittedAt || null,
+      trackingNumber: auction.trackingNumber || null,
+      trackingCarrier: auction.trackingCarrier || null,
+      trackingSubmittedAt: auction.trackingSubmittedAt || null,
+      releaseAt: auction.releaseAt || null,
+      escrowAmount: auction.escrowAmount || 0,
+      escrowStatus: auction.escrowStatus || 'pending',
+      releasedAt: auction.releasedAt || null,
+    });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:id/submit-tracking — 주체가 송장번호 입력
+app.post("/make-server-0b7d3bae/auction/:auctionId/submit-tracking", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    const isAdmin = await checkIsAdmin(user.id);
+    if (user.id !== auction.hostUserId && !isAdmin) return c.json({ error: '경매 주체만 송장을 등록할 수 있어요' }, 403);
+    const { trackingNumber, carrier } = await c.req.json();
+    if (!trackingNumber?.trim()) return c.json({ error: '송장번호를 입력해주세요' }, 400);
+    const now = new Date().toISOString();
+    auction.trackingNumber = trackingNumber.trim();
+    auction.trackingCarrier = carrier?.trim() || '';
+    auction.trackingSubmittedAt = now;
+    auction.releaseAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    auction.escrowStatus = 'tracking_submitted';
+    await kv.set(`auction_${auctionId}`, auction);
+    await updateAuctionResult(auctionId, { trackingNumber: auction.trackingNumber, trackingCarrier: auction.trackingCarrier, escrowStatus: 'tracking_submitted', releaseAt: auction.releaseAt });
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// GET /my/auction-trades — 내가 낙찰자 또는 주체인 경매 거래 목록
+app.get("/make-server-0b7d3bae/my/auction-trades", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const isAdmin = await checkIsAdmin(user.id);
+    const results = (await kv.get('auction_results') as any[] | null) || [];
+    const myTrades = results.filter((r: any) =>
+      r.winnerUserId === user.id || r.hostUserId === user.id || isAdmin
+    );
+    // 지연 지급 처리 (releaseAt 지난 항목)
+    let updatedResults = false;
+    for (const trade of myTrades) {
+      if (trade.escrowStatus === 'tracking_submitted' && trade.releaseAt && new Date(trade.releaseAt) <= new Date()) {
+        const auction = await kv.get(`auction_${trade.auctionId}`) as any | null;
+        if (auction && auction.escrowStatus === 'tracking_submitted' && auction.hostUserId) {
+          const hostEntry = await kv.get(`beta_user_${auction.hostUserId}`).catch(() => null) as any;
+          if (hostEntry?.email) {
+            const hCards = await readCardCountByEmail(hostEntry.email, auction.hostUserId);
+            await writeCardCountByEmail(hostEntry.email, hCards + (auction.escrowAmount || 0));
+            const releasedAt = new Date().toISOString();
+            auction.escrowStatus = 'released';
+            auction.releasedAt = releasedAt;
+            await kv.set(`auction_${auction.auctionId}`, auction);
+            trade.escrowStatus = 'released';
+            trade.releasedAt = releasedAt;
+            updatedResults = true;
+          }
+        }
+      }
+    }
+    if (updatedResults) {
+      const allResults = (await kv.get('auction_results') as any[] | null) || [];
+      for (const trade of myTrades) {
+        const idx = allResults.findIndex((r: any) => r.auctionId === trade.auctionId);
+        if (idx >= 0) allResults[idx] = { ...allResults[idx], ...trade };
+      }
+      await kv.set('auction_results', allResults);
+    }
+    // 각 거래에 배송지 정보 포함
+    const tradesWithDelivery = await Promise.all(myTrades.map(async (trade: any) => {
+      const delivery = await kv.get(`auction_delivery_${trade.auctionId}`).catch(() => null) as any;
+      const auction = await kv.get(`auction_${trade.auctionId}`).catch(() => null) as any;
+      return {
+        ...trade,
+        escrowStatus: auction?.escrowStatus || trade.escrowStatus,
+        escrowAmount: auction?.escrowAmount || trade.escrowAmount,
+        trackingNumber: auction?.trackingNumber || trade.trackingNumber,
+        trackingCarrier: auction?.trackingCarrier || trade.trackingCarrier,
+        releaseAt: auction?.releaseAt || trade.releaseAt,
+        releasedAt: auction?.releasedAt || trade.releasedAt,
+        winnerAddress: delivery?.address || null,
+        winnerAddressAt: delivery?.submittedAt || null,
+        role: trade.winnerUserId === user.id ? 'winner' : (trade.hostUserId === user.id ? 'host' : 'admin'),
+      };
+    }));
+    return c.json({ trades: tradesWithDelivery });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
