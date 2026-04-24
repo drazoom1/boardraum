@@ -1686,6 +1686,9 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-600 text-sm truncate">{auction.title}</p>
               {auction.prize && <p className="text-xs text-gray-400">{auction.prize}</p>}
+              {(auction as any).hostNickname && (
+                <p className="text-xs text-gray-400 mt-0.5">주체: <span className="font-semibold text-gray-500">{(auction as any).hostNickname}</span></p>
+              )}
             </div>
           </div>
           <div className="bg-white/70 rounded-xl px-4 py-3 text-center">
