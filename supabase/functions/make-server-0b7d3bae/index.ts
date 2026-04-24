@@ -9632,12 +9632,33 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
     const startAt = new Date(nowMs + schedAfter * 60 * 1000).toISOString();
     const endAt = new Date(nowMs + schedAfter * 60 * 1000 + timer * 60 * 1000).toISOString();
     const status: 'scheduled' | 'active' = schedAfter > 0 ? 'scheduled' : 'active';
-    const resolvedImageUrls: string[] = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : (imageUrl ? [imageUrl] : []);
+    const resolvedImageUrls: string[] = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
     const now = new Date(nowMs).toISOString();
+
+    // 보드위키 게임 표지 이미지 조회 (오버라이드 → site_game → 전달받은 imageUrl 순)
+    let coverImageUrl = imageUrl || '';
+    if (gameId) {
+      try {
+        const idOverride = await kv.get(`game_image_id_${gameId}`).catch(() => null) as any;
+        if (idOverride?.url) {
+          coverImageUrl = idOverride.url;
+        } else {
+          const siteGame = await kv.get(`site_game_${gameId}`).catch(() => null) as any;
+          if (siteGame) {
+            if (siteGame.bggId) {
+              const bggOverride = await kv.get(`game_image_bgg_${siteGame.bggId}`).catch(() => null) as any;
+              coverImageUrl = bggOverride?.url || siteGame.imageUrl || coverImageUrl;
+            } else {
+              coverImageUrl = siteGame.imageUrl || coverImageUrl;
+            }
+          }
+        }
+      } catch {}
+    }
 
     const auction = {
       auctionId, title: title.trim(), description: description?.trim() || '',
-      imageUrl: resolvedImageUrls[0] || '', imageUrls: resolvedImageUrls,
+      imageUrl: coverImageUrl, imageUrls: resolvedImageUrls,
       startPrice: Number(startPrice), bidUnit: Number(bidUnit),
       status, scheduledAt: startAt, startAt, endAt,
       timerMinutes: timer, scheduleAfterMinutes: schedAfter,
