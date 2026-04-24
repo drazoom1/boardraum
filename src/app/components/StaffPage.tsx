@@ -97,6 +97,8 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   // 회의 완료 (관리자)
   const [closeFormId, setCloseFormId] = useState<string | null>(null);
   const [minutesText, setMinutesText] = useState('');
+  const [minutesPdfFile, setMinutesPdfFile] = useState<File | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [closingMeeting, setClosingMeeting] = useState(false);
 
   const [actLogs, setActLogs] = useState<ActivityLog[]>([]);
@@ -216,17 +218,33 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const handleCloseMeeting = async (meetingId: string) => {
     setClosingMeeting(true);
     try {
+      let minutesPdfUrl: string | null = null;
+      if (minutesPdfFile) {
+        setUploadingPdf(true);
+        const fd = new FormData();
+        fd.append('file', minutesPdfFile);
+        const uploadRes = await fetch(`${API}/staff/upload-pdf`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: fd,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error ?? 'PDF 업로드 실패');
+        minutesPdfUrl = uploadData.url;
+        setUploadingPdf(false);
+      }
       const r = await fetch(`${API}/staff/meeting/${meetingId}/close`, {
         method: 'POST', headers,
-        body: JSON.stringify({ minutes: minutesText.trim() }),
+        body: JSON.stringify({ minutes: minutesText.trim(), minutesPdfUrl }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? '완료 처리 실패');
       setMeetings(prev => prev.map(m => m.id === meetingId ? d.meeting : m));
       setCloseFormId(null);
       setMinutesText('');
+      setMinutesPdfFile(null);
       toast.success('회의가 완료 처리됐습니다.');
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) { toast.error(e.message); setUploadingPdf(false); }
     setClosingMeeting(false);
   };
 
@@ -551,13 +569,38 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                           onChange={e => setMinutesText(e.target.value)}
                           placeholder="회의록 내용 (결정사항, 논의내용 등)"
                           rows={4}
-                          className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm mb-3 bg-white focus:outline-none focus:border-red-400 resize-none"
+                          className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm mb-2 bg-white focus:outline-none focus:border-red-400 resize-none"
                         />
+                        {/* PDF 첨부 */}
+                        <label className="flex items-center gap-2 cursor-pointer mb-3">
+                          <div className={`flex-1 flex items-center gap-2 border rounded-xl px-3 py-2.5 text-sm ${minutesPdfFile ? 'border-red-400 bg-white' : 'border-red-200 bg-white'}`}>
+                            <span className="text-lg">📎</span>
+                            <span className={minutesPdfFile ? 'text-gray-800 truncate' : 'text-gray-400'}>
+                              {minutesPdfFile ? minutesPdfFile.name : 'PDF 파일 첨부 (선택)'}
+                            </span>
+                            {minutesPdfFile && (
+                              <button
+                                type="button"
+                                onClick={e => { e.preventDefault(); setMinutesPdfFile(null); }}
+                                className="ml-auto text-gray-400 hover:text-red-500 text-xs shrink-0">✕</button>
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={e => setMinutesPdfFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
                         <button
                           onClick={() => handleCloseMeeting(m.id)}
-                          disabled={closingMeeting}
+                          disabled={closingMeeting || uploadingPdf}
                           className="w-full py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 disabled:opacity-50">
-                          {closingMeeting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '회의 완료 확정'}
+                          {uploadingPdf
+                            ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />PDF 업로드 중...</span>
+                            : closingMeeting
+                            ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                            : '회의 완료 확정'}
                         </button>
                       </div>
                     )}
@@ -589,10 +632,21 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                     )}
 
                     {/* 회의록 (종료된 회의) */}
-                    {!isOpen && m.minutes && (
+                    {!isOpen && (m.minutes || m.minutesPdfUrl) && (
                       <div className="border-t border-gray-100 px-5 py-4 bg-gray-50">
                         <p className="text-[11px] font-semibold text-gray-500 mb-2">📝 회의록</p>
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{m.minutes}</p>
+                        {m.minutes && (
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-2">{m.minutes}</p>
+                        )}
+                        {m.minutesPdfUrl && (
+                          <a
+                            href={m.minutesPdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl hover:bg-red-100">
+                            📎 회의록 PDF 다운로드
+                          </a>
+                        )}
                         {m.closedAt && <p className="text-[10px] text-gray-300 mt-2">{m.closedAt.slice(0, 10)} 완료</p>}
                       </div>
                     )}

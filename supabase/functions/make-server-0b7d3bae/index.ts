@@ -12047,13 +12047,34 @@ app.post('/make-server-0b7d3bae/staff/meeting/:id/attend', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 회의록 PDF 업로드 (관리자)
+app.post('/make-server-0b7d3bae/staff/upload-pdf', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File;
+    if (!file) return c.json({ error: 'No file provided' }, 400);
+    if (file.type !== 'application/pdf') return c.json({ error: 'PDF 파일만 업로드할 수 있습니다' }, 400);
+    if (file.size > 20 * 1024 * 1024) return c.json({ error: '파일 크기는 20MB 이하여야 합니다' }, 400);
+    const filename = `minutes_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+    const arrayBuffer = await file.arrayBuffer();
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(filename, new Uint8Array(arrayBuffer), { contentType: 'application/pdf', upsert: false });
+    if (error) return c.json({ error: `업로드 실패: ${error.message}` }, 500);
+    const { data: { publicUrl } } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filename);
+    return c.json({ url: publicUrl });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 회의 완료 + 회의록 저장 (관리자)
 app.post('/make-server-0b7d3bae/staff/meeting/:id/close', async (c) => {
   try {
     const auth = await requireStaffAdmin(c);
     if (auth instanceof Response) return auth;
     const id = c.req.param('id');
-    const { minutes } = await c.req.json().catch(() => ({}));
+    const { minutes, minutesPdfUrl } = await c.req.json().catch(() => ({}));
     const meetings: any[] = (await kv.get('staff_meetings') as any[]) ?? [];
     const idx = meetings.findIndex((m: any) => m.id === id);
     if (idx === -1) return c.json({ error: '회의를 찾을 수 없습니다' }, 404);
@@ -12062,6 +12083,7 @@ app.post('/make-server-0b7d3bae/staff/meeting/:id/close', async (c) => {
       status: 'closed',
       closedAt: new Date().toISOString(),
       minutes: minutes ?? '',
+      minutesPdfUrl: minutesPdfUrl ?? null,
     };
     await kv.set('staff_meetings', meetings.slice(0, 100));
     return c.json({ success: true, meeting: meetings[idx] });
