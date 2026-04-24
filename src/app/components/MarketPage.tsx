@@ -1157,6 +1157,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   accessToken?: string; userId?: string; userNickname?: string; isAdmin?: boolean; ownedGames?: BoardGame[];
 }) {
   const [auction, setAuction] = useState<Auction | null>(null);
+  const [participants, setParticipants] = useState<{ userId: string; nickname: string }[]>([]);
+  const [bidderIds, setBidderIds] = useState<string[]>([]);
+  const [joined, setJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [loading, setLoading] = useState(true);
   const [timeDisplay, setTimeDisplay] = useState('');
   const [cardCount, setCardCount] = useState(0);
@@ -1176,6 +1180,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       });
       const d = await res.json();
       setAuction(d.auction || null);
+      const pts: { userId: string; nickname: string }[] = d.participants || [];
+      setParticipants(pts);
+      setBidderIds(d.bidderIds || []);
+      if (userId) setJoined(pts.some(p => p.userId === userId));
     } catch {}
     setLoading(false);
   }
@@ -1231,12 +1239,36 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         toast.success(`${nextBid}장으로 입찰했어요!`);
         setAuction(d.auction);
         setShowConfirm(false);
+        setJoined(true);
+        if (userId && !bidderIds.includes(userId)) setBidderIds(prev => [...prev, userId]);
+        if (userId && !participants.some(p => p.userId === userId)) {
+          setParticipants(prev => [...prev, { userId, nickname: userNickname || '' }]);
+        }
         loadCardCount();
       } else {
         toast.error(d.error || '입찰 실패');
       }
     } catch { toast.error('네트워크 오류'); }
     setBidding(false);
+  }
+
+  async function handleJoin() {
+    if (!accessToken || !auction || joined) return;
+    setJoining(true);
+    try {
+      const res = await fetch(`${API}/auction/${auction.auctionId}/join`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: userNickname }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setJoined(true);
+        setParticipants(d.participants || []);
+        toast.success('경매에 참여했어요!');
+      } else toast.error(d.error || '참여 실패');
+    } catch { toast.error('네트워크 오류'); }
+    setJoining(false);
   }
 
   async function handleEnd() {
@@ -1400,6 +1432,38 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 참여자 섹션 */}
+      {auction && auction.status !== 'ended' && (
+        <div className="px-5 pb-4 border-t border-orange-100 pt-3">
+          {accessToken && !joined && (
+            <button onClick={handleJoin} disabled={joining}
+              className="w-full h-9 mb-3 rounded-xl border-2 border-orange-200 text-orange-600 text-sm font-semibold hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 bg-white">
+              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '🙋 경매 참여하기'}
+            </button>
+          )}
+          {participants.length > 0 && (
+            <div>
+              <p className="text-[11px] text-gray-400 font-medium mb-2">참여자 {participants.length}명</p>
+              <div className="flex flex-wrap gap-1.5">
+                {participants.map(p => {
+                  const hasBid = bidderIds.includes(p.userId);
+                  return (
+                    <span key={p.userId}
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-all ${hasBid ? 'text-teal-700 bg-teal-50' : 'text-gray-500 bg-gray-100'}`}
+                      style={hasBid ? { border: '1.5px solid #2dd4bf' } : { border: '1.5px solid transparent' }}>
+                      {p.nickname}{hasBid ? ' 🎯' : ''}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {participants.length === 0 && joined && (
+            <p className="text-xs text-center text-teal-600 font-semibold">✓ 참여 중</p>
+          )}
         </div>
       )}
 

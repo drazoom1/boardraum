@@ -9607,7 +9607,10 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
       updated = true;
     }
     if (updated) await kv.set(`auction_${activeId}`, auction);
-    return c.json({ auction });
+    const participants = (await kv.get(`auction_participants_${activeId}`) as any[] | null) || [];
+    const bids = (await kv.get(`auction_bids_${activeId}`) as any[] | null) || [];
+    const bidderIds = [...new Set((bids as any[]).map((b: any) => b.userId))];
+    return c.json({ auction, participants, bidderIds });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
@@ -9716,7 +9719,37 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     if (auction.status === 'scheduled') auction.status = 'active';
     await kv.set(`auction_${auctionId}`, auction);
 
+    // 입찰 시 자동 참여 등록
+    const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
+    if (!participants.find((p: any) => p.userId === user.id)) {
+      participants.push({ userId: user.id, nickname: nickname || '', joinedAt: now });
+      await kv.set(`auction_participants_${auctionId}`, participants);
+    }
+
     return c.json({ success: true, auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:auctionId/join — 경매 참여
+app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    if (auction.status === 'ended') return c.json({ error: '종료된 경매예요' }, 400);
+
+    const { nickname } = await c.req.json();
+    const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
+    if (!participants.find((p: any) => p.userId === user.id)) {
+      participants.push({ userId: user.id, nickname: nickname || '', joinedAt: new Date().toISOString() });
+      await kv.set(`auction_participants_${auctionId}`, participants);
+    }
+    return c.json({ success: true, participants });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
