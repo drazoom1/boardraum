@@ -1899,45 +1899,47 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
       {/* 채팅창 */}
       {auction && accessToken && (
-        <div className="border-t border-orange-100 px-5 pt-3 pb-4 bg-white">
+        <div className="border-t border-orange-100 px-5 pt-3 pb-5">
           <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
-          <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
-            {chatMessages.length === 0 ? (
-              <p className="text-[11px] text-gray-300 text-center pt-8">첫 메시지를 남겨보세요</p>
-            ) : (
-              chatMessages.map((m, i) => (
-                <div key={m.msgId ?? i} className={`flex gap-2 ${m.userId === userId ? 'flex-row-reverse' : ''}`}>
-                  <div className={`max-w-[75%] ${m.userId === userId ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
-                    {m.userId !== userId && (
-                      <span className="text-[10px] text-gray-400 px-1">{m.nickname}</span>
-                    )}
-                    <div className={`px-3 py-1.5 rounded-2xl text-sm leading-snug ${
-                      m.userId === userId
-                        ? 'bg-orange-500 text-white rounded-tr-sm'
-                        : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
-                    }`}>
-                      {m.text}
+          <div className="bg-white rounded-xl px-4 pt-3 pb-3">
+            <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
+              {chatMessages.length === 0 ? (
+                <p className="text-[11px] text-gray-300 text-center pt-8">첫 메시지를 남겨보세요</p>
+              ) : (
+                chatMessages.map((m, i) => (
+                  <div key={m.msgId ?? i} className={`flex gap-2 ${m.userId === userId ? 'flex-row-reverse' : ''}`}>
+                    <div className={`max-w-[75%] ${m.userId === userId ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+                      {m.userId !== userId && (
+                        <span className="text-[10px] text-gray-400 px-1">{m.nickname}</span>
+                      )}
+                      <div className={`px-3 py-1.5 rounded-2xl text-sm leading-snug ${
+                        m.userId === userId
+                          ? 'bg-orange-500 text-white rounded-tr-sm'
+                          : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                      }`}>
+                        {m.text}
+                      </div>
+                      <span className="text-[9px] text-gray-300 px-1">
+                        {new Date(m.sentAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <span className="text-[9px] text-gray-300 px-1">
-                      {new Date(m.sentAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-              placeholder="메시지 입력..."
-              className="flex-1 h-9 px-3 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-200"
-            />
-            <button onClick={sendChat} disabled={sendingChat || !chatInput.trim()}
-              className="h-9 px-3 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-1 hover:bg-orange-600 transition-colors">
-              {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            </button>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                placeholder="메시지 입력..."
+                className="flex-1 h-9 px-3 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-200"
+              />
+              <button onClick={sendChat} disabled={sendingChat || !chatInput.trim()}
+                className="h-9 px-3 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-1 hover:bg-orange-600 transition-colors">
+                {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
         </div>
       )}
