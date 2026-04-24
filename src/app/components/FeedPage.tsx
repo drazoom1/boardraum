@@ -178,15 +178,19 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
               onClick={() => comment.userId && onViewProfile?.(comment.userId, comment.userId === userId)}>
               {comment.userName}
             </button>
-            {comment.userRankPoints && (() => {
-              const r = getRankByStats(comment.userRankPoints.points, comment.userRankPoints.posts, comment.userRankPoints.comments, comment.userRankPoints.likesReceived);
-              return <ChessRankBadge rank={r} />;
-            })()}
-            {comment.userId && staffGradeMap[comment.userId] && (
-              <img src={`/staff-grade-${staffGradeMap[comment.userId]}.webp`}
-                className="object-contain flex-shrink-0"
-                style={{ width: '13px', height: '13px', marginLeft: '-2px' }}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            {(comment.userRankPoints || (comment.userId && staffGradeMap[comment.userId])) && (
+              <span className="inline-flex items-end" style={{ gap: '0px' }}>
+                {comment.userRankPoints && (() => {
+                  const r = getRankByStats(comment.userRankPoints.points, comment.userRankPoints.posts, comment.userRankPoints.comments, comment.userRankPoints.likesReceived);
+                  return <ChessRankBadge rank={r} />;
+                })()}
+                {comment.userId && staffGradeMap[comment.userId] && (
+                  <img src={`/staff-grade-${staffGradeMap[comment.userId]}.webp`}
+                    className="object-contain flex-shrink-0"
+                    style={{ width: '15px', height: '15px', marginLeft: '-3px' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                )}
+              </span>
             )}
             {comment.isSecret && <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />}
             {comment.createdAt && (
@@ -1502,15 +1506,19 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
             <div className="flex items-center gap-1.5 flex-wrap mb-0">
               <button onClick={() => onViewProfile?.(post.userId, post.userId === userId)}
                 className="font-semibold text-gray-900 text-sm hover:underline">{post.userName}</button>
-              {post.userRankPoints && (() => {
-                const r = getRankByStats(post.userRankPoints.points, post.userRankPoints.posts, post.userRankPoints.comments, post.userRankPoints.likesReceived);
-                return <ChessRankBadge rank={r} />;
-              })()}
-              {staffGradeMap[post.userId] && (
-                <img src={`/staff-grade-${staffGradeMap[post.userId]}.webp`}
-                  className="object-contain flex-shrink-0"
-                  style={{ width: '15px', height: '15px', marginLeft: '-3px' }}
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              {(post.userRankPoints || staffGradeMap[post.userId]) && (
+                <span className="inline-flex items-end" style={{ gap: '0px' }}>
+                  {post.userRankPoints && (() => {
+                    const r = getRankByStats(post.userRankPoints.points, post.userRankPoints.posts, post.userRankPoints.comments, post.userRankPoints.likesReceived);
+                    return <ChessRankBadge rank={r} />;
+                  })()}
+                  {staffGradeMap[post.userId] && (
+                    <img src={`/staff-grade-${staffGradeMap[post.userId]}.webp`}
+                      className="object-contain flex-shrink-0"
+                      style={{ width: '15px', height: '15px', marginLeft: '-3px' }}
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  )}
+                </span>
               )}
               {post.category && post.category !== '자유' && (
                 <button
