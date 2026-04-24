@@ -1424,7 +1424,7 @@ function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClo
               </div>
 
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                <p className="text-xs text-amber-700">⏱ 경매 시간은 관리자가 설정합니다. 승인 후 마켓 상단에 '시작하기' 버튼이 표시돼요.</p>
+                <p className="text-xs text-amber-700">✅ 승인되면 마켓 상단에 <strong>[게임명] 시작하기</strong> 버튼이 나타나요. 누르면 5분 카운트다운 후 경매가 시작돼요.</p>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
@@ -1458,6 +1458,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [approvedRequest, setApprovedRequest] = useState<any>(null);
+  const [pendingRequest, setPendingRequest] = useState<any>(null);
   const [launching, setLaunching] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
   const [addressInput, setAddressInput] = useState('');
@@ -1505,8 +1506,9 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     try {
       const res = await fetch(`${API}/auction/my-requests`, { headers: { Authorization: `Bearer ${accessToken}` } });
       const d = await res.json();
-      const approved = (d.requests || []).find((r: any) => r.status === 'approved');
-      setApprovedRequest(approved || null);
+      const reqs: any[] = d.requests || [];
+      setApprovedRequest(reqs.find(r => r.status === 'approved') || null);
+      setPendingRequest(reqs.find(r => r.status === 'pending') || null);
     } catch {}
   }
 
@@ -1711,6 +1713,17 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   return (
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
+
+      {/* 승인 대기 배너 */}
+      {pendingRequest && !approvedRequest && !isAdmin && (
+        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="text-xl shrink-0">⏳</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-amber-800 truncate">"{pendingRequest.title}" 승인 대기중</p>
+            <p className="text-[11px] text-amber-600 mt-0.5">관리자 승인 후 경매를 시작할 수 있어요.</p>
+          </div>
+        </div>
+      )}
 
       {/* 승인된 요청 배너 */}
       {approvedRequest && !isAdmin && (
