@@ -1359,8 +1359,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction?.status === 'scheduled' && (
         <div className="px-5 pb-5">
           <div className="flex gap-4 items-start">
-            {(auction.imageUrls?.[0] || auction.imageUrl) && (
-              <img src={auction.imageUrls?.[0] || auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
+            {auction.imageUrl && (
+              <img src={auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-sm truncate">{auction.title}</p>
@@ -1379,8 +1379,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction?.status === 'active' && (
         <div className="px-5 pb-5">
           <div className="flex gap-4 items-start mb-3">
-            {(auction.imageUrls?.[0] || auction.imageUrl) && (
-              <img src={auction.imageUrls?.[0] || auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
+            {auction.imageUrl && (
+              <img src={auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-sm truncate">{auction.title}</p>
@@ -1404,6 +1404,17 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               </div>
             </div>
           </div>
+          {/* 실물 사진 */}
+          {(auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (
+            <div className="flex gap-2 overflow-x-auto mb-3">
+              {auction.imageUrls!.filter(Boolean).map((url, idx) => (
+                <button key={idx} onClick={() => setLightboxIdx(idx)}
+                  className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/60 hover:border-orange-300 transition-all active:scale-95">
+                  <img src={url} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
           {accessToken && (
             <p className="text-xs text-gray-400 mb-2 text-right">내 카드 {cardCount}장</p>
           )}
@@ -1435,8 +1446,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction?.status === 'ended' && (
         <div className="px-5 pb-5">
           <div className="flex gap-4 items-center mb-3">
-            {(auction.imageUrls?.[0] || auction.imageUrl) && (
-              <img src={auction.imageUrls?.[0] || auction.imageUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white opacity-70" />
+            {auction.imageUrl && (
+              <img src={auction.imageUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white opacity-70" />
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-600 text-sm truncate">{auction.title}</p>
@@ -1471,8 +1482,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         </div>
       )}
 
-      {/* 실물 사진 썸네일 */}
-      {auction && (auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (() => {
+      {/* 실물 사진 썸네일 (scheduled/ended 상태용) */}
+      {auction && auction.status !== 'active' && (auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (() => {
         const photos = auction.imageUrls!.filter(Boolean);
         return (
           <div className="px-5 pb-3 flex gap-2 overflow-x-auto">
