@@ -1712,6 +1712,12 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
             const escrowStatus = deliveryInfo?.escrowStatus;
             return (
               <div className="mt-3 bg-white/80 rounded-xl px-4 py-3 space-y-2">
+                <div className="flex items-center gap-1.5 mb-1 pb-2 border-b border-gray-100">
+                  <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  <p className="text-[10px] text-gray-400">배송 정보는 낙찰자·주체자·관리자에게만 공개됩니다</p>
+                </div>
                 {/* 낙찰자: 배송지 입력 */}
                 {isWinner && (
                   <div>
@@ -2046,6 +2052,12 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
             {/* 배송지: 낙찰자·주체자·관리자 */}
             {(isWinner || isHost || isAdmin) && (
               <div className="border-t border-gray-50 pt-3 space-y-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  <p className="text-[10px] text-gray-400">배송 정보는 낙찰자·주체자·관리자에게만 공개됩니다</p>
+                </div>
                 <div>
                   <p className="text-[11px] font-semibold text-gray-400 mb-1">배송지</p>
                   {t.address ? (
