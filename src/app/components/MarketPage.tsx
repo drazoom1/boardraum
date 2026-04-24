@@ -2060,8 +2060,8 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
                 </div>
                 <div>
                   <p className="text-[11px] font-semibold text-gray-400 mb-1">배송지</p>
-                  {t.address ? (
-                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{t.address}</p>
+                  {t.winnerAddress ? (
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{t.winnerAddress}</p>
                   ) : isWinner ? (
                     <WinnerAddressInput auctionId={t.auctionId} accessToken={accessToken} onSubmitted={loadTrades} />
                   ) : (
