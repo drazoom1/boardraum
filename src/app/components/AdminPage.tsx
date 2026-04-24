@@ -6860,7 +6860,7 @@ function SiteGamesSection({ accessToken }: { accessToken: string }) {
 
 // ─── 운영자 페이지 ─────────────────────────────────────────────────────────────
 
-type OperatorTab = 'staff-list' | 'activity' | 'revenue' | 'agreements';
+type OperatorTab = 'staff-list' | 'activity' | 'revenue' | 'agreements' | 'auction-results';
 
 const STAFF_ACTIVITY_CATEGORIES = [
   { key: 'tag',     label: '태그 매기기',    points: 2,  unit: '건', wip: false },
@@ -6955,6 +6955,8 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   const [agreementsActiveIds, setAgreementsActiveIds] = useState<string[]>([]);
   const [agreementsLoading, setAgreementsLoading] = useState(false);
   const [resettingAgreementId, setResettingAgreementId] = useState<string | null>(null);
+  const [auctionResults, setAuctionResults] = useState<any[]>([]);
+  const [auctionResultsLoading, setAuctionResultsLoading] = useState(false);
 
   const loadStaff = async () => {
     setStaffLoading(true);
@@ -7049,6 +7051,18 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     finally { setAgreementsLoading(false); }
   };
 
+  const loadAuctionResults = async () => {
+    setAuctionResultsLoading(true);
+    try {
+      const r = await fetch(`${API}/auction/results`, { headers: authHeaders });
+      if (r.ok) {
+        const d = await r.json();
+        setAuctionResults(d.results ?? []);
+      }
+    } catch { /* silent */ }
+    finally { setAuctionResultsLoading(false); }
+  };
+
   const handleResetAgreement = async (userId: string) => {
     setResettingAgreementId(userId);
     try {
@@ -7064,6 +7078,7 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   useEffect(() => { if (opTab === 'revenue') { loadRevList(); loadMonthlyScores(); } }, [opTab]);
   useEffect(() => { if (opTab === 'activity') loadMeetings(); }, [opTab]);
   useEffect(() => { if (opTab === 'agreements') loadAgreements(); }, [opTab]);
+  useEffect(() => { if (opTab === 'auction-results') loadAuctionResults(); }, [opTab]);
   useEffect(() => { if (actUserId) loadActLogs(actUserId); }, [actUserId]);
   useEffect(() => { if (showSearch) loadAllUsers(); }, [showSearch]);
 
@@ -7220,6 +7235,7 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     { id: 'activity',    label: '활동 점수' },
     { id: 'revenue',     label: '수익 등록' },
     { id: 'agreements',  label: '동의 현황' },
+    { id: 'auction-results', label: '경매결과' },
   ];
 
   return (
@@ -7703,6 +7719,66 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {opTab === 'auction-results' && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">경매 결과 보관함</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">종료된 경매 낙찰 결과 전체 기록</p>
+            </div>
+            <button onClick={loadAuctionResults} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+          {auctionResultsLoading ? (
+            <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+          ) : auctionResults.length === 0 ? (
+            <div className="py-8 text-center text-gray-300 text-sm">경매 결과가 없습니다.</div>
+          ) : (
+            <div className="space-y-3 max-h-[520px] overflow-y-auto">
+              {[...auctionResults].reverse().map((r, i) => (
+                <div key={r.id ?? i} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    {r.imageUrl && (
+                      <img src={r.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-gray-100" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-gray-900">{r.gameName ?? '게임명 없음'}</span>
+                        {r.boxCondition && (
+                          <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-semibold">{r.boxCondition}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-gray-500">낙찰자:</span>
+                        <span className="text-xs font-semibold text-emerald-600">{r.winnerNickname ?? r.winnerId ?? '—'}</span>
+                        <span className="text-xs text-gray-400">|</span>
+                        <span className="text-xs text-gray-500">낙찰가:</span>
+                        <span className="text-xs font-bold text-gray-800">{r.currentBid?.toLocaleString()}장</span>
+                      </div>
+                      {r.endedAt && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {new Date(r.endedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                        </p>
+                      )}
+                      {(r.participants?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {r.participants.map((p: any, pi: number) => (
+                            <span key={pi} className="text-[10px] bg-white border border-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">
+                              {p.nickname ?? p}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
