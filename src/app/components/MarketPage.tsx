@@ -1457,6 +1457,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showForceEndConfirm, setShowForceEndConfirm] = useState(false);
+  const [forceEnding, setForceEnding] = useState(false);
   const [approvedRequest, setApprovedRequest] = useState<any>(null);
   const [pendingRequest, setPendingRequest] = useState<any>(null);
   const [launching, setLaunching] = useState(false);
@@ -1699,7 +1701,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   async function handleEnd() {
     if (!accessToken || !auction) return;
-    if (!confirm('경매를 지금 종료하고 낙찰 처리할까요?')) return;
+    setForceEnding(true);
     try {
       const res = await fetch(`${API}/auction/${auction.auctionId}/end`, {
         method: 'POST',
@@ -1707,9 +1709,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         body: JSON.stringify({}),
       });
       const d = await res.json();
-      if (d.success) { toast.success('경매가 종료됐어요'); setAuction(d.auction); }
+      if (d.success) { toast.success('경매가 종료됐어요'); setAuction(d.auction); setShowForceEndConfirm(false); }
       else toast.error(d.error || '종료 실패');
     } catch { toast.error('네트워크 오류'); }
+    setForceEnding(false);
   }
 
   if (loading) return null;
@@ -1770,8 +1773,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && auction?.status === 'active' && (
-            <button onClick={handleEnd} className="text-[11px] text-gray-400 hover:text-red-500 transition-colors">강제종료</button>
+          {isAdmin && auction && auction.status !== 'ended' && (
+            <button onClick={() => setShowForceEndConfirm(true)} className="text-[11px] font-semibold text-red-400 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+              강제종료
+            </button>
           )}
           {isAdmin && (
             <button onClick={() => setShowCreateModal(true)} className="text-xs font-semibold bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 transition-colors">
@@ -2082,6 +2087,37 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
             )}
           </div>
         </div>
+      )}
+
+      {showForceEndConfirm && auction && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[9998]" onClick={() => !forceEnding && setShowForceEndConfirm(false)} />
+          <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-xs rounded-t-3xl sm:rounded-2xl shadow-2xl p-6">
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <X className="w-6 h-6 text-red-500" />
+                </div>
+                <h3 className="text-base font-bold text-gray-900">경매를 강제 종료할까요?</h3>
+                <p className="text-sm text-gray-500 mt-1.5">
+                  {auction.currentBidder
+                    ? <>현재 최고 입찰자 <span className="font-semibold text-gray-800">{auction.currentBidderNickname}</span>으로 낙찰 처리돼요.</>
+                    : '현재 입찰자가 없어 유찰 처리돼요.'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowForceEndConfirm(false)} disabled={forceEnding}
+                  className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                  취소
+                </button>
+                <button onClick={handleEnd} disabled={forceEnding}
+                  className="flex-1 h-11 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 disabled:opacity-40 flex items-center justify-center gap-1.5">
+                  {forceEnding ? <Loader2 className="w-4 h-4 animate-spin" /> : '종료하기'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {showInfoModal && (
