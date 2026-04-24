@@ -1726,8 +1726,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   return (
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
 
-      {/* 승인 대기 배너 — 진행 중인 경매 없을 때만 표시 */}
-      {pendingRequest && !approvedRequest && !isAdmin && (!auction || auction.status === 'ended') && (
+      {/* 승인 대기 배너 */}
+      {pendingRequest && !approvedRequest && !isAdmin && (
         <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <span className="text-xl shrink-0">⏳</span>
           <div className="flex-1 min-w-0">
