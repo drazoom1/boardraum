@@ -1507,7 +1507,13 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       const res = await fetch(`${API}/auction/my-requests`, { headers: { Authorization: `Bearer ${accessToken}` } });
       const d = await res.json();
       const reqs: any[] = d.requests || [];
-      setApprovedRequest(reqs.find(r => r.status === 'approved') || null);
+      const EXPIRE_MS = 24 * 60 * 60 * 1000;
+      const approved = reqs.find(r =>
+        r.status === 'approved' &&
+        r.reviewedAt &&
+        Date.now() - new Date(r.reviewedAt).getTime() < EXPIRE_MS
+      );
+      setApprovedRequest(approved || null);
       setPendingRequest(reqs.find(r => r.status === 'pending') || null);
     } catch {}
   }
