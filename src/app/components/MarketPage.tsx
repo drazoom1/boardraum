@@ -1272,7 +1272,7 @@ function AuctionRequestModal({ accessToken, userNickname, ownedGames = [], onClo
       });
       const d = await res.json();
       if (d.success && d.request) { toast.success('경매 요청이 접수됐어요! 승인되면 마켓 상단에 알림이 떠요.'); onSuccess?.(d.request); onClose(); }
-      else { toast.error(d.error || `요청 실패 (${JSON.stringify(d)})`); }
+      else toast.error(d.error || '요청 실패');
     } catch { toast.error('네트워크 오류'); }
     setSubmitting(false);
   }
@@ -1461,7 +1461,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [showForceEndConfirm, setShowForceEndConfirm] = useState(false);
   const [forceEnding, setForceEnding] = useState(false);
   const [approvedRequest, setApprovedRequest] = useState<any>(null);
-  const [pendingRequest, setPendingRequest] = useState<any>(null);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [launching, setLaunching] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
@@ -1521,7 +1521,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         Date.now() - new Date(r.reviewedAt).getTime() < EXPIRE_MS
       );
       setApprovedRequest(approved || null);
-      setPendingRequest(reqs.find(r => r.status === 'pending') || null);
+      setPendingRequests(reqs.filter(r => r.status === 'pending'));
     } catch {}
   }
 
@@ -1729,17 +1729,14 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   return (
     <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-100 overflow-hidden">
 
-      {/* 승인 대기 배너 - DEBUG */}
-      {accessToken && !isAdmin && (
-        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <p className="text-[10px] text-amber-500">DEBUG: pendingRequest={pendingRequest ? `"${pendingRequest.title}"` : 'null'} | isAdmin={String(isAdmin)}</p>
-        </div>
-      )}
-      {pendingRequest && !isAdmin && (
-        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+      {/* 승인 대기 배너 */}
+      {pendingRequests.length > 0 && !isAdmin && (
+        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
           <span className="text-xl shrink-0">⏳</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-amber-800 truncate">"{pendingRequest.title}" 승인 대기중</p>
+          <div className="flex-1 min-w-0 space-y-1">
+            {pendingRequests.map((r, i) => (
+              <p key={r.requestId || i} className="text-xs font-bold text-amber-800 truncate">"{r.title}" 승인 대기중</p>
+            ))}
             <p className="text-[11px] text-amber-600 mt-0.5">관리자 승인 후 경매를 시작할 수 있어요.</p>
           </div>
         </div>
@@ -2184,7 +2181,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           userNickname={userNickname}
           ownedGames={ownedGames}
           onClose={() => setShowRequestModal(false)}
-          onSuccess={(req) => { loadRequestVersionRef.current++; setPendingRequest(req); }}
+          onSuccess={(req) => { loadRequestVersionRef.current++; setPendingRequests(prev => [...prev, req]); }}
         />
       )}
     </div>
