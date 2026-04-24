@@ -2054,7 +2054,7 @@ function WikiMigrationSection({ accessToken }: { accessToken: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games';
+type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games' | 'operator';
 
 
 // ── 이미지 검수 섹션 ──
@@ -2194,6 +2194,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [showCardReductionEdit, setShowCardReductionEdit] = useState(false);
   const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
   const [cardReductionSaving, setCardReductionSaving] = useState(false);
+  const [showSuccessProbEdit, setShowSuccessProbEdit] = useState(false);
+  const [editSuccessProb, setEditSuccessProb] = useState(Math.round((event.cardSuccessProb ?? 1) * 100));
+  const [successProbSaving, setSuccessProbSaving] = useState(false);
   const [showDescEdit, setShowDescEdit] = useState(false);
   const [editDesc, setEditDesc] = useState(event.description ?? '');
   const [descSaving, setDescSaving] = useState(false);
@@ -2315,6 +2318,22 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       else toast.error('저장 실패');
     } catch { toast.error('오류'); }
     setCardReductionSaving(false);
+  };
+
+  const saveSuccessProb = async () => {
+    const prob = Number(editSuccessProb);
+    if (isNaN(prob) || prob < 0 || prob > 100) { toast.error('0~100 사이 숫자를 입력해주세요'); return; }
+    setSuccessProbSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'update', eventId: event.id, cardSuccessProb: prob / 100 }) }
+      );
+      if (res.ok) { toast.success(`카드 성공 확률 ${prob}%로 변경!`); setShowSuccessProbEdit(false); }
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setSuccessProbSaving(false);
   };
 
   const saveDesc = async () => {
@@ -2724,6 +2743,54 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
             )}
           </div>
 
+          {/* 카드 성공 확률 수정 */}
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            {!showSuccessProbEdit ? (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  🎯 카드 성공 확률: <span className="font-semibold text-gray-600">{Math.round((event.cardSuccessProb ?? 1) * 100)}%</span>
+                </p>
+                <button onClick={() => { setShowSuccessProbEdit(true); setEditSuccessProb(Math.round((event.cardSuccessProb ?? 1) * 100)); }}
+                  className="text-xs px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-semibold">
+                  수정
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-700">🎯 카드 성공 확률 수정</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[10, 20, 30, 50, 70, 100].map(p => (
+                    <button key={p} onClick={() => setEditSuccessProb(p)}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold border transition-colors ${editSuccessProb === p ? 'text-white border-transparent bg-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={0} max={100}
+                    value={editSuccessProb}
+                    onChange={e => setEditSuccessProb(Number(e.target.value))}
+                    className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center"
+                    placeholder="0~100"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveSuccessProb} disabled={successProbSaving}
+                    className="flex-1 py-1.5 rounded-lg text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1 bg-indigo-600">
+                    {successProbSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    저장
+                  </button>
+                  <button onClick={() => setShowSuccessProbEdit(false)}
+                    className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 이벤트 규칙 수정 */}
           <div className="mt-2 pt-2 border-t border-gray-100">
             {!showDescEdit ? (
@@ -2896,6 +2963,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const [sleepStart, setSleepStart] = useState(0);
   const [sleepEnd, setSleepEnd] = useState(8);
   const [cardReductionSeconds, setCardReductionSeconds] = useState(300);
+  const [newCardSuccessProb, setNewCardSuccessProb] = useState(100);
   const [noticeTitle, setNoticeTitle] = useState('규칙사항');
   const [noticeContent, setNoticeContent] = useState('');
   const [savingNotice, setSavingNotice] = useState(false);
@@ -3006,7 +3074,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds }) }
+          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessProb: newCardSuccessProb / 100 }) }
       );
       if (res.ok) {
         await loadData();
@@ -3202,6 +3270,31 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
             ))}
           </div>
           <p className="text-[11px] text-gray-400 mt-1">카드 1장 사용 시 타이머가 <span className="font-semibold text-indigo-600">{cardReductionSeconds >= 60 ? `${cardReductionSeconds / 60}분` : `${cardReductionSeconds}초`}</span> 줄어듭니다.</p>
+        </div>
+
+        {/* 카드 성공 확률 */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1">
+            🎯 카드 성공 확률
+          </label>
+          <div className="flex gap-2 items-center flex-wrap">
+            {[10, 20, 30, 50, 70, 100].map(p => (
+              <button key={p} onClick={() => setNewCardSuccessProb(p)}
+                className={`px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${newCardSuccessProb === p ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>
+                {p}%
+              </button>
+            ))}
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min={0} max={100}
+                value={newCardSuccessProb}
+                onChange={e => setNewCardSuccessProb(Number(e.target.value))}
+                className="w-16 border border-gray-200 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+              <span className="text-sm text-gray-400">%</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">카드 사용 시 <span className="font-semibold text-indigo-600">{newCardSuccessProb}%</span> 확률로 효과 적용. 실패 시 카드만 차감됩니다.</p>
         </div>
 
         {/* 휴식 시간 */}
@@ -4204,6 +4297,561 @@ function SallaeAdminSection({ accessToken }: { accessToken: string }) {
   );
 }
 
+// ─── 운영자 페이지 ─────────────────────────────────────────────────────────────
+
+interface StaffMember {
+  userId: string;
+  nickname: string;
+  level: number;
+  joinedAt: string;
+  equity?: number;
+}
+
+interface StaffActivityLog {
+  action: string;
+  detail: string | null;
+  recordedAt: string;
+  recordedBy: string;
+}
+
+interface RevenueEntry {
+  id: string;
+  amount: number;
+  category: string;
+  note: string;
+  recordedAt: string;
+  recordedBy: string;
+  paid?: boolean;
+}
+
+type OperatorTab = 'staff-list' | 'activity' | 'revenue';
+
+const ACTIVITY_CATEGORIES = ['콘텐츠 제작', '이벤트 진행', '커뮤니티 관리', '기타'] as const;
+
+function OperatorSection({ accessToken }: { accessToken: string }) {
+  const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
+
+  const [opTab, setOpTab] = useState<OperatorTab>('staff-list');
+
+  // ── 운영진 목록 ──
+  const [members, setMembers] = useState<StaffMember[]>([]);
+  const [equityMap, setEquityMap] = useState<Record<string, number>>({});
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addingMember, setAddingMember] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  // ── 가입자 검색 ──
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+
+  // ── 지분 편집 ──
+  const [editingEquity, setEditingEquity] = useState<Record<string, string>>({});
+  const [savingEquity, setSavingEquity] = useState(false);
+
+  // ── 활동 점수 ──
+  const [actSelectedId, setActSelectedId] = useState('');
+  const [actScores, setActScores] = useState<Record<string, string>>({ '콘텐츠 제작': '', '이벤트 진행': '', '커뮤니티 관리': '', '기타': '' });
+  const [actNote, setActNote] = useState('');
+  const [savingAct, setSavingAct] = useState(false);
+  const [actLogs, setActLogs] = useState<StaffActivityLog[]>([]);
+  const [actLogsLoading, setActLogsLoading] = useState(false);
+
+  // ── 수익 등록 ──
+  const [revAmount, setRevAmount] = useState('');
+  const [revCategory, setRevCategory] = useState('광고');
+  const [revNote, setRevNote] = useState('');
+  const [savingRev, setSavingRev] = useState(false);
+  const [revList, setRevList] = useState<RevenueEntry[]>([]);
+  const [revListLoading, setRevListLoading] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  const fetchMembers = async () => {
+    setMembersLoading(true);
+    try {
+      const [mRes, eRes] = await Promise.all([
+        fetch(`${API}/staff/list`, { headers }),
+        fetch(`${API}/staff/equity`, { headers }),
+      ]);
+      const mData = await mRes.json();
+      const eData = await eRes.json();
+      const list: StaffMember[] = mData.members ?? [];
+      const eq: Record<string, number> = eData.equity ?? {};
+      setMembers(list);
+      setEquityMap(eq);
+      const init: Record<string, string> = {};
+      list.forEach(m => { init[m.userId] = eq[m.userId] !== undefined ? String(eq[m.userId]) : '0'; });
+      setEditingEquity(init);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    if (allUsers.length > 0) return;
+    setUsersLoading(true);
+    try {
+      const res = await fetch(
+        `${API}/admin/beta-testers?limit=1000&offset=0&includeGameData=false`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (res.ok) {
+        const d = await res.json();
+        setAllUsers((d.testers ?? []).filter((t: any) => t.status === 'approved'));
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const fetchRevList = async () => {
+    setRevListLoading(true);
+    try {
+      const res = await fetch(`${API}/staff/revenue/list`, { headers });
+      const data = await res.json();
+      setRevList(data.list ?? []);
+    } finally {
+      setRevListLoading(false);
+    }
+  };
+
+  const fetchActLogs = async (userId: string) => {
+    if (!userId) return;
+    setActLogsLoading(true);
+    try {
+      const res = await fetch(`${API}/staff/activity/${userId}`, { headers });
+      const data = await res.json();
+      setActLogs(data.logs ?? []);
+    } finally {
+      setActLogsLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchMembers(); }, []);
+  useEffect(() => { if (opTab === 'revenue') fetchRevList(); }, [opTab]);
+  useEffect(() => { if (actSelectedId) fetchActLogs(actSelectedId); }, [actSelectedId]);
+  useEffect(() => { if (showAddForm) fetchAllUsers(); }, [showAddForm]);
+
+  const handleAddMember = async (user: any) => {
+    const nickname = user.name || user.username || user.email;
+    setAddingMember(true);
+    try {
+      const res = await fetch(`${API}/staff/add`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ userId: user.userId, nickname, level: 1 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMembers(data.members ?? []);
+      setUserSearch('');
+      setShowAddForm(false);
+      toast.success(`${nickname}님이 운영진 레벨1로 등록됐습니다.`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setAddingMember(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId: string, nickname: string) => {
+    if (!window.confirm(`${nickname}님을 운영진에서 제거할까요?`)) return;
+    setRemovingId(userId);
+    try {
+      const res = await fetch(`${API}/staff/remove`, { method: 'POST', headers, body: JSON.stringify({ userId }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMembers(data.members ?? []);
+      toast.success('제거됐습니다.');
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  const handleSaveEquity = async () => {
+    setSavingEquity(true);
+    try {
+      const equity: Record<string, number> = {};
+      members.forEach(m => { equity[m.userId] = parseFloat(editingEquity[m.userId] ?? '0') || 0; });
+      const res = await fetch(`${API}/staff/equity`, { method: 'POST', headers, body: JSON.stringify({ equity }) } as any);
+      if (!res.ok) throw new Error('저장 실패');
+      setEquityMap(equity);
+      toast.success('지분이 저장됐습니다.');
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingEquity(false);
+    }
+  };
+
+  const handleSaveActivity = async () => {
+    if (!actSelectedId) { toast.error('운영진을 선택하세요'); return; }
+    const lines = ACTIVITY_CATEGORIES.filter(k => actScores[k]).map(k => `${k}: ${actScores[k]}점`);
+    if (lines.length === 0) { toast.error('점수를 하나 이상 입력하세요'); return; }
+    setSavingAct(true);
+    try {
+      const total = ACTIVITY_CATEGORIES.reduce((s, k) => s + (parseFloat(actScores[k]) || 0), 0);
+      const detail = [...lines, actNote ? `메모: ${actNote}` : ''].filter(Boolean).join(' | ');
+      const res = await fetch(`${API}/staff/activity`, { method: 'POST', headers, body: JSON.stringify({ userId: actSelectedId, action: `활동점수 합계 ${total}점`, detail }) });
+      if (!res.ok) throw new Error('저장 실패');
+      toast.success('활동 점수가 기록됐습니다.');
+      setActScores({ '콘텐츠 제작': '', '이벤트 진행': '', '커뮤니티 관리': '', '기타': '' });
+      setActNote('');
+      fetchActLogs(actSelectedId);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingAct(false);
+    }
+  };
+
+  const handleAddRevenue = async () => {
+    if (!revAmount || isNaN(Number(revAmount))) { toast.error('금액을 입력하세요'); return; }
+    setSavingRev(true);
+    try {
+      const res = await fetch(`${API}/staff/revenue`, { method: 'POST', headers, body: JSON.stringify({ amount: Number(revAmount), category: revCategory, note: revNote }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('수익이 등록됐습니다.');
+      setRevAmount(''); setRevNote('');
+      fetchRevList();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingRev(false);
+    }
+  };
+
+  const handlePayout = async (entry: RevenueEntry) => {
+    if (!window.confirm(`${entry.amount.toLocaleString()}원 지급완료 처리할까요?`)) return;
+    setPayingId(entry.id);
+    try {
+      const totalEquity = members.reduce((s, m) => s + (equityMap[m.userId] ?? 0), 0);
+      await Promise.all(
+        members.map(m => {
+          const share = totalEquity > 0 ? Math.round(entry.amount * (equityMap[m.userId] ?? 0) / totalEquity) : 0;
+          return fetch(`${API}/staff/payout`, { method: 'POST', headers, body: JSON.stringify({ userId: m.userId, amount: share, note: `${entry.category} 수익 정산 (${entry.recordedAt.slice(0, 10)})` }) });
+        })
+      );
+      setRevList(prev => prev.map(r => r.id === entry.id ? { ...r, paid: true } : r));
+      toast.success('정산이 완료됐습니다.');
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setPayingId(null);
+    }
+  };
+
+  const totalEquity = members.reduce((s, m) => s + (equityMap[m.userId] ?? 0), 0);
+
+  const staffIds = new Set(members.map(m => m.userId));
+  const filteredUsers = allUsers.filter(u => {
+    if (staffIds.has(u.userId)) return false;
+    if (!userSearch.trim()) return false;
+    const q = userSearch.toLowerCase();
+    return (
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q) ||
+      (u.nickname || '').toLowerCase().includes(q)
+    );
+  });
+
+  const opTabs: { id: OperatorTab; label: string }[] = [
+    { id: 'staff-list', label: '운영진 목록' },
+    { id: 'activity',   label: '활동 점수' },
+    { id: 'revenue',    label: '수익 등록' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* 헤더 */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-2xl">🛠</span>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">운영자 페이지</h2>
+            <p className="text-xs text-gray-400">운영진 관리 및 수익 정산 도구</p>
+          </div>
+        </div>
+        {/* 탭 */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {opTabs.map(t => (
+            <button key={t.id} onClick={() => setOpTab(t.id)}
+              className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors ${opTab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 운영진 목록 ── */}
+      {opTab === 'staff-list' && (
+        <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">운영진 목록 ({members.length}명)</h3>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAddForm(v => !v)}
+                  className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-700">
+                  <Plus className="w-3.5 h-3.5" /> 추가
+                </button>
+                <button onClick={fetchMembers} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {showAddForm && (
+              <div className="bg-blue-50 rounded-xl p-4 mb-4 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-blue-700">가입자 검색으로 운영진 등록</p>
+                  <button onClick={() => { setShowAddForm(false); setUserSearch(''); }} className="text-xs text-gray-400 hover:text-gray-600">닫기</button>
+                </div>
+                <input
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  placeholder="이름, 닉네임, 이메일로 검색..."
+                  className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  autoFocus
+                />
+                {usersLoading && <div className="py-3 flex justify-center"><Loader2 className="w-4 h-4 text-blue-400 animate-spin" /></div>}
+                {!usersLoading && userSearch.trim() && filteredUsers.length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-2">검색 결과가 없습니다.</p>
+                )}
+                {filteredUsers.slice(0, 8).map(u => {
+                  const name = u.name || u.username || u.email;
+                  return (
+                    <div key={u.userId} className="flex items-center justify-between bg-white rounded-lg px-3 py-2.5 border border-blue-100">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{name}</p>
+                        <p className="text-[10px] text-gray-400">{u.email}</p>
+                      </div>
+                      <button
+                        onClick={() => handleAddMember(u)}
+                        disabled={addingMember}
+                        className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                        {addingMember ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '등록'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {membersLoading ? (
+              <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+            ) : members.length === 0 ? (
+              <div className="py-8 text-center text-gray-300 text-sm">등록된 운영진이 없습니다.</div>
+            ) : (
+              <div className="space-y-2">
+                {members.map(m => {
+                  const eq = equityMap[m.userId] ?? 0;
+                  const lv = m.level ?? 1;
+                  return (
+                    <div key={m.userId} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600">
+                        {m.nickname[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900 truncate">{m.nickname}</span>
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full">운영진 Lv.{lv}</span>
+                        </div>
+                        <div className="text-xs text-gray-400">{m.joinedAt?.slice(0, 10)} 합류</div>
+                      </div>
+                      <div className="text-right mr-2">
+                        <div className="text-xs font-semibold text-gray-700">{eq}%</div>
+                        <div className="text-[10px] text-gray-400">지분</div>
+                      </div>
+                      <button onClick={() => handleRemoveMember(m.userId, m.nickname)} disabled={removingId === m.userId}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        {removingId === m.userId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 지분 편집 */}
+          {members.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800">지분 설정</h3>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${Math.abs(totalEquity - 100) < 0.1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                  합계 {totalEquity}%
+                </span>
+              </div>
+              <div className="space-y-2 mb-4">
+                {members.map(m => (
+                  <div key={m.userId} className="flex items-center gap-3">
+                    <span className="text-sm text-gray-700 flex-1 truncate">{m.nickname}</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" min="0" max="100" step="0.1"
+                        value={editingEquity[m.userId] ?? '0'}
+                        onChange={e => setEditingEquity(prev => ({ ...prev, [m.userId]: e.target.value }))}
+                        className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right" />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleSaveEquity} disabled={savingEquity}
+                className="w-full bg-gray-900 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-700 disabled:opacity-50">
+                {savingEquity ? '저장 중...' : '지분 저장'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 활동 점수 ── */}
+      {opTab === 'activity' && (
+        <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <h3 className="text-sm font-bold text-gray-800 mb-4">활동 점수 입력</h3>
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 mb-1.5 block">운영진 선택</label>
+              <select value={actSelectedId} onChange={e => setActSelectedId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
+                <option value="">-- 선택 --</option>
+                {members.map(m => <option key={m.userId} value={m.userId}>{m.nickname} ({m.role})</option>)}
+              </select>
+            </div>
+            <div className="space-y-2 mb-3">
+              {ACTIVITY_CATEGORIES.map(cat => (
+                <div key={cat} className="flex items-center gap-3">
+                  <span className="text-sm text-gray-700 flex-1">{cat}</span>
+                  <input type="number" min="0" placeholder="0"
+                    value={actScores[cat]}
+                    onChange={e => setActScores(prev => ({ ...prev, [cat]: e.target.value }))}
+                    className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right" />
+                  <span className="text-sm text-gray-500 w-4">점</span>
+                </div>
+              ))}
+            </div>
+            <input value={actNote} onChange={e => setActNote(e.target.value)} placeholder="메모 (선택)"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-3" />
+            <button onClick={handleSaveActivity} disabled={savingAct || !actSelectedId}
+              className="w-full bg-blue-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
+              {savingAct ? '저장 중...' : '활동 기록 저장'}
+            </button>
+          </div>
+
+          {actSelectedId && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">
+                {members.find(m => m.userId === actSelectedId)?.nickname} 활동 로그
+              </h3>
+              {actLogsLoading ? (
+                <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+              ) : actLogs.length === 0 ? (
+                <div className="py-6 text-center text-gray-300 text-sm">기록이 없습니다.</div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {actLogs.map((log, i) => (
+                    <div key={i} className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800">{log.action}</p>
+                        {log.detail && <p className="text-xs text-gray-400 mt-0.5">{log.detail}</p>}
+                      </div>
+                      <span className="text-[10px] text-gray-300 whitespace-nowrap">{log.recordedAt?.slice(0, 10)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 수익 등록 ── */}
+      {opTab === 'revenue' && (
+        <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <h3 className="text-sm font-bold text-gray-800 mb-4">수익 등록</h3>
+            <div className="space-y-2 mb-3">
+              <div className="flex gap-2">
+                <input type="number" placeholder="금액 (원)" value={revAmount} onChange={e => setRevAmount(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" />
+                <select value={revCategory} onChange={e => setRevCategory(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
+                  {['광고', '후원', '협찬', '판매', '기타'].map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <input placeholder="메모 (선택)" value={revNote} onChange={e => setRevNote(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" />
+            </div>
+
+            {/* 자동 배분 미리보기 */}
+            {revAmount && !isNaN(Number(revAmount)) && members.length > 0 && (
+              <div className="bg-gray-50 rounded-xl p-3 mb-3">
+                <p className="text-xs text-gray-500 mb-2 font-medium">지분별 배분 미리보기</p>
+                {members.map(m => {
+                  const share = totalEquity > 0 ? Math.round(Number(revAmount) * (equityMap[m.userId] ?? 0) / totalEquity) : 0;
+                  return (
+                    <div key={m.userId} className="flex justify-between text-xs py-1">
+                      <span className="text-gray-600">{m.nickname} ({equityMap[m.userId] ?? 0}%)</span>
+                      <span className="font-semibold text-gray-800">{share.toLocaleString()}원</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button onClick={handleAddRevenue} disabled={savingRev}
+              className="w-full bg-green-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-50">
+              {savingRev ? '등록 중...' : '수익 등록'}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">수익 내역</h3>
+              <button onClick={fetchRevList} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+            {revListLoading ? (
+              <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+            ) : revList.length === 0 ? (
+              <div className="py-6 text-center text-gray-300 text-sm">등록된 수익이 없습니다.</div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {revList.map(entry => (
+                  <div key={entry.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-900">{entry.amount.toLocaleString()}원</span>
+                        <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{entry.category}</span>
+                        {entry.paid && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">지급완료</span>}
+                      </div>
+                      {entry.note && <p className="text-xs text-gray-400 mt-0.5 truncate">{entry.note}</p>}
+                      <p className="text-[10px] text-gray-300 mt-0.5">{entry.recordedAt?.slice(0, 10)}</p>
+                    </div>
+                    {!entry.paid && (
+                      <button onClick={() => handlePayout(entry)} disabled={payingId === entry.id}
+                        className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
+                        {payingId === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '지급완료'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>('approval');
 
@@ -4226,6 +4874,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'activity-cards', label: '활동 카드 로그', icon: <span className="text-base leading-none">🃏</span>, desc: '글·댓글 카드 획득 내역' },
     { id: 'bulk-mail', label: '단체 메일', icon: <span className="text-base leading-none">📧</span>, desc: '전체 회원 메일 발송' },
     { id: 'site-games', label: '게임 DB 관리', icon: <span className="text-base leading-none">🎲</span>, desc: '등록 게임 수정·삭제·통합' },
+    { id: 'operator', label: '운영자 페이지', icon: <span className="text-base leading-none">🛠</span>, desc: '운영 도구 모음' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -4234,6 +4883,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { label: '커뮤니티',    ids: ['homework', 'sallae', 'last-event'] },
     { label: '게임 · DB',   ids: ['site-games', 'migration', 'player-migration'] },
     { label: '통계 · 데이터', ids: ['analytics', 'backup', 'activity-cards'] },
+    { label: '운영',           ids: ['operator'] },
   ];
 
   return (
@@ -4309,6 +4959,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'activity-cards' && <ActivityCardLogSection accessToken={accessToken} />}
           {activeTab === 'bulk-mail' && <BulkMailSection accessToken={accessToken} />}
           {activeTab === 'site-games' && <SiteGamesSection accessToken={accessToken} />}
+          {activeTab === 'operator' && <OperatorSection accessToken={accessToken} />}
         </div>
       </div>
     </div>

@@ -5595,6 +5595,15 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
     // 이메일 기반으로 차감
     await writeCardCountByEmail(user.email, current - 1);
 
+    // 성공 확률 체크 (관리자가 설정한 cardSuccessProb, 기본 100%)
+    const activeEventForProb: any[] = await kv.get('last_post_events') || [];
+    const activeEvt = activeEventForProb.find((e: any) => e.active);
+    const successProb: number = typeof activeEvt?.cardSuccessProb === 'number' ? activeEvt.cardSuccessProb : 1;
+    const isSuccess = Math.random() < successProb;
+    if (!isSuccess) {
+      return c.json({ success: true, cards: current - 1, cardFailed: true });
+    }
+
     // 이벤트 타이머 -5분(300초) 적용 + 카드 사용 기록 남기기 (다중 이벤트 지원)
     let updatedEvent = null;
     const useEvents: any[] = await kv.get('last_post_events') || [];
@@ -10126,7 +10135,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
 
     const body = await c.req.json();
-    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, prizeImageUrl, manualCardUser } = body;
+    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessProb, prizeImageUrl, manualCardUser } = body;
 
     const events: any[] = await kv.get("last_post_events") || [];
 
@@ -10197,6 +10206,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
         if (sleepEnd !== undefined) patch.sleepEnd = Number(sleepEnd);
         if (durationMinutes !== undefined) patch.durationMinutes = Number(durationMinutes);
         if (cardReductionSeconds !== undefined) patch.cardReductionSeconds = Number(cardReductionSeconds);
+        if (cardSuccessProb !== undefined) patch.cardSuccessProb = Number(cardSuccessProb);
         if (description !== undefined) patch.description = description;
         if (prize !== undefined) patch.prize = prize;
         if (eventTitle !== undefined) patch.eventTitle = eventTitle;
@@ -10255,6 +10265,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
       prizeImageUrl: prizeImageUrl || "",
       reductionSeconds: 0,
       cardReductionSeconds: cardReductionSeconds !== undefined ? Number(cardReductionSeconds) : 300,
+      cardSuccessProb: cardSuccessProb !== undefined ? Number(cardSuccessProb) : 1,
       sleepStart: sleepStart !== undefined ? Number(sleepStart) : 0,
       sleepEnd: sleepEnd !== undefined ? Number(sleepEnd) : 8,
       startedAt: new Date().toISOString(),
@@ -11645,5 +11656,184 @@ app.post("/make-server-0b7d3bae/game-feed-badge/mark-read", async (c) => {
     return c.json({ error: String(e) }, 500);
   }
 });
+
+// ─── Staff / Operator API ─────────────────────────────────────────────────────
+// All routes are admin-only and use only `staff_` KV prefix.
+
+async function requireAdmin(c: any): Promise<{ user: any } | Response> {
+  const authHeader = c.req.header('Authorization') ?? '';
+  const accessToken = authHeader.replace('Bearer ', '').trim();
+  if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+  const { data: { user } } = await supabase.auth.getUser(accessToken);
+  if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+  const role = await getUserRole(user.id, user.email ?? '');
+  if (role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  return { user };
+}
+
+// GET /staff/list — 운영진 목록 조회
+app.get('/make-server-0b7d3bae/staff/list', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const raw = await kv.get('staff_members');
+    const members: any[] = Array.isArray(raw) ? raw : [];
+    return c.json({ members });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/add — 운영진 추가
+app.post('/make-server-0b7d3bae/staff/add', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { userId, nickname, level } = body;
+    if (!userId || !nickname) return c.json({ error: 'userId and nickname required' }, 400);
+    const raw = await kv.get('staff_members');
+    const members: any[] = Array.isArray(raw) ? raw : [];
+    if (members.find((m: any) => m.userId === userId)) {
+      return c.json({ error: 'Already a staff member' }, 409);
+    }
+    members.push({ userId, nickname, level: level ?? 1, joinedAt: new Date().toISOString() });
+    await kv.set('staff_members', members);
+    return c.json({ success: true, members });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/remove — 운영진 제거
+app.post('/make-server-0b7d3bae/staff/remove', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { userId } = body;
+    if (!userId) return c.json({ error: 'userId required' }, 400);
+    const raw = await kv.get('staff_members');
+    const members: any[] = Array.isArray(raw) ? raw : [];
+    const next = members.filter((m: any) => m.userId !== userId);
+    await kv.set('staff_members', next);
+    return c.json({ success: true, members: next });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// GET /staff/activity/:userId — 특정 운영진 활동 로그 조회
+app.get('/make-server-0b7d3bae/staff/activity/:userId', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const userId = c.req.param('userId');
+    const raw = await kv.get(`staff_activity_${userId}`);
+    const logs: any[] = Array.isArray(raw) ? raw : [];
+    return c.json({ logs });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/activity — 운영진 활동 로그 기록
+app.post('/make-server-0b7d3bae/staff/activity', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { userId, action, detail } = body;
+    if (!userId || !action) return c.json({ error: 'userId and action required' }, 400);
+    const raw = await kv.get(`staff_activity_${userId}`);
+    const logs: any[] = Array.isArray(raw) ? raw : [];
+    logs.unshift({ action, detail: detail ?? null, recordedAt: new Date().toISOString(), recordedBy: (auth as any).user.id });
+    const trimmed = logs.slice(0, 200);
+    await kv.set(`staff_activity_${userId}`, trimmed);
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// GET /staff/equity — 운영진 지분 현황 조회
+app.get('/make-server-0b7d3bae/staff/equity', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const raw = await kv.get('staff_equity');
+    const equity: any = raw ?? {};
+    return c.json({ equity });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/equity — 운영진 지분 저장
+app.post('/make-server-0b7d3bae/staff/equity', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { equity } = body;
+    if (!equity || typeof equity !== 'object') return c.json({ error: 'equity object required' }, 400);
+    await kv.set('staff_equity', equity);
+    return c.json({ success: true, equity });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/revenue — 수익 내역 추가
+app.post('/make-server-0b7d3bae/staff/revenue', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { amount, category, note } = body;
+    if (amount === undefined || !category) return c.json({ error: 'amount and category required' }, 400);
+    const raw = await kv.get('staff_revenue_list');
+    const list: any[] = Array.isArray(raw) ? raw : [];
+    const entry = { id: crypto.randomUUID(), amount: Number(amount), category, note: note ?? '', recordedAt: new Date().toISOString(), recordedBy: (auth as any).user.id };
+    list.unshift(entry);
+    await kv.set('staff_revenue_list', list.slice(0, 500));
+    return c.json({ success: true, entry });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// GET /staff/revenue/list — 수익 내역 목록 조회
+app.get('/make-server-0b7d3bae/staff/revenue/list', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const raw = await kv.get('staff_revenue_list');
+    const list: any[] = Array.isArray(raw) ? raw : [];
+    return c.json({ list });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// POST /staff/payout — 운영진 정산 처리
+app.post('/make-server-0b7d3bae/staff/payout', async (c) => {
+  try {
+    const auth = await requireAdmin(c);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json();
+    const { userId, amount, note } = body;
+    if (!userId || amount === undefined) return c.json({ error: 'userId and amount required' }, 400);
+    const raw = await kv.get(`staff_payout_${userId}`);
+    const history: any[] = Array.isArray(raw) ? raw : [];
+    const entry = { id: crypto.randomUUID(), amount: Number(amount), note: note ?? '', paidAt: new Date().toISOString(), paidBy: (auth as any).user.id };
+    history.unshift(entry);
+    await kv.set(`staff_payout_${userId}`, history.slice(0, 200));
+    return c.json({ success: true, entry });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+// ─── End Staff API ─────────────────────────────────────────────────────────────
 
 Deno.serve(app.fetch);
