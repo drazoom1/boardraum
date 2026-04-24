@@ -420,7 +420,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                     }`}
                     style={isCurrent ? { backgroundColor: g.color + '15', outline: `1.5px solid ${g.color}` } : {}}>
                     <img src={`/staff-grade-${g.level}.webp`} alt={g.name}
-                      className="w-8 h-8 rounded-lg object-cover shrink-0"
+                      className="w-6 h-6 object-contain shrink-0"
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800">Lv.{g.level} {g.name}</p>
@@ -484,8 +484,8 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                   {/* 당근 등급 */}
                   <div className="flex items-center gap-1.5">
                     <img src={`/staff-grade-${member.level ?? 1}.webp`} alt={grade.name}
-                      className="rounded object-cover shrink-0"
-                      style={{ width: '1.25rem', height: '1.25rem' }}
+                      className="object-contain shrink-0"
+                      style={{ width: '15px', height: '15px' }}
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <span className="text-sm font-bold" style={{ color: grade.color }}>
                       Lv.{member.level ?? 1} {grade.name}

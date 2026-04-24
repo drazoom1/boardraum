@@ -101,6 +101,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
   const [showEditModal, setShowEditModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showRankModal, setShowRankModal] = useState(false);
+  const [staffLevel, setStaffLevel] = useState<number | null>(null);
   const [showPwSection, setShowPwSection] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
@@ -303,10 +304,16 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
     try {
       const { data: { user } } = await supabase.auth.getUser(accessToken);
       if (!user?.id) return;
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+      const [res, staffRes] = await Promise.all([
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }),
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/me`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }),
+      ]);
+      if (staffRes.ok) {
+        const sd = await staffRes.json();
+        if (sd.member) setStaffLevel(sd.member.level ?? 1);
+      }
       if (res.ok) {
         const data = await res.json();
         setProfile(data.profile);
@@ -401,8 +408,21 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
               {(() => {
                 const rank = getRankByStats(userPoints.points, userPoints.posts, userPoints.comments, userPoints.likesReceived);
                 return (
-                  <div className="flex items-center gap-1">
-                    <ChessRankBadge rank={rank} showLabel={true} />
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {/* 체스 등급 아이콘 + 당근 아이콘 + 등급명 묶음 */}
+                    <span className="inline-flex items-end" style={{ gap: '0px' }}>
+                      <ChessRankBadge rank={rank} showLabel={false} />
+                      {staffLevel && (
+                        <img
+                          src={`/staff-grade-${staffLevel}.webp`}
+                          className="object-contain flex-shrink-0"
+                          style={{ width: '15px', height: '15px', marginLeft: '-3px' }}
+                          title="운영진 등급"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      )}
+                      <span className="text-xs font-semibold text-gray-600" style={{ marginLeft: '3px' }}>{rank.label}</span>
+                    </span>
                     <button onClick={() => setShowRankModal(true)}
                       className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors flex-shrink-0"
                       title="등급 정보">
@@ -970,7 +990,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
           accessToken={accessToken}
           userId={userId || ''}
           userEmail={userEmail || ''}
-          userProfile={{ username: displayName, profileImage: avatarUrl }}
+          userProfile={{ username: displayName, profileImage: avatarUrl, staffLevel }}
           ownedGames={ownedGames}
           onClose={() => { setShowComposer(false); setComposerCategory(undefined); }}
           onPosted={() => {

@@ -160,7 +160,7 @@ function GamePickerModal({ onConfirm, onClose, accessToken, selectedIds = [], al
 // ─── 글 작성 모달 ───
 export function PostComposer({ accessToken, userId, userEmail, userProfile, ownedGames, onClose, onPosted, draftPost, editPost, initialCategory, myPostCount, onFirstPost }: {
   accessToken: string; userId: string; userEmail: string;
-  userProfile: { username: string; profileImage?: string } | null;
+  userProfile: { username: string; profileImage?: string; staffLevel?: number | null } | null;
   ownedGames: BoardGame[]; onClose: () => void;
   onPosted: () => void; draftPost?: Partial<FeedPost>; editPost?: FeedPost;
   initialCategory?: string;
@@ -1200,11 +1200,21 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
         {/* 작성 영역 */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 sm:py-4">
           <div className="flex gap-2.5 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-xs sm:text-sm font-bold text-gray-500 overflow-hidden">
-              {avatarUrl 
-                ? <img src={avatarUrl} className="w-full h-full object-cover" alt="profile" />
-                : userName[0]?.toUpperCase()
-              }
+            <div className="relative flex-shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs sm:text-sm font-bold text-gray-500 overflow-hidden">
+                {avatarUrl
+                  ? <img src={avatarUrl} className="w-full h-full object-cover" alt="profile" />
+                  : userName[0]?.toUpperCase()
+                }
+              </div>
+              {userProfile?.staffLevel && (
+                <img
+                  src={`/staff-grade-${userProfile.staffLevel}.webp`}
+                  className="absolute -bottom-1 -right-1 object-contain"
+                  style={{ width: '12px', height: '12px' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-gray-900 text-sm mb-2">{userName}</p>

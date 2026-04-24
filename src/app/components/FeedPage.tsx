@@ -181,6 +181,12 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
               const r = getRankByStats(comment.userRankPoints.points, comment.userRankPoints.posts, comment.userRankPoints.comments, comment.userRankPoints.likesReceived);
               return <ChessRankBadge rank={r} />;
             })()}
+            {comment.userId && staffGradeMap[comment.userId] && (
+              <img src={`/staff-grade-${staffGradeMap[comment.userId]}.webp`}
+                className="object-contain flex-shrink-0"
+                style={{ width: '13px', height: '13px', marginLeft: '-2px' }}
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            )}
             {comment.isSecret && <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />}
             {comment.createdAt && (
               <span className="text-[10px] text-gray-400">{timeAgo(comment.createdAt)}</span>
@@ -446,7 +452,7 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
 }
 
 // ─── 댓글 섹션 ───
-const CommentSection = memo(function CommentSection({ post, accessToken, userId, userName, avatarUrl, userRankPoints, onUpdate, inputRef, onViewProfile, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick }: {
+const CommentSection = memo(function CommentSection({ post, accessToken, userId, userName, avatarUrl, userRankPoints, onUpdate, inputRef, onViewProfile, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick, staffGradeMap = {} }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   avatarUrl?: string; userRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
   onUpdate: () => void;
@@ -457,6 +463,7 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
   onAddToWishlist?: (game: { id: string; name: string; imageUrl: string }) => void;
   onRemoveFromWishlist?: (gameId: string) => void;
   onGameClick?: (gameId: string, gameName: string, imageUrl?: string) => void;
+  staffGradeMap?: Record<string, number>;
 }) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -989,7 +996,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false, staffGradeMap = {} }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -1025,6 +1032,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   onNoticeChange?: () => void;
   isCelebrating?: boolean;
   isOwnFirstPost?: boolean;
+  staffGradeMap?: Record<string, number>;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -1497,6 +1505,12 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                 const r = getRankByStats(post.userRankPoints.points, post.userRankPoints.posts, post.userRankPoints.comments, post.userRankPoints.likesReceived);
                 return <ChessRankBadge rank={r} />;
               })()}
+              {staffGradeMap[post.userId] && (
+                <img src={`/staff-grade-${staffGradeMap[post.userId]}.webp`}
+                  className="object-contain flex-shrink-0"
+                  style={{ width: '15px', height: '15px', marginLeft: '-3px' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              )}
               {post.category && post.category !== '자유' && (
                 <button
                   onClick={() => onCategoryClick?.(post.category)}
@@ -2137,6 +2151,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               onAddToWishlist={onAddToWishlist}
               onRemoveFromWishlist={onRemoveFromWishlist}
               onGameClick={onGameClick}
+              staffGradeMap={staffGradeMap}
             />
           </div>
         )}
@@ -3579,7 +3594,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     }).catch(() => {});
   }, [accessToken]);
   const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
-  const [userProfile, setUserProfile] = useState<{ username: string; profileImage?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ username: string; profileImage?: string; staffLevel?: number | null } | null>(null);
+  const [staffGradeMap, setStaffGradeMap] = useState<Record<string, number>>({});
   const [myPoints, setMyPoints] = useState<{ points: number; posts: number; comments: number; likesReceived: number }>({ points: 0, posts: 0, comments: 0, likesReceived: 0 });
 
   const userName = userProfile?.username || userEmail?.split('@')[0] || '회원';
@@ -3589,16 +3605,30 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   useEffect(() => {
     const loadUserProfile = async () => {
       try {
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        if (res.ok) {
-          const data = await res.json();
+        const [profileRes, staffRes, gradeMapRes] = await Promise.all([
+          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }),
+          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/me`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }),
+          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/grade-map`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }),
+        ]);
+        let staffLevel: number | null = null;
+        if (staffRes.ok) {
+          const sd = await staffRes.json();
+          if (sd.member) staffLevel = sd.member.level ?? 1;
+        }
+        if (gradeMapRes.ok) {
+          const gd = await gradeMapRes.json();
+          if (gd.map) setStaffGradeMap(gd.map);
+        }
+        if (profileRes.ok) {
+          const data = await profileRes.json();
           if (data.profile) {
             setUserProfile({
               username: data.profile.username || data.profile.name || userEmail?.split('@')[0] || '회원',
-              profileImage: data.profile.profileImage
+              profileImage: data.profile.profileImage,
+              staffLevel,
             });
           }
         }
@@ -4538,6 +4568,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                 onCategoryClick={handleCategoryClick}
                 noticeInfo={noticeMap[post.id] ?? null}
                 onNoticeChange={loadNotices}
+                staffGradeMap={staffGradeMap}
               />
             </div>
           ));})()}
