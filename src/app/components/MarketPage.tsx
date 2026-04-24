@@ -798,8 +798,8 @@ function AuctionCreateModal({ accessToken, ownedGames = [], onClose, onSuccess }
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title, description,
-          imageUrl: imageUrls[0] || selectedGame?.imageUrl || '',
-          imageUrls: imageUrls.length > 0 ? imageUrls : (selectedGame?.imageUrl ? [selectedGame.imageUrl] : []),
+          imageUrl: selectedGame?.imageUrl || '',
+          imageUrls,
           startPrice: Number(startPrice) || 1,
           bidUnit: Number(bidUnit) || 1,
           timerMinutes: timer,
@@ -1161,6 +1161,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [bidderIds, setBidderIds] = useState<string[]>([]);
   const [joined, setJoined] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeDisplay, setTimeDisplay] = useState('');
   const [cardCount, setCardCount] = useState(0);
@@ -1434,6 +1435,62 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           </div>
         </div>
       )}
+
+      {/* 실물 사진 썸네일 */}
+      {auction && (auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (() => {
+        const photos = auction.imageUrls!.filter(Boolean);
+        return (
+          <div className="px-5 pb-3 flex gap-2 overflow-x-auto">
+            {photos.map((url, idx) => (
+              <button key={idx} onClick={() => setLightboxIdx(idx)}
+                className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/60 hover:border-orange-300 transition-all active:scale-95">
+                <img src={url} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* 실물 사진 라이트박스 */}
+      {lightboxIdx !== null && auction && (() => {
+        const photos = (auction.imageUrls || []).filter(Boolean);
+        if (!photos.length) return null;
+        const cur = Math.max(0, Math.min(lightboxIdx, photos.length - 1));
+        return (
+          <div className="fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center"
+            onClick={() => setLightboxIdx(null)}>
+            <img src={photos[cur]} className="max-w-full max-h-full object-contain select-none"
+              style={{ maxHeight: '90vh', maxWidth: '95vw' }}
+              onClick={e => e.stopPropagation()} />
+            <button onClick={() => setLightboxIdx(null)}
+              className="absolute top-4 right-4 w-9 h-9 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
+              <X className="w-5 h-5 text-white" />
+            </button>
+            {photos.length > 1 && (
+              <>
+                <button
+                  onClick={e => { e.stopPropagation(); setLightboxIdx(Math.max(0, cur - 1)); }}
+                  disabled={cur === 0}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white/30 disabled:opacity-20 rounded-full flex items-center justify-center transition-colors">
+                  <ChevronDown className="w-5 h-5 text-white rotate-90" />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); setLightboxIdx(Math.min(photos.length - 1, cur + 1)); }}
+                  disabled={cur === photos.length - 1}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white/30 disabled:opacity-20 rounded-full flex items-center justify-center transition-colors">
+                  <ChevronDown className="w-5 h-5 text-white -rotate-90" />
+                </button>
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {photos.map((_, i) => (
+                    <button key={i} onClick={e => { e.stopPropagation(); setLightboxIdx(i); }}
+                      className={`w-1.5 h-1.5 rounded-full transition-all ${i === cur ? 'bg-white w-4' : 'bg-white/40'}`} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 참여자 섹션 */}
       {auction && auction.status !== 'ended' && (
