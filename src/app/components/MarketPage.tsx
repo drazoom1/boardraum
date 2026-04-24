@@ -1845,19 +1845,23 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                 ))
               )}
             </div>
-            <div className="flex gap-2">
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-                placeholder="메시지 입력..."
-                className="flex-1 h-9 px-3 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-200"
-              />
-              <button onClick={sendChat} disabled={sendingChat || !chatInput.trim()}
-                className="h-9 px-3 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-1 hover:bg-orange-600 transition-colors">
-                {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              </button>
-            </div>
+            {joined || isAdmin ? (
+              <div className="flex gap-2">
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                  placeholder="메시지 입력..."
+                  className="flex-1 h-9 px-3 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+                <button onClick={sendChat} disabled={sendingChat || !chatInput.trim()}
+                  className="h-9 px-3 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center gap-1 hover:bg-orange-600 transition-colors">
+                  {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-400 text-center py-1">경매에 참여하면 대화할 수 있어요</p>
+            )}
           </div>
         </div>
       )}

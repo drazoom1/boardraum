@@ -10127,6 +10127,12 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/chat", async (c) => {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const auctionId = c.req.param('auctionId');
+    const isAdmin = await checkIsAdmin(user.id);
+    if (!isAdmin) {
+      const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
+      const joined = participants.some((p: any) => p.userId === user.id);
+      if (!joined) return c.json({ error: '경매 참여자만 대화할 수 있어요' }, 403);
+    }
     const { text } = await c.req.json();
     if (!text?.trim()) return c.json({ error: '내용을 입력해주세요' }, 400);
     const noEmail = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
