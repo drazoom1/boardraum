@@ -68,6 +68,7 @@ interface FeedPageProps {
   onRemoveFromWishlist?: (gameId: string) => void;
   onGuestAction?: () => void;
   noticeRefreshKey?: number;
+  onNavigateToMarket?: () => void;
 }
 
 // ─── 시간 포맷 ──��
@@ -3487,7 +3488,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
   );
 }
 
-export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey }: FeedPageProps) {
+export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
   const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
@@ -4110,13 +4111,15 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           )}
           {auctionBadge && (
             auctionBadge.status === 'active' ? (
-              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-500 text-white animate-pulse">
+              <button onClick={onNavigateToMarket}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-400 text-white hover:bg-teal-500 transition-colors active:scale-95">
                 🔨 경매중
-              </span>
+              </button>
             ) : (
-              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-600">
+              <button onClick={onNavigateToMarket}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-100 text-teal-600 hover:bg-teal-200 transition-colors active:scale-95">
                 ⏰ 경매예정 {auctionBadge.countdown}
-              </span>
+              </button>
             )
           )}
           <div className="flex-1" />

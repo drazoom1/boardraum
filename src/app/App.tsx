@@ -2088,6 +2088,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   }
                 }}
                 onGuestAction={() => setShowGuestModal(true)}
+                onNavigateToMarket={() => setActiveTab('market')}
                 noticeRefreshKey={noticeRefreshKey}
                 wishlistGames={wishlistGames}
                 onRemoveFromWishlist={(gameId) => {
