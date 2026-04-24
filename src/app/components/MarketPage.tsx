@@ -1878,9 +1878,11 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction && accessToken && (
         <div className="border-t border-orange-100 px-5 pt-3 pb-4">
           <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
-          {chatMessages.length > 0 && (
-            <div className="max-h-48 overflow-y-auto space-y-2 mb-3 pr-1">
-              {chatMessages.map((m, i) => (
+          <div className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
+            {chatMessages.length === 0 ? (
+              <p className="text-[11px] text-gray-300 text-center pt-8">첫 메시지를 남겨보세요</p>
+            ) : (
+              chatMessages.map((m, i) => (
                 <div key={m.msgId ?? i} className={`flex gap-2 ${m.userId === userId ? 'flex-row-reverse' : ''}`}>
                   <div className={`max-w-[75%] ${m.userId === userId ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
                     {m.userId !== userId && (
@@ -1898,10 +1900,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                     </span>
                   </div>
                 </div>
-              ))}
-              <div ref={chatBottomRef} />
-            </div>
-          )}
+              ))
+            )}
+            <div ref={chatBottomRef} />
+          </div>
           <div className="flex gap-2">
             <input
               value={chatInput}
