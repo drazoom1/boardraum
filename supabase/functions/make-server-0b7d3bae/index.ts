@@ -11773,6 +11773,116 @@ app.post('/make-server-0b7d3bae/staff/payout', async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// ─── Staff Member Self-Service API (staff_members에 등록된 유저 전용) ─────────
+
+async function requireStaffMember(c: any): Promise<{ user: any; member: any } | Response> {
+  const token = (c.req.header('Authorization') ?? '').replace('Bearer ', '').trim();
+  if (!token) return c.json({ error: 'Unauthorized' }, 401);
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+  const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+  const member = members.find((m: any) => m.userId === user.id);
+  if (!member) {
+    const role = await getUserRole(user.id, user.email ?? '');
+    if (role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+    return { user, member: null };
+  }
+  return { user, member };
+}
+
+app.get('/make-server-0b7d3bae/staff/me', async (c) => {
+  try {
+    const token = (c.req.header('Authorization') ?? '').replace('Bearer ', '').trim();
+    if (!token) return c.json({ member: null });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ member: null });
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const member = members.find((m: any) => m.userId === user.id) ?? null;
+    if (!member) {
+      const role = await getUserRole(user.id, user.email ?? '');
+      if (role === 'admin') {
+        return c.json({ member: { userId: user.id, nickname: '관리자', level: 6, joinedAt: new Date().toISOString(), isAdmin: true } });
+      }
+      return c.json({ member: null });
+    }
+    return c.json({ member });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.get('/make-server-0b7d3bae/staff/revenue/public', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const list: any[] = (await kv.get('staff_revenue_list') as any[]) ?? [];
+    const publicList = list.filter((e: any) => e.isPublic !== false);
+    return c.json({ list: publicList });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.get('/make-server-0b7d3bae/staff/agenda', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const agendas: any[] = (await kv.get('staff_agenda_list') as any[]) ?? [];
+    return c.json({ agendas });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.post('/make-server-0b7d3bae/staff/agenda', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const { title, description } = await c.req.json();
+    if (!title) return c.json({ error: 'title required' }, 400);
+    const agendas: any[] = (await kv.get('staff_agenda_list') as any[]) ?? [];
+    const agenda = {
+      id: crypto.randomUUID(),
+      title,
+      description: description ?? '',
+      createdAt: new Date().toISOString(),
+      closedAt: null,
+      status: 'open',
+      votes: {},
+      createdBy: (auth as any).user.id,
+    };
+    agendas.unshift(agenda);
+    await kv.set('staff_agenda_list', agendas.slice(0, 100));
+    return c.json({ success: true, agenda });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.patch('/make-server-0b7d3bae/staff/agenda/:id/close', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const id = c.req.param('id');
+    const agendas: any[] = (await kv.get('staff_agenda_list') as any[]) ?? [];
+    const idx = agendas.findIndex((a: any) => a.id === id);
+    if (idx === -1) return c.json({ error: 'not found' }, 404);
+    agendas[idx] = { ...agendas[idx], status: 'closed', closedAt: new Date().toISOString() };
+    await kv.set('staff_agenda_list', agendas);
+    return c.json({ success: true, agenda: agendas[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.post('/make-server-0b7d3bae/staff/agenda/:id/vote', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const id = c.req.param('id');
+    const { vote } = await c.req.json();
+    if (vote !== 'yes' && vote !== 'no') return c.json({ error: 'vote must be yes or no' }, 400);
+    const agendas: any[] = (await kv.get('staff_agenda_list') as any[]) ?? [];
+    const idx = agendas.findIndex((a: any) => a.id === id);
+    if (idx === -1) return c.json({ error: '의제를 찾을 수 없습니다' }, 404);
+    if (agendas[idx].status !== 'open') return c.json({ error: '종료된 의제입니다' }, 400);
+    const userId = (auth as any).user.id;
+    agendas[idx] = { ...agendas[idx], votes: { ...agendas[idx].votes, [userId]: vote } };
+    await kv.set('staff_agenda_list', agendas);
+    return c.json({ success: true, agenda: agendas[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 app.post('/make-server-0b7d3bae/staff/update-level', async (c) => {
   try {
     const auth = await requireStaffAdmin(c);

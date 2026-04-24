@@ -19,6 +19,7 @@ import { CalculatorHub } from './components/CalculatorHub';
 import { MarketPage, ReleaseConfirmModal, ListingModal } from './components/MarketPage';
 import { GameCustom } from './components/GameCustom';
 import { AdminPage } from './components/AdminPage';
+import StaffPage from './components/StaffPage';
 // BetaTesterManagement moved to AdminPage
 import { BetaCommunity } from './components/BetaCommunity';
 import { FeedPage, FeedCard } from './components/FeedPage';
@@ -620,6 +621,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('user'); // 사용자 role (항상 서버에서 조회)
+  const [isStaff, setIsStaff] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [serverTimestamp, setServerTimestamp] = useState<number>(0); // 서버의 마지막 수정 시간
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -743,6 +745,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         if (isAdmin) setBetaTesterStatus('approved');
         await Promise.all([
           fetchUserRole(session.access_token),
+          checkStaff(session.access_token),
           isAdmin ? Promise.resolve() : checkBetaTesterStatus(session.access_token),
           loadFromServer(session.access_token, true),
         ]);
@@ -804,6 +807,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         
         // ���버에서 role 조회
         parallelTasks.push(fetchUserRole(session.access_token));
+        parallelTasks.push(checkStaff(session.access_token));
         
         // Check beta tester status for non-admin users
         if (!isAdminEmail(session.user.email)) {
@@ -835,6 +839,19 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     } finally {
       setIsLoadingSession(false);
     }
+  };
+
+  // 운영진 여부 확인
+  const checkStaff = async (token: string) => {
+    try {
+      const r = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setIsStaff(!!d.member);
+      }
+    } catch {}
   };
 
   // 서버에서 사용자 role 조회 (항상 DB에서 조회)
@@ -1180,12 +1197,14 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       setBetaTesterStatus('approved');
       await Promise.all([
         fetchUserRole(token),
+        checkStaff(token),
         loadFromServer(token, true),
       ]);
     } else {
       // role + betaStatus + data 병렬 실행
       await Promise.all([
         fetchUserRole(token),
+        checkStaff(token),
         checkBetaTesterStatus(token),
         loadFromServer(token, true),
       ]);
@@ -1239,6 +1258,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       setUserEmail(null);
       setUserId(null);
       setUserRole('user');
+      setIsStaff(false);
       setBetaTesterStatus(null);
       setOwnedGames([]);
       setWishlistGames([]);
@@ -1785,6 +1805,12 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                         <Shield className="w-4 h-4" /> 관리자 페이지
                       </button>
                     )}
+                    {(isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
+                      <button onClick={() => { setActiveTab('staff'); setShowUserMenu(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-orange-600 hover:bg-orange-50">
+                        <Shield className="w-4 h-4" /> 운영진 페이지
+                      </button>
+                    )}
                     <button onClick={() => setShowSponsorModal(true)}
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-yellow-600 hover:bg-yellow-50">
                       <Coffee className="w-4 h-4" /> 후원하기
@@ -1860,6 +1886,12 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                       <button onClick={() => { setActiveTab('admin'); setShowUserMenu(false); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 rounded-xl">
                         <Shield className="w-4 h-4" /> 관리자 페이지
+                      </button>
+                    )}
+                    {(isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
+                      <button onClick={() => { setActiveTab('staff'); setShowUserMenu(false); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-orange-600 hover:bg-orange-50 rounded-xl">
+                        <Shield className="w-4 h-4" /> 운영진 페이지
                       </button>
                     )}
                     <button onClick={() => { setShowSponsorModal(true); setShowUserMenu(false); }}
@@ -2187,9 +2219,17 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             )}
 
             {activeTab === 'admin' && (
-              <AdminPage 
+              <AdminPage
                 accessToken={accessToken!}
                 onBack={() => setActiveTab('owned')}
+              />
+            )}
+
+            {activeTab === 'staff' && (
+              <StaffPage
+                accessToken={accessToken!}
+                userId={userId!}
+                onExit={() => setActiveTab('feed')}
               />
             )}
             
