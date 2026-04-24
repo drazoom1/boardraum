@@ -1475,6 +1475,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadRequestVersionRef = useRef(0);
 
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
 
@@ -1507,9 +1508,11 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   async function loadMyApprovedRequest() {
     if (!accessToken || isAdmin) return;
+    const version = ++loadRequestVersionRef.current;
     try {
       const res = await fetch(`${API}/auction/my-requests`, { headers: { Authorization: `Bearer ${accessToken}` } });
       const d = await res.json();
+      if (version !== loadRequestVersionRef.current) return; // stale response, ignore
       const reqs: any[] = d.requests || [];
       const EXPIRE_MS = 24 * 60 * 60 * 1000;
       const approved = reqs.find(r =>
@@ -2176,7 +2179,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
           userNickname={userNickname}
           ownedGames={ownedGames}
           onClose={() => setShowRequestModal(false)}
-          onSuccess={(req) => setPendingRequest(req)}
+          onSuccess={(req) => { loadRequestVersionRef.current++; setPendingRequest(req); }}
         />
       )}
     </div>
