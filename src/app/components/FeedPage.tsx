@@ -3614,13 +3614,20 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             { headers: { Authorization: `Bearer ${accessToken}` } }),
         ]);
         let staffLevel: number | null = null;
+        let myStaffUserId: string | null = null;
         if (staffRes.ok) {
           const sd = await staffRes.json();
-          if (sd.member) staffLevel = sd.member.level ?? 1;
+          if (sd.member) {
+            staffLevel = sd.member.level ?? 1;
+            myStaffUserId = sd.member.userId;
+          }
         }
         if (gradeMapRes.ok) {
           const gd = await gradeMapRes.json();
-          if (gd.map) setStaffGradeMap(gd.map);
+          const map = gd.map ?? {};
+          // 현재 유저가 운영진/관리자면 map에 직접 추가 (관리자는 staff_members에 없음)
+          if (myStaffUserId && staffLevel) map[myStaffUserId] = staffLevel;
+          setStaffGradeMap(map);
         }
         if (profileRes.ok) {
           const data = await profileRes.json();
