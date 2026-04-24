@@ -6907,7 +6907,7 @@ interface StaffRevenueEntry {
 }
 
 function AuctionResultsSection({ accessToken }: { accessToken: string }) {
-  const API = (window as any).BOARDRAUM_API ?? '';
+  const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
