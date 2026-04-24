@@ -6948,31 +6948,25 @@ function AuctionResultsSection({ accessToken }: { accessToken: string }) {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-gray-900">{r.gameName ?? '게임명 없음'}</span>
+                    <span className="text-sm font-bold text-gray-900">{r.title ?? r.gameName ?? '게임명 없음'}</span>
                     {r.boxCondition && (
                       <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-semibold">{r.boxCondition}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs text-gray-500">낙찰자:</span>
-                    <span className="text-xs font-semibold text-emerald-600">{r.winnerNickname ?? r.winnerId ?? '—'}</span>
+                    <span className="text-xs font-semibold text-emerald-600">{r.winnerNickname ?? r.winnerId ?? '유찰'}</span>
                     <span className="text-xs text-gray-400">|</span>
                     <span className="text-xs text-gray-500">낙찰가:</span>
-                    <span className="text-xs font-bold text-gray-800">{r.currentBid?.toLocaleString()}장</span>
+                    <span className="text-xs font-bold text-gray-800">{(r.finalBid ?? r.currentBid)?.toLocaleString() ?? '—'}장</span>
                   </div>
                   {r.endedAt && (
                     <p className="text-[11px] text-gray-400 mt-1">
                       {new Date(r.endedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
                     </p>
                   )}
-                  {(r.participants?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {r.participants.map((p: any, pi: number) => (
-                        <span key={pi} className="text-[10px] bg-white border border-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">
-                          {p.nickname ?? p}
-                        </span>
-                      ))}
-                    </div>
+                  {(r.participantCount ?? 0) > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">참여자 {r.participantCount}명</p>
                   )}
                 </div>
               </div>
