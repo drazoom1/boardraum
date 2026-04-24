@@ -3510,6 +3510,39 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
+  const [auctionBadge, setAuctionBadge] = useState<{ status: 'active' | 'scheduled'; countdown?: string } | null>(null);
+  const auctionBadgeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+    async function fetchAuction() {
+      try {
+        const r = await fetch(`${API}/auction/active`, { headers: { Authorization: `Bearer ${publicAnonKey}` } });
+        if (!r.ok) return;
+        const d = await r.json();
+        const a = d.auction;
+        if (!a || a.status === 'ended') { setAuctionBadge(null); return; }
+        if (a.status === 'active') { setAuctionBadge({ status: 'active' }); return; }
+        if (a.status === 'scheduled' && a.startAt) {
+          const tick = () => {
+            const ms = new Date(a.startAt).getTime() - Date.now();
+            if (ms <= 0) { setAuctionBadge({ status: 'active' }); if (auctionBadgeRef.current) clearInterval(auctionBadgeRef.current); return; }
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            const s = Math.floor((ms % 60000) / 1000);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            setAuctionBadge({ status: 'scheduled', countdown: h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}` });
+          };
+          tick();
+          if (auctionBadgeRef.current) clearInterval(auctionBadgeRef.current);
+          auctionBadgeRef.current = setInterval(tick, 1000);
+        }
+      } catch {}
+    }
+    fetchAuction();
+    const pollId = setInterval(fetchAuction, 60000);
+    return () => { clearInterval(pollId); if (auctionBadgeRef.current) clearInterval(auctionBadgeRef.current); };
+  }, []);
   const [hwCategories, setHwCategories] = useState<{ id: string; name: string; guideline: string; pointReward: number; prizeReward?: string; startDate?: string; endDate?: string; active?: boolean }[]>([]);
   const [allHwCategories, setAllHwCategories] = useState<{ id: string; name: string; endDate?: string; active?: boolean }[]>([]);
   const [hwWinner, setHwWinner] = useState<{ userName: string; category: string; prizeReward: string; isWinner: boolean; isAdmin?: boolean; emailClaimed: boolean; email?: string; selectedAt: string } | null>(null);
@@ -4074,6 +4107,17 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               className="text-gray-400 hover:text-gray-600 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
+          )}
+          {auctionBadge && (
+            auctionBadge.status === 'active' ? (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-500 text-white animate-pulse">
+                🔨 경매중
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-600">
+                ⏰ 경매예정 {auctionBadge.countdown}
+              </span>
+            )
           )}
           <div className="flex-1" />
           <button onClick={() => setShowSearch(true)}
