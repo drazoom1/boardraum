@@ -13,8 +13,18 @@ function setMetaContent(selector: string, content: string, attr = 'content') {
   if (el) el.setAttribute(attr, content);
 }
 
-/** 게임 위키 페이지용 SEO 메타태그 업데이트 */
-export function updateGameSEO(gameName: string, imageUrl?: string, description?: string) {
+export interface GameSEOData {
+  imageUrl?: string;
+  description?: string;
+  rating?: number;         // 1-10 평점
+  recommendedPlayers?: string; // "2-4" 형태
+  minAge?: number;
+  englishName?: string;
+}
+
+/** 게임 위키 페이지용 SEO 메타태그 + BoardGame JSON-LD 업데이트 */
+export function updateGameSEO(gameName: string, data: GameSEOData = {}) {
+  const { imageUrl, description, rating, recommendedPlayers, minAge, englishName } = data;
   const title = `${gameName} - 보드게임 정보 | 보드라움`;
   const desc = description || `${gameName} 보드게임 정보, 리뷰, 평점, 게시물을 보드라움에서 확인하세요.`;
   const url = `${SITE_URL}/game/${encodeURIComponent(gameName)}`;
@@ -35,7 +45,37 @@ export function updateGameSEO(gameName: string, imageUrl?: string, description?:
   setMetaContent('meta[name="twitter:description"]', desc);
   setMetaContent('meta[name="twitter:image"]', image);
 
-  // JSON-LD for game
+  // JSON-LD — BoardGame 리치 스니펫
+  const jsonld: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'BoardGame',
+    name: gameName,
+    description: desc,
+    image: image,
+    url: url,
+    publisher: { '@type': 'Organization', name: '보드라움', url: SITE_URL },
+  };
+  if (englishName) jsonld.alternateName = englishName;
+  if (rating != null) {
+    jsonld.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: rating.toFixed(1),
+      bestRating: '10',
+      worstRating: '1',
+      ratingCount: 1,
+    };
+  }
+  if (recommendedPlayers) {
+    const match = recommendedPlayers.match(/(\d+)\s*[-~]\s*(\d+)/);
+    if (match) {
+      jsonld.numberOfPlayers = { '@type': 'QuantitativeValue', minValue: Number(match[1]), maxValue: Number(match[2]) };
+    } else {
+      const single = recommendedPlayers.match(/(\d+)/);
+      if (single) jsonld.numberOfPlayers = { '@type': 'QuantitativeValue', value: Number(single[1]) };
+    }
+  }
+  if (minAge != null) jsonld.typicalAgeRange = `${minAge}+`;
+
   let ldScript = document.getElementById('dynamic-jsonld');
   if (!ldScript) {
     ldScript = document.createElement('script');
@@ -43,15 +83,7 @@ export function updateGameSEO(gameName: string, imageUrl?: string, description?:
     ldScript.setAttribute('type', 'application/ld+json');
     document.head.appendChild(ldScript);
   }
-  ldScript.textContent = JSON.stringify({
-    '@context': 'https://schema.org',
-    '@type': 'Game',
-    name: gameName,
-    description: desc,
-    image: image,
-    url: url,
-    publisher: { '@type': 'Organization', name: '보드라움', url: SITE_URL },
-  });
+  ldScript.textContent = JSON.stringify(jsonld);
 }
 
 /** 기본 메인 페이지 SEO로 복원 */

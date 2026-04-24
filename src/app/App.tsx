@@ -518,7 +518,14 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   useEffect(() => {
     if (wikiGame) {
       const name = wikiGame.koreanName || wikiGame.englishName || wikiGame.id;
-      updateGameSEO(name, wikiGame.imageUrl || undefined);
+      updateGameSEO(name, {
+        imageUrl: wikiGame.imageUrl || undefined,
+        description: (wikiGame as any).wikiInfo || undefined,
+        rating: wikiGame.rating,
+        recommendedPlayers: wikiGame.recommendedPlayers || undefined,
+        minAge: (wikiGame as any).minAge ?? undefined,
+        englishName: wikiGame.englishName || undefined,
+      });
       const gameUrl = `/game/${encodeURIComponent(name)}`;
       if (window.location.pathname !== gameUrl) {
         window.history.pushState({ game: name }, '', gameUrl);
