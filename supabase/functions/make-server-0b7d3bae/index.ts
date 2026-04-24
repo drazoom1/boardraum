@@ -2619,9 +2619,36 @@ app.post("/make-server-0b7d3bae/customs", async (c) => {
     
     
     await kv.set(kvKey, post);
-    
-    
-    return c.json({ success: true, post });
+
+    // 운영진/관리자 위키 등록 자동 적립 +5점
+    let staffPointsAwarded = 0;
+    if (post.postType === 'info' && post.category === 'overview') {
+      const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+      const isMember = members.some((m: any) => m.userId === user.id);
+      const isAdminUser = await getUserRole(user.id) === 'admin';
+      if (isMember || isAdminUser) {
+        const logs: any[] = (await kv.get(`staff_activity_${user.id}`) as any[]) ?? [];
+        logs.unshift({
+          action: '활동점수 합계 5점',
+          detail: `보드위키 등록 1건(+5점) | gameId: ${gameId}`,
+          totalPoints: 5,
+          scores: { wiki: 1 },
+          recordedAt: new Date().toISOString(),
+          recordedBy: user.id,
+        });
+        await kv.set(`staff_activity_${user.id}`, logs.slice(0, 200));
+        staffPointsAwarded = 5;
+        await createNotification(user.id, {
+          type: 'points',
+          fromUserId: user.id,
+          fromUserName: '',
+          postId: postId,
+          message: `보드위키 등록 +5 운영진 포인트 적립!`,
+        }).catch(() => {});
+      }
+    }
+
+    return c.json({ success: true, post, staffPointsAwarded });
   } catch (error) {
     console.error('❌ [Create Post] Error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -4532,35 +4559,40 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
       await kv.del('trending_games_cache').catch(() => {});
     }
 
-    // 운영진 태그 자동 적립: 다른 사람 게시물에 게임 태그 추가한 경우 +2점
-    if (
-      linkedGames !== undefined &&
-      updatedPost.linkedGames?.length > 0 &&
-      post.userId !== user.id
-    ) {
+    // 운영진 태그 자동 적립: 운영진/관리자가 게임 태그 추가한 경우 +2점
+    let staffPointsAwarded = 0;
+    if (linkedGames !== undefined && updatedPost.linkedGames?.length > 0) {
       const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
       const isMember = members.some((m: any) => m.userId === user.id);
-      const isAdminUser = await getUserRole(user.id, user.email ?? '') === 'admin';
-      if (isMember || isAdminUser) {
+      if (isMember || isAdmin) {
         const prevCount = Array.isArray(post.linkedGames) ? post.linkedGames.length : (post.linkedGame ? 1 : 0);
         const newCount = updatedPost.linkedGames.length;
         const added = Math.max(0, newCount - prevCount);
         if (added > 0) {
+          const pts = added * 2;
           const logs: any[] = (await kv.get(`staff_activity_${user.id}`) as any[]) ?? [];
           logs.unshift({
-            action: `활동점수 합계 ${added * 2}점`,
-            detail: `태그 매기기 ${added}건(+${added * 2}점) | postId: ${postId}`,
-            totalPoints: added * 2,
+            action: `활동점수 합계 ${pts}점`,
+            detail: `태그 매기기 ${added}건(+${pts}점) | postId: ${postId}`,
+            totalPoints: pts,
             scores: { tag: added },
             recordedAt: new Date().toISOString(),
             recordedBy: user.id,
           });
           await kv.set(`staff_activity_${user.id}`, logs.slice(0, 200));
+          staffPointsAwarded = pts;
+          await createNotification(user.id, {
+            type: 'points',
+            fromUserId: user.id,
+            fromUserName: '',
+            postId,
+            message: `태그 매기기 ${added}건 +${pts} 운영진 포인트 적립!`,
+          }).catch(() => {});
         }
       }
     }
 
-    return c.json({ success: true, post: updatedPost });
+    return c.json({ success: true, post: updatedPost, staffPointsAwarded });
   } catch (error) {
     console.error('Update post error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -11925,13 +11957,30 @@ app.get('/make-server-0b7d3bae/staff/monthly-scores', async (c) => {
     if (auth instanceof Response) return auth;
     const month = (c.req.query('month') ?? new Date().toISOString().slice(0, 7));
     const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    // 요청자(관리자 포함)도 반드시 포함
+    const requesterId = (auth as any).user.id;
+    const allUserIds = [...new Set([...members.map((m: any) => m.userId), requesterId])];
     const scores: Record<string, number> = {};
-    await Promise.all(members.map(async (m: any) => {
-      const logs: any[] = (await kv.get(`staff_activity_${m.userId}`) as any[]) ?? [];
-      const total = logs
-        .filter((l: any) => (l.recordedAt ?? '').startsWith(month) && l.totalPoints)
-        .reduce((s: number, l: any) => s + (l.totalPoints ?? 0), 0);
-      if (total > 0) scores[m.userId] = total;
+
+    const calcLogPoints = (logs: any[]): number =>
+      logs
+        .filter((l: any) => (l.recordedAt ?? '').startsWith(month))
+        .reduce((s: number, l: any) => {
+          // totalPoints 필드가 있으면 그대로, 없으면 scores 객체에서 합산 (하위 호환)
+          if (typeof l.totalPoints === 'number') return s + l.totalPoints;
+          if (l.scores && typeof l.scores === 'object') {
+            const POINTS: Record<string, number> = { tag: 2, title: 3, wiki: 5, report: 10, mediate: 15, recruit: 20, event: 30, meeting: 10 };
+            const sub = Object.entries(l.scores as Record<string, number>)
+              .reduce((acc: number, [k, v]) => acc + (POINTS[k] ?? 0) * (v ?? 0), 0);
+            return s + sub;
+          }
+          return s;
+        }, 0);
+
+    await Promise.all(allUserIds.map(async (uid: string) => {
+      const logs: any[] = (await kv.get(`staff_activity_${uid}`) as any[]) ?? [];
+      const total = calcLogPoints(logs);
+      if (total > 0) scores[uid] = total;
     }));
     return c.json({ scores });
   } catch (e) { return c.json({ error: String(e) }, 500); }
@@ -11994,6 +12043,32 @@ app.post('/make-server-0b7d3bae/staff/meeting/:id/attend', async (c) => {
       recordedBy: userId,
     });
     await kv.set(`staff_activity_${userId}`, logs.slice(0, 200));
+    return c.json({ success: true, meeting: meetings[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 회의 안건 제출 (운영진/관리자)
+app.post('/make-server-0b7d3bae/staff/meeting/:id/agenda', async (c) => {
+  try {
+    const auth = await requireStaffMember(c);
+    if (auth instanceof Response) return auth;
+    const userId = (auth as any).user.id;
+    const id = c.req.param('id');
+    const { title, description } = await c.req.json();
+    if (!title) return c.json({ error: 'title required' }, 400);
+    const meetings: any[] = (await kv.get('staff_meetings') as any[]) ?? [];
+    const idx = meetings.findIndex((m: any) => m.id === id);
+    if (idx === -1) return c.json({ error: '회의를 찾을 수 없습니다' }, 404);
+    if (meetings[idx].status !== 'open') return c.json({ error: '종료된 회의입니다' }, 400);
+    const agendaItem = {
+      id: crypto.randomUUID(),
+      title,
+      description: description ?? '',
+      submittedBy: userId,
+      submittedAt: new Date().toISOString(),
+    };
+    meetings[idx] = { ...meetings[idx], agendas: [...(meetings[idx].agendas ?? []), agendaItem] };
+    await kv.set('staff_meetings', meetings.slice(0, 100));
     return c.json({ success: true, meeting: meetings[idx] });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });

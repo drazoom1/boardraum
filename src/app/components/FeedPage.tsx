@@ -2214,12 +2214,18 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                   ...g,
                   id: String(g.id).replace(/^bgg_/, ''),
                 }));
-                await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${post.id}`, {
+                const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${post.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
                   body: JSON.stringify({ linkedGames: normalizedQueue, linkedGame: normalizedQueue[0] || null }),
                 });
                 setShowAdminGameTag(false);
+                if (res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  if (data.staffPointsAwarded > 0) {
+                    toast.success(`🏅 태그 활동 +${data.staffPointsAwarded} 운영진 포인트 적립!`);
+                  }
+                }
                 onUpdate();
               }} className="flex-1 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold">저장</button>
             </div>

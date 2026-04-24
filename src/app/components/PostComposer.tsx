@@ -582,7 +582,12 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
           const err = await res.json();
           throw new Error(err.error || '수정 실패');
         }
-        toast.success('게시물이 수정되었습니다');
+        const data = await res.json();
+        if (data.staffPointsAwarded > 0) {
+          toast.success(`🏅 태그 활동 +${data.staffPointsAwarded} 운영진 포인트 적립!`);
+        } else {
+          toast.success('게시물이 수정되었습니다');
+        }
         onPosted();
         onClose();
       } else {
@@ -1104,6 +1109,10 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                       if (!wikiRes.ok) {
                         const errData = await wikiRes.json().catch(() => ({}));
                         throw new Error('보드위키 등록 실패: ' + (errData.error || wikiRes.status));
+                      }
+                      const wikiData = await wikiRes.json().catch(() => ({}));
+                      if (wikiData.staffPointsAwarded > 0) {
+                        toast.success(`🏅 보드위키 등록 +${wikiData.staffPointsAwarded} 운영진 포인트 적립!`);
                       }
 
                       // 3) 표지 이미지 저장 (coverImageUrl 있을 때)

@@ -14,7 +14,7 @@ const STAFF_GRADES = [
   { level: 6, name: '검은 당근', color: '#1F2937', baseEquity: 5.0 },
 ];
 
-type StaffTab = 'status' | 'revenue' | 'agenda' | 'activity';
+type StaffTab = 'status' | 'revenue' | 'meeting' | 'activity';
 
 interface StaffMember {
   userId: string;
@@ -68,7 +68,7 @@ function timeAgo(iso: string) {
 const TABS: { key: StaffTab; label: string }[] = [
   { key: 'status', label: '현황' },
   { key: 'revenue', label: '수익' },
-  { key: 'agenda', label: '의제' },
+  { key: 'meeting', label: '회의' },
   { key: 'activity', label: '활동' },
 ];
 
@@ -82,10 +82,11 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [revLoading, setRevLoading] = useState(false);
   const [revLoaded, setRevLoaded] = useState(false);
 
-  const [agendas, setAgendas] = useState<Agenda[]>([]);
-  const [agendaLoading, setAgendaLoading] = useState(false);
-  const [agendaLoaded, setAgendaLoaded] = useState(false);
-  const [votingId, setVotingId] = useState<string | null>(null);
+  // 의제 제출 (회의 탭)
+  const [agendaFormId, setAgendaFormId] = useState<string | null>(null);
+  const [agendaTitle, setAgendaTitle] = useState('');
+  const [agendaDesc, setAgendaDesc] = useState('');
+  const [submittingAgenda, setSubmittingAgenda] = useState(false);
 
   const [actLogs, setActLogs] = useState<ActivityLog[]>([]);
   const [actLoading, setActLoading] = useState(false);
@@ -102,28 +103,36 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
 
+  const loadMonthlyScores = (memberId: string) => {
+    const month = new Date().toISOString().slice(0, 7);
+    fetch(`${API}/staff/monthly-scores?month=${month}`, { headers })
+      .then(r => r.json())
+      .then(d => {
+        const scores: Record<string, number> = d.scores ?? {};
+        const myScore = scores[memberId] ?? 0;
+        const total = Object.values(scores).reduce((s: number, p: any) => s + p, 0);
+        setMonthlyScore(myScore);
+        setPerfEquity(total > 0 ? 19 * myScore / total : 0);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetch(`${API}/staff/me`, { headers })
       .then(r => r.json())
       .then(d => {
         if (!d.member) { onExit(); return; }
         setMember(d.member);
-        // 월간 점수 로드
-        const month = new Date().toISOString().slice(0, 7);
-        fetch(`${API}/staff/monthly-scores?month=${month}`, { headers })
-          .then(r2 => r2.json())
-          .then(d2 => {
-            const scores: Record<string, number> = d2.scores ?? {};
-            const myScore = scores[d.member.userId] ?? 0;
-            const total = Object.values(scores).reduce((s: number, p: any) => s + p, 0);
-            setMonthlyScore(myScore);
-            setPerfEquity(total > 0 ? 19 * myScore / total : 0);
-          })
-          .catch(() => {});
+        loadMonthlyScores(d.member.userId);
       })
       .catch(() => onExit())
       .finally(() => setChecking(false));
   }, []);
+
+  // 현황 탭으로 돌아올 때마다 점수 갱신
+  useEffect(() => {
+    if (tab === 'status' && member) loadMonthlyScores(member.userId);
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== 'revenue' || revLoaded) return;
@@ -135,14 +144,16 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .finally(() => setRevLoading(false));
   }, [tab]);
 
-  useEffect(() => {
-    if (tab !== 'agenda' || agendaLoaded) return;
-    setAgendaLoading(true);
-    fetch(`${API}/staff/agenda`, { headers })
+  const loadMeetings = () => {
+    fetch(`${API}/staff/meetings`, { headers })
       .then(r => r.json())
-      .then(d => { setAgendas(d.agendas ?? []); setAgendaLoaded(true); })
-      .catch(() => toast.error('의제 불러오기 실패'))
-      .finally(() => setAgendaLoading(false));
+      .then(d => { setMeetings(d.meetings ?? []); setMeetingsLoaded(true); })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (tab !== 'meeting') return;
+    loadMeetings();
   }, [tab]);
 
   useEffect(() => {
@@ -153,12 +164,7 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       .then(d => { setActLogs(d.logs ?? []); setActLoaded(true); })
       .catch(() => toast.error('활동 내역 불러오기 실패'))
       .finally(() => setActLoading(false));
-    if (!meetingsLoaded) {
-      fetch(`${API}/staff/meetings`, { headers })
-        .then(r => r.json())
-        .then(d => { setMeetings(d.meetings ?? []); setMeetingsLoaded(true); })
-        .catch(() => {});
-    }
+    if (!meetingsLoaded) loadMeetings();
   }, [tab, member]);
 
   const handleAttend = async (meetingId: string) => {
@@ -177,18 +183,23 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
     setAttendingId(null);
   };
 
-  const handleVote = async (agendaId: string, vote: 'yes' | 'no') => {
-    setVotingId(agendaId);
+  const handleSubmitAgenda = async (meetingId: string) => {
+    if (!agendaTitle.trim()) { toast.error('안건 제목을 입력해주세요'); return; }
+    setSubmittingAgenda(true);
     try {
-      const r = await fetch(`${API}/staff/agenda/${agendaId}/vote`, {
-        method: 'POST', headers, body: JSON.stringify({ vote }),
+      const r = await fetch(`${API}/staff/meeting/${meetingId}/agenda`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ title: agendaTitle.trim(), description: agendaDesc.trim() }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? '투표 실패');
-      setAgendas(prev => prev.map(a => a.id === agendaId ? d.agenda : a));
-      toast.success('투표 완료');
+      if (!r.ok) throw new Error(d.error ?? '제출 실패');
+      setMeetings(prev => prev.map(m => m.id === meetingId ? d.meeting : m));
+      setAgendaFormId(null);
+      setAgendaTitle('');
+      setAgendaDesc('');
+      toast.success('안건이 제출됐습니다.');
     } catch (e: any) { toast.error(e.message); }
-    setVotingId(null);
+    setSubmittingAgenda(false);
   };
 
   if (checking) {
@@ -394,96 +405,105 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
           )
         )}
 
-        {/* ── 의제 ── */}
-        {tab === 'agenda' && (
-          agendaLoading ? (
-            <div className="py-20 flex justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
-            </div>
-          ) : agendas.length === 0 ? (
-            <div className="py-20 text-center text-gray-300 text-sm">등록된 의제가 없습니다.</div>
+        {/* ── 회의 ── */}
+        {tab === 'meeting' && (
+          meetings.length === 0 ? (
+            <div className="py-20 text-center text-gray-300 text-sm">등록된 회의가 없습니다.</div>
           ) : (
-            <>
-              {agendas.filter(a => a.status === 'open').length > 0 && (
-                <p className="text-xs font-semibold text-gray-400 px-1">투표 진행 중</p>
-              )}
-              {agendas.map(agenda => {
-                const myVote = agenda.votes?.[userId];
-                const votes = Object.values(agenda.votes ?? {});
-                const yesCount = votes.filter(v => v === 'yes').length;
-                const noCount = votes.filter(v => v === 'no').length;
-                const total = yesCount + noCount;
-                const isOpen = agenda.status === 'open';
-                const yesPct = total > 0 ? Math.round(yesCount / total * 100) : 0;
-
+            <div className="space-y-3">
+              {meetings.map(m => {
+                const isOpen = m.status === 'open';
+                const attended = (m.attendees ?? []).includes(userId);
+                const isFormOpen = agendaFormId === m.id;
+                const agendas: any[] = m.agendas ?? [];
                 return (
-                  <div key={agenda.id} className="bg-white rounded-2xl border border-gray-200 p-5">
-                    <div className="flex items-start gap-2 mb-2">
-                      <h3 className="text-sm font-bold text-gray-900 flex-1 leading-snug">{agenda.title}</h3>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
-                        isOpen ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                      }`}>{isOpen ? '투표 중' : '종료'}</span>
-                    </div>
-                    {agenda.description && (
-                      <p className="text-xs text-gray-500 mb-3 leading-relaxed">{agenda.description}</p>
-                    )}
-
-                    {/* 투표 현황 바 */}
-                    {total > 0 && (
-                      <div className="mb-3">
-                        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full bg-green-400 rounded-full transition-all"
-                            style={{ width: `${yesPct}%` }} />
-                        </div>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-[10px] text-green-600 font-semibold">찬성 {yesCount}</span>
-                          <span className="text-[10px] text-gray-400">{total}명 참여</span>
-                          <span className="text-[10px] text-red-500 font-semibold">반대 {noCount}</span>
-                        </div>
+                  <div key={m.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    {/* 회의 헤더 */}
+                    <div className="p-5 pb-4">
+                      <div className="flex items-start gap-2 mb-1">
+                        <h3 className="text-sm font-bold text-gray-900 flex-1 leading-snug">{m.title}</h3>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                          isOpen ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                        }`}>{isOpen ? '진행중' : '종료'}</span>
                       </div>
-                    )}
+                      <p className="text-xs text-gray-400 mb-3">
+                        {m.date ?? ''}{m.date ? ' · ' : ''}참석 {(m.attendees ?? []).length}명
+                      </p>
 
-                    {isOpen && (
+                      {/* 액션 버튼 */}
                       <div className="flex gap-2">
+                        {isOpen && (
+                          attended ? (
+                            <span className="text-[11px] font-bold bg-green-100 text-green-700 px-3 py-1.5 rounded-xl">✓ 참석완료</span>
+                          ) : (
+                            <button
+                              onClick={() => handleAttend(m.id)}
+                              disabled={attendingId === m.id}
+                              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                              {attendingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '참석 +10pt'}
+                            </button>
+                          )
+                        )}
+                        {isOpen && (
+                          <button
+                            onClick={() => {
+                              if (isFormOpen) { setAgendaFormId(null); setAgendaTitle(''); setAgendaDesc(''); }
+                              else setAgendaFormId(m.id);
+                            }}
+                            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-xl hover:bg-gray-700">
+                            {isFormOpen ? '취소' : '📋 의제 제출'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 의제 제출 인라인 폼 */}
+                    {isFormOpen && (
+                      <div className="px-5 pb-5 border-t border-gray-100 pt-4 bg-gray-50">
+                        <p className="text-xs font-bold text-gray-700 mb-3">안건 제출</p>
+                        <input
+                          value={agendaTitle}
+                          onChange={e => setAgendaTitle(e.target.value)}
+                          placeholder="안건 제목 *"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-2 bg-white focus:outline-none focus:border-gray-400"
+                        />
+                        <textarea
+                          value={agendaDesc}
+                          onChange={e => setAgendaDesc(e.target.value)}
+                          placeholder="상세 내용 (선택)"
+                          rows={3}
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-3 bg-white focus:outline-none focus:border-gray-400 resize-none"
+                        />
                         <button
-                          onClick={() => handleVote(agenda.id, 'yes')}
-                          disabled={votingId === agenda.id}
-                          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                            myVote === 'yes'
-                              ? 'bg-green-500 text-white shadow-sm'
-                              : 'bg-green-50 text-green-700 hover:bg-green-100'
-                          }`}>
-                          {votingId === agenda.id
-                            ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                            : `👍 찬성${myVote === 'yes' ? ' ✓' : ''}`}
-                        </button>
-                        <button
-                          onClick={() => handleVote(agenda.id, 'no')}
-                          disabled={votingId === agenda.id}
-                          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                            myVote === 'no'
-                              ? 'bg-red-500 text-white shadow-sm'
-                              : 'bg-red-50 text-red-600 hover:bg-red-100'
-                          }`}>
-                          {votingId === agenda.id
-                            ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                            : `👎 반대${myVote === 'no' ? ' ✓' : ''}`}
+                          onClick={() => handleSubmitAgenda(m.id)}
+                          disabled={submittingAgenda}
+                          className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                          {submittingAgenda ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '제출'}
                         </button>
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-[10px] text-gray-300">{(agenda.createdAt ?? '').slice(0, 10)}</span>
-                      {myVote && (
-                        <span className="text-[10px] text-gray-400">
-                          내 투표권 {grade.baseEquity}% · {myVote === 'yes' ? '찬성' : '반대'}
-                        </span>
-                      )}
-                    </div>
+                    {/* 제출된 안건 목록 */}
+                    {agendas.length > 0 && (
+                      <div className="border-t border-gray-100">
+                        <p className="text-[11px] font-semibold text-gray-400 px-5 pt-3 pb-1">제출된 안건 {agendas.length}건</p>
+                        <div className="divide-y divide-gray-50">
+                          {agendas.map((a: any, i: number) => (
+                            <div key={a.id ?? i} className="px-5 py-3">
+                              <p className="text-sm font-semibold text-gray-800 leading-snug">{a.title}</p>
+                              {a.description && (
+                                <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{a.description}</p>
+                              )}
+                              <p className="text-[10px] text-gray-300 mt-1">{(a.submittedAt ?? '').slice(0, 10)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-            </>
+            </div>
           )
         )}
 
@@ -572,39 +592,6 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                 </div>
               )}
             </div>
-
-            {/* 전체 회의 목록 */}
-            {meetings.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 p-5">
-                <h3 className="text-sm font-bold text-gray-800 mb-3">회의 목록</h3>
-                <div className="space-y-2">
-                  {meetings.map(m => {
-                    const attended = (m.attendees ?? []).includes(userId);
-                    const isOpen = m.status === 'open';
-                    return (
-                      <div key={m.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800">{m.title}</p>
-                          <p className="text-xs text-gray-400">{m.date ?? ''} · 참석 {(m.attendees ?? []).length}명</p>
-                        </div>
-                        {attended ? (
-                          <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-lg">✓ 참석완료</span>
-                        ) : isOpen ? (
-                          <button
-                            onClick={() => handleAttend(m.id)}
-                            disabled={attendingId === m.id}
-                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
-                            {attendingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '참석'}
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-gray-300">종료</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* 활동 로그 */}
             {actLoading ? (
