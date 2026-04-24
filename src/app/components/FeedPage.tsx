@@ -3717,15 +3717,19 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         const data = await res.json();
         // 서버에서 반환된 값으로 즉시 반영 후, 서버와 재동기화
         setBonusCards(typeof data.cards === 'number' ? data.cards : 0);
-        // 서버에서 반환된 업데이트된 이벤트로 즉시 타이머 반영
-        if (data.updatedEvent) {
-          setLastPostEvents(prev =>
-            prev.map(e => e.id === data.updatedEvent.id ? data.updatedEvent : e)
-          );
+        if (data.cardFailed) {
+          toast.error('아쉽게도 효과사용에 실패하였습니다.');
+        } else {
+          // 서버에서 반환된 업데이트된 이벤트로 즉시 타이머 반영
+          if (data.updatedEvent) {
+            setLastPostEvents(prev =>
+              prev.map(e => e.id === data.updatedEvent.id ? data.updatedEvent : e)
+            );
+          }
+          const secs: number = data.updatedEvent?.cardReductionSeconds ?? 300;
+          const reductionLabel = secs >= 60 ? `${Math.round(secs / 60)}분` : `${secs}초`;
+          toast.success(`⏱ 타이머가 ${reductionLabel} 줄었어요!`);
         }
-        const secs: number = data.updatedEvent?.cardReductionSeconds ?? 300;
-        const reductionLabel = secs >= 60 ? `${Math.round(secs / 60)}분` : `${secs}초`;
-        toast.success(`⏱ 타이머가 ${reductionLabel} 줄었어요!`);
         // 서버와 재동기화 (정확한 카드 수 보장)
         setTimeout(() => loadBonusCards(), 500);
       } else {

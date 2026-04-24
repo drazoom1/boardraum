@@ -4668,7 +4668,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
     const comment = {
       id: `${Date.now()}_${Math.random().toString(36).substring(7)}`,
       userId: user.id,
-      userName: userName && userName !== 'Anonymous' ? userName : resolvedUserName,
+      userName: resolvedUserName,
       userAvatar: commenterProfile?.profileImage || null,
       userRankPoints: commenterPoints,
       content: (content || "").trim(),
@@ -11770,6 +11770,21 @@ app.post('/make-server-0b7d3bae/staff/payout', async (c) => {
     history.unshift({ id: crypto.randomUUID(), amount: Number(amount), note: note ?? '', paidAt: new Date().toISOString(), paidBy: (auth as any).user.id });
     await kv.set(`staff_payout_${userId}`, history.slice(0, 200));
     return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.post('/make-server-0b7d3bae/staff/update-level', async (c) => {
+  try {
+    const auth = await requireStaffAdmin(c);
+    if (auth instanceof Response) return auth;
+    const { userId, level } = await c.req.json();
+    if (!userId || level === undefined) return c.json({ error: 'userId and level required' }, 400);
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const idx = members.findIndex(m => m.userId === userId);
+    if (idx === -1) return c.json({ error: '운영진을 찾을 수 없습니다' }, 404);
+    members[idx] = { ...members[idx], level: Number(level) };
+    await kv.set('staff_members', members);
+    return c.json({ success: true, members });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 

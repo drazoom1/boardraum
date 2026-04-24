@@ -6864,6 +6864,15 @@ type OperatorTab = 'staff-list' | 'activity' | 'revenue';
 
 const STAFF_ACTIVITY_CATEGORIES = ['콘텐츠 제작', '이벤트 진행', '커뮤니티 관리', '기타'] as const;
 
+const STAFF_GRADES = [
+  { level: 1, name: '노랑 당근', color: '#FACC15', baseEquity: 1.0 },
+  { level: 2, name: '초록 당근', color: '#22C55E', baseEquity: 2.0 },
+  { level: 3, name: '파랑 당근', color: '#3B82F6', baseEquity: 3.0 },
+  { level: 4, name: '빨강 당근', color: '#EF4444', baseEquity: 4.0 },
+  { level: 5, name: '보라 당근', color: '#A855F7', baseEquity: 4.5 },
+  { level: 6, name: '검은 당근', color: '#1F2937', baseEquity: 5.0 },
+];
+
 interface StaffMember {
   userId: string;
   nickname: string;
@@ -6894,13 +6903,9 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
 
   // 운영진 목록
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
-  const [equityMap, setEquityMap] = useState<Record<string, number>>({});
   const [staffLoading, setStaffLoading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
-
-  // 지분 편집
-  const [equityEdits, setEquityEdits] = useState<Record<string, string>>({});
-  const [savingEquity, setSavingEquity] = useState(false);
+  const [updatingLevelId, setUpdatingLevelId] = useState<string | null>(null);
 
   // 운영진 추가 (가입자 검색)
   const [showSearch, setShowSearch] = useState(false);
@@ -6930,19 +6935,9 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
   const loadStaff = async () => {
     setStaffLoading(true);
     try {
-      const [r1, r2] = await Promise.all([
-        fetch(`${API}/staff/list`, { headers: authHeaders }),
-        fetch(`${API}/staff/equity`, { headers: authHeaders }),
-      ]);
-      const d1 = await r1.json();
-      const d2 = await r2.json();
-      const list: StaffMember[] = d1.members ?? [];
-      const eq: Record<string, number> = d2.equity ?? {};
-      setStaffList(list);
-      setEquityMap(eq);
-      const edits: Record<string, string> = {};
-      list.forEach(m => { edits[m.userId] = String(eq[m.userId] ?? 0); });
-      setEquityEdits(edits);
+      const r = await fetch(`${API}/staff/list`, { headers: authHeaders });
+      const d = await r.json();
+      setStaffList(d.members ?? []);
     } catch { /* silent */ }
     finally { setStaffLoading(false); }
   };
@@ -7025,22 +7020,21 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     setRemovingId(null);
   };
 
-  const handleSaveEquity = async () => {
-    setSavingEquity(true);
+  const handleUpdateLevel = async (userId: string, level: number) => {
+    setUpdatingLevelId(userId);
     try {
-      const equity: Record<string, number> = {};
-      staffList.forEach(m => { equity[m.userId] = parseFloat(equityEdits[m.userId] ?? '0') || 0; });
-      const r = await fetch(`${API}/staff/equity`, {
+      const r = await fetch(`${API}/staff/update-level`, {
         method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ equity }),
+        body: JSON.stringify({ userId, level }),
       });
-      if (!r.ok) throw new Error('저장 실패');
-      setEquityMap(equity);
-      toast.success('지분이 저장됐습니다.');
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? '저장 실패');
+      setStaffList(d.members ?? []);
+      toast.success('등급이 변경됐습니다.');
     } catch (e: any) {
       toast.error(e.message);
     }
-    setSavingEquity(false);
+    setUpdatingLevelId(null);
   };
 
   const handleSaveActivity = async () => {
@@ -7092,10 +7086,11 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     if (!window.confirm(`${entry.amount.toLocaleString()}원 지급완료 처리할까요?`)) return;
     setPayingId(entry.id);
     try {
-      const totalEq = staffList.reduce((s, m) => s + (equityMap[m.userId] ?? 0), 0);
+      const net = Math.round(entry.amount * 0.9);
       await Promise.all(
         staffList.map(m => {
-          const share = totalEq > 0 ? Math.round(entry.amount * (equityMap[m.userId] ?? 0) / totalEq) : 0;
+          const grade = STAFF_GRADES.find(g => g.level === (m.level ?? 1)) ?? STAFF_GRADES[0];
+          const share = Math.round(net * grade.baseEquity / 100);
           return fetch(`${API}/staff/payout`, {
             method: 'POST', headers: authHeaders,
             body: JSON.stringify({ userId: m.userId, amount: share, note: `${entry.category} 정산 (${entry.recordedAt.slice(0, 10)})` }),
@@ -7110,7 +7105,10 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
     setPayingId(null);
   };
 
-  const totalEquity = staffList.reduce((s, m) => s + (equityMap[m.userId] ?? 0), 0);
+  const staffBaseEquitySum = staffList.reduce((s, m) => {
+    const grade = STAFF_GRADES.find(g => g.level === (m.level ?? 1)) ?? STAFF_GRADES[0];
+    return s + grade.baseEquity;
+  }, 0);
   const staffIds = new Set(staffList.map(m => m.userId));
   const filteredUsers = allUsers.filter(u => {
     if (staffIds.has(u.userId)) return false;
@@ -7220,65 +7218,70 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
               <div className="py-8 text-center text-gray-300 text-sm">등록된 운영진이 없습니다.</div>
             ) : (
               <div className="space-y-2">
-                {staffList.map(m => (
-                  <div key={m.userId} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600">
-                      {(m.nickname ?? '?')[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-900 truncate">{m.nickname}</span>
-                        <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full">
-                          운영진 Lv.{m.level ?? 1}
-                        </span>
+                {staffList.map(m => {
+                  const grade = STAFF_GRADES.find(g => g.level === (m.level ?? 1)) ?? STAFF_GRADES[0];
+                  return (
+                    <div key={m.userId} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
+                        style={{ backgroundColor: grade.color }}>
+                        {(m.nickname ?? '?')[0]}
                       </div>
-                      <div className="text-xs text-gray-400">{(m.joinedAt ?? '').slice(0, 10)} 합류</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900 truncate">{m.nickname}</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white"
+                            style={{ backgroundColor: grade.color }}>
+                            {grade.name}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400">{(m.joinedAt ?? '').slice(0, 10)} 합류 · 기본지분 {grade.baseEquity}%</div>
+                      </div>
+                      <select
+                        value={m.level ?? 1}
+                        onChange={e => handleUpdateLevel(m.userId, Number(e.target.value))}
+                        disabled={updatingLevelId === m.userId}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white mr-1">
+                        {STAFF_GRADES.map(g => (
+                          <option key={g.level} value={g.level}>Lv.{g.level}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleRemoveStaff(m.userId, m.nickname)}
+                        disabled={removingId === m.userId}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        {removingId === m.userId
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
                     </div>
-                    <div className="text-right mr-2">
-                      <div className="text-xs font-semibold text-gray-700">{equityMap[m.userId] ?? 0}%</div>
-                      <div className="text-[10px] text-gray-400">지분</div>
-                    </div>
-                    <button
-                      onClick={() => handleRemoveStaff(m.userId, m.nickname)}
-                      disabled={removingId === m.userId}
-                      className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                      {removingId === m.userId
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* 지분 설정 */}
+          {/* 지분 현황 */}
           {staffList.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-800">지분 설정</h3>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  Math.abs(totalEquity - 100) < 0.1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                }`}>합계 {totalEquity}%</span>
+              <h3 className="text-sm font-bold text-gray-800 mb-4">지분 현황</h3>
+              <div className="space-y-0">
+                <div className="flex justify-between text-sm py-2 border-b border-gray-100">
+                  <span className="text-gray-600">운영사 (프린스캣)</span>
+                  <span className="font-semibold text-gray-900">51%</span>
+                </div>
+                <div className="flex justify-between text-sm py-2 border-b border-gray-100">
+                  <span className="text-gray-600">운영진 기본 지분 합계</span>
+                  <span className="font-semibold text-gray-900">{staffBaseEquitySum.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between items-center text-sm py-2 border-b border-gray-100">
+                  <span className="text-gray-600">운영진 성과 지분</span>
+                  <span className="text-[11px] text-gray-400">19% (활동점수 기반, 추후 반영)</span>
+                </div>
+                <div className="flex justify-between text-sm py-2">
+                  <span className="text-gray-600">미충원분 (운영사 임시 보유)</span>
+                  <span className="font-semibold text-orange-500">{Math.max(0, 30 - staffBaseEquitySum).toFixed(1)}%</span>
+                </div>
               </div>
-              <div className="space-y-2 mb-4">
-                {staffList.map(m => (
-                  <div key={m.userId} className="flex items-center gap-3">
-                    <span className="text-sm text-gray-700 flex-1 truncate">{m.nickname}</span>
-                    <input
-                      type="number" min="0" max="100" step="0.1"
-                      value={equityEdits[m.userId] ?? '0'}
-                      onChange={e => setEquityEdits(prev => ({ ...prev, [m.userId]: e.target.value }))}
-                      className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right"
-                    />
-                    <span className="text-sm text-gray-500 w-4">%</span>
-                  </div>
-                ))}
-              </div>
-              <button onClick={handleSaveEquity} disabled={savingEquity}
-                className="w-full bg-gray-900 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-700 disabled:opacity-50">
-                {savingEquity ? '저장 중...' : '지분 저장'}
-              </button>
             </div>
           )}
         </div>
@@ -7385,18 +7388,28 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
 
             {revAmount && !isNaN(Number(revAmount)) && staffList.length > 0 && (
               <div className="bg-gray-50 rounded-xl p-3 mb-3">
-                <p className="text-xs text-gray-500 mb-2 font-medium">지분별 배분 미리보기</p>
-                {staffList.map(m => {
-                  const share = totalEquity > 0
-                    ? Math.round(Number(revAmount) * (equityMap[m.userId] ?? 0) / totalEquity)
-                    : 0;
+                <p className="text-xs text-gray-500 mb-2 font-medium">배분 미리보기 (부가세 10% 차감 후)</p>
+                {(() => {
+                  const net = Math.round(Number(revAmount) * 0.9);
                   return (
-                    <div key={m.userId} className="flex justify-between text-xs py-1">
-                      <span className="text-gray-600">{m.nickname} ({equityMap[m.userId] ?? 0}%)</span>
-                      <span className="font-semibold text-gray-800">{share.toLocaleString()}원</span>
-                    </div>
+                    <>
+                      <div className="flex justify-between text-xs py-1 border-b border-gray-200 mb-1">
+                        <span className="text-gray-400">순수익 (VAT 차감)</span>
+                        <span className="text-gray-600">{net.toLocaleString()}원</span>
+                      </div>
+                      {staffList.map(m => {
+                        const grade = STAFF_GRADES.find(g => g.level === (m.level ?? 1)) ?? STAFF_GRADES[0];
+                        const share = Math.round(net * grade.baseEquity / 100);
+                        return (
+                          <div key={m.userId} className="flex justify-between text-xs py-1">
+                            <span className="text-gray-600">{m.nickname} ({grade.baseEquity}%)</span>
+                            <span className="font-semibold text-gray-800">{share.toLocaleString()}원</span>
+                          </div>
+                        );
+                      })}
+                    </>
                   );
-                })}
+                })()}
               </div>
             )}
 
