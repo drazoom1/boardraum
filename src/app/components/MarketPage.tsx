@@ -1462,6 +1462,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [forceEnding, setForceEnding] = useState(false);
   const [approvedRequest, setApprovedRequest] = useState<any>(null);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [rejectedRequests, setRejectedRequests] = useState<any[]>([]);
   const [launching, setLaunching] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [dismissingBanner, setDismissingBanner] = useState(false);
@@ -1522,6 +1523,10 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       );
       setApprovedRequest(approved || null);
       setPendingRequests(reqs.filter(r => r.status === 'pending'));
+      setRejectedRequests(reqs.filter(r =>
+        r.status === 'rejected' && r.reviewedAt &&
+        Date.now() - new Date(r.reviewedAt).getTime() < EXPIRE_MS
+      ));
     } catch {}
   }
 
@@ -1738,6 +1743,21 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p key={r.requestId || i} className="text-xs font-bold text-amber-800 truncate">"{r.title}" 승인 대기중</p>
             ))}
             <p className="text-[11px] text-amber-600 mt-0.5">관리자 승인 후 경매를 시작할 수 있어요.</p>
+          </div>
+        </div>
+      )}
+
+      {/* 거절된 요청 배너 (24시간) */}
+      {rejectedRequests.length > 0 && !isAdmin && (
+        <div className="mx-4 mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="text-xl shrink-0">❌</span>
+          <div className="flex-1 min-w-0 space-y-1">
+            {rejectedRequests.map((r, i) => (
+              <div key={r.requestId || i}>
+                <p className="text-xs font-bold text-red-700 truncate">"{r.title}" 경매 요청이 거절됐어요</p>
+                {r.rejectReason && <p className="text-[11px] text-red-500 mt-0.5">사유: {r.rejectReason}</p>}
+              </div>
+            ))}
           </div>
         </div>
       )}
