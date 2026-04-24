@@ -9581,6 +9581,179 @@ async function requireAdmin(c: any): Promise<{ user: any; error?: Response }> {
   return { user };
 }
 
+// ============================================================
+// 🎯 경매 시스템 API
+// ============================================================
+
+// GET /auction/active — 현재/최근 경매 조회 (공개)
+app.get("/make-server-0b7d3bae/auction/active", async (c) => {
+  try {
+    const activeId = await kv.get("auction_active_id") as string | null;
+    if (!activeId) return c.json({ auction: null });
+    const auction = await kv.get(`auction_${activeId}`) as any | null;
+    if (!auction) return c.json({ auction: null });
+
+    const now = new Date().toISOString();
+    let updated = false;
+    if (auction.status === 'scheduled' && auction.startAt && now >= auction.startAt) {
+      auction.status = 'active'; updated = true;
+    }
+    if (auction.status === 'active' && auction.endAt && now >= auction.endAt) {
+      auction.status = 'ended';
+      if (auction.currentBidder && !auction.winnerUserId) {
+        auction.winnerUserId = auction.currentBidder;
+        auction.winnerNickname = auction.currentBidderNickname;
+      }
+      updated = true;
+    }
+    if (updated) await kv.set(`auction_${activeId}`, auction);
+    return c.json({ auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction — 경매 등록 (관리자)
+app.post("/make-server-0b7d3bae/auction", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const body = await c.req.json();
+    const { title, description, imageUrl, imageUrls, startPrice, bidUnit, scheduledAt, startAt, endAt, bidExtendMinutes, prize, boxCondition, gameId } = body;
+    if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
+    if (!startPrice || Number(startPrice) < 1) return c.json({ error: '시작가를 입력해주세요' }, 400);
+    if (!bidUnit || Number(bidUnit) < 1) return c.json({ error: '입찰 단위를 입력해주세요' }, 400);
+    if (!startAt) return c.json({ error: '경매 시작 시간을 입력해주세요' }, 400);
+    if (!endAt) return c.json({ error: '경매 종료 시간을 입력해주세요' }, 400);
+
+    const auctionId = `auction_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
+    const effScheduled = scheduledAt || startAt;
+    const status: 'scheduled' | 'active' = now < effScheduled ? 'scheduled' : 'active';
+    const resolvedImageUrls: string[] = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : (imageUrl ? [imageUrl] : []);
+
+    const auction = {
+      auctionId, title: title.trim(), description: description?.trim() || '',
+      imageUrl: resolvedImageUrls[0] || '', imageUrls: resolvedImageUrls,
+      startPrice: Number(startPrice), bidUnit: Number(bidUnit),
+      status, scheduledAt: scheduledAt || '', startAt, endAt,
+      bidExtendMinutes: Number(bidExtendMinutes) || 5,
+      createdBy: user.id, currentBid: Number(startPrice),
+      currentBidder: null, currentBidderNickname: null,
+      prize: prize?.trim() || '', boxCondition: boxCondition || '',
+      gameId: gameId || '', type: 'admin',
+      winnerUserId: null, winnerNickname: null, createdAt: now,
+    };
+
+    await kv.set(`auction_${auctionId}`, auction);
+    await kv.set('auction_active_id', auctionId);
+    return c.json({ success: true, auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/request — 경매 요청 (일반회원)
+app.post("/make-server-0b7d3bae/auction/request", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json();
+    const { title, description, imageUrl, startPrice, bidUnit, nickname } = body;
+    if (!title?.trim()) return c.json({ error: '상품명을 입력해주세요' }, 400);
+    const requestId = `auc_req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const request = {
+      requestId, userId: user.id, nickname: nickname || '',
+      title: title.trim(), description: description?.trim() || '',
+      imageUrl: imageUrl || '', startPrice: Number(startPrice) || 1,
+      bidUnit: Number(bidUnit) || 1, status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    const requests = (await kv.get('auction_requests') as any[] | null) || [];
+    await kv.set('auction_requests', [...requests, request]);
+    return c.json({ success: true, request });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:auctionId/bid — 입찰
+app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.split(' ')[1];
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+
+    const now = new Date().toISOString();
+    if (auction.status === 'ended' || now >= auction.endAt) return c.json({ error: '종료된 경매예요' }, 400);
+    if (auction.status === 'scheduled' && now < auction.startAt) return c.json({ error: '아직 경매가 시작되지 않았어요' }, 400);
+    if (auction.currentBidder === user.id) return c.json({ error: '이미 최고 입찰자예요' }, 400);
+
+    const { nickname, amount } = await c.req.json();
+    const bidAmount = Number(amount);
+    const expectedBid = auction.currentBid + auction.bidUnit;
+    if (bidAmount !== expectedBid) return c.json({ error: `입찰가는 ${expectedBid}장이어야 해요` }, 400);
+
+    const email = user.email || '';
+    const cardCount = await readCardCountByEmail(email, user.id);
+    if (cardCount < bidAmount) return c.json({ error: `보너스카드가 부족해요 (보유: ${cardCount}장, 필요: ${bidAmount}장)` }, 400);
+
+    const bids = (await kv.get(`auction_bids_${auctionId}`) as any[] | null) || [];
+    bids.push({
+      bidId: `bid_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      userId: user.id, email, nickname: nickname || '', amount: bidAmount, bidAt: now,
+    });
+    await kv.set(`auction_bids_${auctionId}`, bids);
+
+    const newEndAt = new Date(Math.max(
+      new Date(auction.endAt).getTime(),
+      Date.now() + auction.bidExtendMinutes * 60 * 1000
+    )).toISOString();
+    auction.currentBid = bidAmount;
+    auction.currentBidder = user.id;
+    auction.currentBidderNickname = nickname || '';
+    auction.endAt = newEndAt;
+    if (auction.status === 'scheduled') auction.status = 'active';
+    await kv.set(`auction_${auctionId}`, auction);
+
+    return c.json({ success: true, auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /auction/:auctionId/end — 경매 종료 처리 (관리자)
+app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const auctionId = c.req.param('auctionId');
+    const auction = await kv.get(`auction_${auctionId}`) as any | null;
+    if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
+    if (auction.status === 'ended') return c.json({ error: '이미 종료된 경매예요' }, 400);
+
+    auction.status = 'ended';
+    auction.endAt = new Date().toISOString();
+
+    if (auction.currentBidder) {
+      auction.winnerUserId = auction.currentBidder;
+      auction.winnerNickname = auction.currentBidderNickname;
+      const bids = (await kv.get(`auction_bids_${auctionId}`) as any[] | null) || [];
+      const winnerBids = (bids as any[])
+        .filter((b: any) => b.userId === auction.currentBidder)
+        .sort((a: any, b: any) => b.amount - a.amount);
+      const winningBid = winnerBids[0];
+      if (winningBid?.email) {
+        const winnerCards = await readCardCountByEmail(winningBid.email, auction.currentBidder);
+        await writeCardCountByEmail(winningBid.email, Math.max(0, winnerCards - auction.currentBid));
+        console.log(`[경매낙찰] ${winningBid.email} -${auction.currentBid}장`);
+      }
+    }
+
+    await kv.set(`auction_${auctionId}`, auction);
+    return c.json({ success: true, auction });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 숙제 카테고리 목록 조회 (전체 공개)
 app.get("/make-server-0b7d3bae/homework/categories", async (c) => {
   try {
