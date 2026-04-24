@@ -4531,6 +4531,34 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     if (updatedPost.linkedGames?.length > 0) {
       await kv.del('trending_games_cache').catch(() => {});
     }
+
+    // 운영진 태그 자동 적립: 다른 사람 게시물에 게임 태그 추가한 경우 +2점
+    if (
+      linkedGames !== undefined &&
+      updatedPost.linkedGames?.length > 0 &&
+      post.userId !== user.id
+    ) {
+      const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+      const isMember = members.some((m: any) => m.userId === user.id);
+      if (isMember) {
+        const prevCount = Array.isArray(post.linkedGames) ? post.linkedGames.length : (post.linkedGame ? 1 : 0);
+        const newCount = updatedPost.linkedGames.length;
+        const added = Math.max(0, newCount - prevCount);
+        if (added > 0) {
+          const logs: any[] = (await kv.get(`staff_activity_${user.id}`) as any[]) ?? [];
+          logs.unshift({
+            action: `활동점수 합계 ${added * 2}점`,
+            detail: `태그 매기기 ${added}건(+${added * 2}점) | postId: ${postId}`,
+            totalPoints: added * 2,
+            scores: { tag: added },
+            recordedAt: new Date().toISOString(),
+            recordedBy: user.id,
+          });
+          await kv.set(`staff_activity_${user.id}`, logs.slice(0, 200));
+        }
+      }
+    }
+
     return c.json({ success: true, post: updatedPost });
   } catch (error) {
     console.error('Update post error:', error);
