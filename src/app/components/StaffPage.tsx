@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Loader2, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
 
@@ -83,6 +83,12 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [member, setMember] = useState<StaffMember | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfTotalPages, setPdfTotalPages] = useState(0);
+  const [pdfRendering, setPdfRendering] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pdfDocRef = useRef<any>(null);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const [showGradeModal, setShowGradeModal] = useState(false);
   const [gradeModalTab, setGradeModalTab] = useState<'my' | 'table'>('my');
 
@@ -92,6 +98,55 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [submittingAgreement, setSubmittingAgreement] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showGuideModal || !isMobile) return;
+    setPdfPage(1);
+    setPdfTotalPages(0);
+    pdfDocRef.current = null;
+    async function loadPdf() {
+      setPdfRendering(true);
+      try {
+        let pdfjsLib = (window as any).pdfjsLib;
+        if (!pdfjsLib) {
+          await new Promise<void>((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            s.onload = () => resolve(); s.onerror = reject;
+            document.head.appendChild(s);
+          });
+          pdfjsLib = (window as any).pdfjsLib;
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+        const doc = await pdfjsLib.getDocument('/staff-agreement.pdf').promise;
+        pdfDocRef.current = doc;
+        setPdfTotalPages(doc.numPages);
+        await renderPdfPage(doc, 1);
+      } catch {}
+      setPdfRendering(false);
+    }
+    loadPdf();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGuideModal]);
+
+  async function renderPdfPage(doc: any, pageNum: number) {
+    const canvas = canvasRef.current;
+    if (!canvas || !doc) return;
+    setPdfRendering(true);
+    const page = await doc.getPage(pageNum);
+    const scale = (canvas.parentElement?.clientWidth || window.innerWidth) / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+    setPdfRendering(false);
+  }
+
+  async function goToPdfPage(pageNum: number) {
+    if (!pdfDocRef.current || pdfRendering) return;
+    setPdfPage(pageNum);
+    await renderPdfPage(pdfDocRef.current, pageNum);
+  }
 
   const [revenues, setRevenues] = useState<RevenueEntry[]>([]);
   const [revLoading, setRevLoading] = useState(false);
@@ -391,18 +446,54 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
       {/* 운영진 가이드 PDF 모달 — 풀스크린 */}
       {showGuideModal && (
         <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{ height: '100dvh' }}>
+          {/* 헤더 */}
           <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-white">
             <button onClick={() => setShowGuideModal(false)}
               className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <span className="font-bold text-gray-900 flex-1 text-sm">운영진 가이드</span>
+            {isMobile && pdfTotalPages > 0 && (
+              <span className="text-xs text-gray-400 font-mono">{pdfPage} / {pdfTotalPages}</span>
+            )}
           </div>
-          <iframe
-            src="/staff-agreement.pdf"
-            className="flex-1 w-full border-0"
-            title="운영진 가이드"
-          />
+
+          {/* 데스크탑: iframe */}
+          {!isMobile && (
+            <iframe src="/staff-agreement.pdf" className="flex-1 w-full border-0" title="운영진 가이드" />
+          )}
+
+          {/* 모바일: canvas 렌더링 */}
+          {isMobile && (
+            <>
+              <div className="flex-1 overflow-y-auto bg-gray-100 relative">
+                {pdfRendering && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                )}
+                <canvas ref={canvasRef} className="w-full block" />
+              </div>
+              {/* 페이지 네비게이션 */}
+              <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-white">
+                <button
+                  onClick={() => goToPdfPage(pdfPage - 1)}
+                  disabled={pdfPage <= 1 || pdfRendering}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all">
+                  <ChevronLeft className="w-4 h-4" /> 이전
+                </button>
+                <span className="text-sm font-bold text-gray-700">
+                  {pdfTotalPages > 0 ? `${pdfPage} / ${pdfTotalPages}` : '불러오는 중...'}
+                </span>
+                <button
+                  onClick={() => goToPdfPage(pdfPage + 1)}
+                  disabled={pdfPage >= pdfTotalPages || pdfRendering}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all">
+                  다음 <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
       {/* ── 당근 등급 모달 ── */}
