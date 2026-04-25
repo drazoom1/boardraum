@@ -2059,13 +2059,16 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {/* 참여자 섹션 */}
       {auction && auction.status !== 'ended' && (
         <div className="px-5 pb-4 border-t border-orange-100 pt-3">
-          {isHost && (
-            <p className="text-xs text-center text-orange-400 font-semibold mb-3">내가 올린 경매예요 · 참여할 수 없어요</p>
-          )}
-          {accessToken && !joined && !isHost && (
-            <button onClick={handleJoin} disabled={joining}
-              className="w-full h-9 mb-3 rounded-xl border-2 border-orange-200 text-orange-600 text-sm font-semibold hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-1.5 bg-white">
-              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (
+          {accessToken && !joined && (
+            <button onClick={isHost ? undefined : handleJoin} disabled={joining || isHost}
+              className={`w-full h-9 mb-3 rounded-xl border-2 text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                isHost
+                  ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                  : 'border-orange-200 text-orange-600 hover:bg-orange-50 active:scale-95 bg-white'
+              }`}>
+              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isHost ? (
+                '🙋 경매 참여하기 (주최자는 참여 불가)'
+              ) : (
                 <>
                   🙋 경매 참여하기
                   {(auction?.entryFee ?? 0) > 0 && (
