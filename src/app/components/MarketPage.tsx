@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { toast } from 'sonner';
-import { Loader2, MessageSquare, Lock, Send, Package, X, ChevronDown, ChevronUp, Search, ChevronRight, Plus, Info } from 'lucide-react';
+import { Loader2, MessageSquare, Lock, Send, Package, X, ChevronDown, ChevronUp, Search, ChevronRight, Plus, Info, XCircle } from 'lucide-react';
 import type { BoardGame } from '../App';
 
 export interface MarketListing {
@@ -1780,42 +1780,49 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       )}
 
       {/* 헤더 */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🥕</span>
-          <span className="text-sm font-bold text-orange-700">보너스카드 경매</span>
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="w-5 h-5 rounded-full bg-orange-200 text-orange-600 flex items-center justify-center hover:bg-orange-300 transition-colors shrink-0">
-            <Info className="w-3 h-3" />
-          </button>
-          {auction && (
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-              auction.status === 'active' ? 'bg-green-100 text-green-700' :
-              auction.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
-              'bg-gray-100 text-gray-500'
-            }`}>
-              {auction.status === 'active' ? '진행 중' : auction.status === 'scheduled' ? '예고' : '종료'}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && auction && auction.status !== 'ended' && (
-            <button onClick={() => setShowForceEndConfirm(true)} className="text-[11px] font-semibold text-red-400 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
-              강제종료
+      <div className="px-4 pt-4 pb-3">
+        {/* 타이틀 + 상태 + 일반회원 버튼 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base">🥕</span>
+            <span className="text-sm font-bold text-orange-700 shrink-0">보너스카드 경매</span>
+            <button
+              onClick={() => setShowInfoModal(true)}
+              className="w-5 h-5 rounded-full bg-orange-200 text-orange-600 flex items-center justify-center hover:bg-orange-300 transition-colors shrink-0">
+              <Info className="w-3 h-3" />
             </button>
-          )}
-          {isAdmin && (
-            <button onClick={() => setShowCreateModal(true)} className="text-xs font-semibold bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 transition-colors">
-              경매 시작하기
-            </button>
-          )}
+            {auction && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                auction.status === 'active' ? 'bg-green-100 text-green-700' :
+                auction.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>
+                {auction.status === 'active' ? '진행 중' : auction.status === 'scheduled' ? '예고' : '종료'}
+              </span>
+            )}
+          </div>
           {!isAdmin && accessToken && (!auction || auction.status === 'ended') && (
-            <button onClick={() => setShowRequestModal(true)} className="text-xs font-semibold bg-white text-orange-600 border border-orange-200 px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-colors">
+            <button onClick={() => setShowRequestModal(true)}
+              className="shrink-0 text-xs font-semibold bg-white text-orange-600 border border-orange-200 h-8 px-3 rounded-lg hover:bg-orange-50 active:scale-95 transition-all">
               경매 요청하기
             </button>
           )}
         </div>
+        {/* 관리자 버튼 — 별도 행 */}
+        {isAdmin && (
+          <div className="flex gap-2 mt-2.5">
+            {auction && auction.status !== 'ended' && (
+              <button onClick={() => setShowForceEndConfirm(true)}
+                className="h-9 px-3 text-xs font-semibold text-red-500 border border-red-200 rounded-xl hover:bg-red-50 active:scale-95 transition-all flex items-center gap-1 shrink-0">
+                <XCircle className="w-3.5 h-3.5" /> 강제종료
+              </button>
+            )}
+            <button onClick={() => setShowCreateModal(true)}
+              className="flex-1 h-9 text-xs font-bold bg-orange-500 text-white rounded-xl hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+              <span className="text-sm leading-none">＋</span> 경매 시작하기
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 경매 없음 */}
@@ -1827,33 +1834,36 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
       {/* 경매 예고 */}
       {auction?.status === 'scheduled' && (
-        <div className="px-5 pb-5">
-          <div className="flex gap-4 items-start">
-            {auction.imageUrl && (
-              <img src={auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 text-sm truncate">{auction.title}</p>
-              {auction.prize && <p className="text-xs text-gray-500 mt-0.5">{auction.prize}</p>}
-              <p className="text-xs text-gray-400 mt-1">시작가 {auction.startPrice}장 · {auction.bidUnit}장 단위 입찰</p>
+        <div className="px-4 pb-4">
+          <div className="bg-white/60 rounded-2xl p-3">
+            <div className="flex gap-3 items-center mb-3">
+              {auction.imageUrl && (
+                <img src={auction.imageUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white border border-orange-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 text-sm leading-tight truncate">{auction.title}</p>
+                {auction.prize && <p className="text-xs text-gray-500 mt-0.5 truncate">{auction.prize}</p>}
+                <p className="text-[11px] text-gray-400 mt-1">시작가 <span className="font-semibold text-gray-600">{auction.startPrice}장</span> · <span className="font-semibold text-gray-600">{auction.bidUnit}장</span> 단위</p>
+              </div>
             </div>
-          </div>
-          <div className="mt-3 bg-white/70 rounded-xl px-4 py-3 text-center">
-            <p className="text-xs text-gray-400 mb-1">경매 시작까지</p>
-            <p className="text-2xl font-black text-orange-500 tabular-nums">{timeDisplay}</p>
+            <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-center">
+              <p className="text-[11px] text-orange-400 font-medium mb-0.5">경매 시작까지</p>
+              <p className="text-3xl font-black text-orange-500 tabular-nums tracking-tight">{timeDisplay}</p>
+            </div>
           </div>
         </div>
       )}
 
       {/* 경매 진행 중 */}
       {auction?.status === 'active' && (
-        <div className="px-5 pb-5">
-          <div className="flex gap-4 items-start mb-3">
+        <div className="px-4 pb-4">
+          {/* 상품 정보 */}
+          <div className="flex gap-3 items-center mb-3">
             {auction.imageUrl && (
-              <img src={auction.imageUrl} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-white" />
+              <img src={auction.imageUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white border border-orange-100" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 text-sm truncate">{auction.title}</p>
+              <p className="font-bold text-gray-900 text-sm leading-tight truncate">{auction.title}</p>
               {(auction.tags?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {auction.tags!.map((t, i) => (
@@ -1861,13 +1871,16 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
                   ))}
                 </div>
               )}
-              {auction.prize && <p className="text-xs text-gray-500 mt-0.5">{auction.prize}</p>}
-              <p className="text-xs text-gray-400 mt-0.5">입찰 단위 {auction.bidUnit}장{(auction as any).hostNickname ? ` · 주체: ${(auction as any).hostNickname}` : ''}</p>
+              {auction.prize && <p className="text-xs text-gray-500 mt-0.5 truncate">{auction.prize}</p>}
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                입찰 단위 <span className="font-semibold text-gray-600">{auction.bidUnit}장</span>
+                {(auction as any).hostNickname ? <span> · 주체: {(auction as any).hostNickname}</span> : ''}
+              </p>
             </div>
           </div>
           {/* 실물 사진 */}
           {(auction.imageUrls?.filter(Boolean).length ?? 0) > 0 && (
-            <div className="flex gap-2 overflow-x-auto mb-3">
+            <div className="flex gap-2 overflow-x-auto mb-3 -mx-1 px-1">
               {auction.imageUrls!.filter(Boolean).map((url, idx) => (
                 <button key={idx} onClick={() => setLightboxIdx(idx)}
                   className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/60 hover:border-orange-300 transition-all active:scale-95">
@@ -1876,98 +1889,104 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               ))}
             </div>
           )}
-          <div className="bg-white/70 rounded-xl px-4 py-3 mb-3">
+          {/* 현재 입찰 현황 */}
+          <div className="bg-white/70 rounded-2xl px-4 py-3 mb-3">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-xs text-gray-400">현재 최고 입찰</p>
-                <p className="text-xl font-black text-orange-500">{auction.currentBid}장
-                  {auction.currentBidderNickname && (
-                    <span className="text-sm font-semibold text-gray-500 ml-2">· {maskName(auction.currentBidderNickname)}</span>
-                  )}
-                </p>
+                <p className="text-[11px] text-gray-400 mb-0.5">현재 최고 입찰</p>
+                <p className="text-2xl font-black text-orange-500 leading-none">{auction.currentBid}장</p>
+                {auction.currentBidderNickname && (
+                  <p className="text-xs text-gray-500 mt-0.5 font-semibold">{maskName(auction.currentBidderNickname)}</p>
+                )}
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-400">남은 시간</p>
-                <p className="text-lg font-black text-gray-700 tabular-nums">{timeDisplay}</p>
+                <p className="text-[11px] text-gray-400 mb-0.5">남은 시간</p>
+                <p className="text-2xl font-black text-gray-700 tabular-nums leading-none">{timeDisplay}</p>
+                {accessToken && <p className="text-[11px] text-gray-400 mt-0.5">내 카드 {cardCount}장</p>}
               </div>
             </div>
           </div>
-          {accessToken && (
-            <p className="text-xs text-gray-400 mb-2 text-right">내 카드 {cardCount}장</p>
-          )}
+          {/* 입찰 영역 */}
           {isHost ? (
-            <p className="text-center text-xs text-orange-400 font-semibold py-2">내가 올린 경매예요 · 입찰할 수 없어요</p>
+            <div className="bg-orange-50 border border-orange-100 rounded-xl py-3 text-center">
+              <p className="text-xs text-orange-400 font-semibold">내가 올린 경매예요 · 입찰할 수 없어요</p>
+            </div>
           ) : accessToken ? (
             showConfirm ? (
-              <div className="bg-orange-100 rounded-xl p-3 flex items-center gap-2">
-                <p className="flex-1 text-sm font-semibold text-orange-800">{nextBid}장으로 입찰할까요?</p>
-                <button onClick={() => setShowConfirm(false)} className="text-xs text-gray-400 px-2 py-1 rounded-lg hover:bg-white transition-colors">취소</button>
-                <button onClick={handleBid} disabled={bidding} className="text-xs font-bold bg-orange-500 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 flex items-center gap-1">
-                  {bidding ? <Loader2 className="w-3 h-3 animate-spin" /> : `입찰 (${nextBid}장)`}
-                </button>
+              <div className="bg-orange-100 rounded-2xl p-4">
+                <p className="text-sm font-bold text-orange-800 text-center mb-3">{nextBid}장으로 입찰할까요?</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowConfirm(false)}
+                    className="flex-1 h-11 text-sm text-gray-500 font-semibold bg-white rounded-xl hover:bg-gray-50 active:scale-95 transition-all">
+                    취소
+                  </button>
+                  <button onClick={handleBid} disabled={bidding}
+                    className="flex-1 h-11 text-sm font-bold bg-orange-500 text-white rounded-xl disabled:opacity-50 hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                    {bidding ? <Loader2 className="w-4 h-4 animate-spin" /> : `입찰 · ${nextBid}장`}
+                  </button>
+                </div>
               </div>
             ) : (
               <button
                 onClick={() => setShowConfirm(true)}
                 disabled={!canBid}
-                className="w-full h-11 rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
+                className="w-full h-12 rounded-2xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-orange-500 text-white hover:bg-orange-600 active:scale-95 shadow-sm shadow-orange-200"
               >
-                {isMyBid ? '내가 최고 입찰 중' : cardCount < nextBid ? `카드 부족 (필요: ${nextBid}장)` : `입찰하기 · ${nextBid}장`}
+                {isMyBid ? '✓ 내가 최고 입찰 중' : cardCount < nextBid ? `카드 부족 (보유 ${cardCount}장 · 필요 ${nextBid}장)` : `입찰하기 · ${nextBid}장`}
               </button>
             )
           ) : (
-            <p className="text-center text-xs text-gray-400 py-2">로그인 후 입찰할 수 있어요</p>
+            <p className="text-center text-xs text-gray-400 py-3">로그인 후 입찰할 수 있어요</p>
           )}
         </div>
       )}
 
       {/* 경매 종료 */}
       {auction?.status === 'ended' && (
-        <div className="px-5 pb-5">
-          <div className="flex gap-4 items-center mb-3">
-            {auction.imageUrl && (
-              <img src={auction.imageUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white opacity-70" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-600 text-sm truncate">{auction.title}</p>
-              {auction.prize && <p className="text-xs text-gray-400">{auction.prize}</p>}
-              {(auction as any).hostNickname && (
-                <p className="text-xs text-gray-400 mt-0.5">주체: <span className="font-semibold text-gray-500">{(auction as any).hostNickname}</span></p>
+        <div className="px-4 pb-4">
+          <div className="bg-white/60 rounded-2xl p-3">
+            <div className="flex gap-3 items-center mb-3">
+              {auction.imageUrl && (
+                <img src={auction.imageUrl} className="w-12 h-12 rounded-xl object-cover shrink-0 bg-white opacity-60 border border-gray-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-500 text-sm truncate">{auction.title}</p>
+                {(auction as any).hostNickname && (
+                  <p className="text-[11px] text-gray-400 mt-0.5">주체: <span className="font-semibold">{(auction as any).hostNickname}</span></p>
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
+              {auction.winnerNickname ? (
+                <>
+                  <p className="text-[11px] text-gray-400 mb-0.5">낙찰자</p>
+                  <p className="text-base font-black text-gray-800">🎉 {auction.winnerNickname}</p>
+                  <p className="text-sm text-orange-500 font-bold mt-0.5">{auction.currentBid}장 낙찰</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-400 font-medium py-1">유찰됐어요</p>
               )}
             </div>
-          </div>
-          <div className="bg-white/70 rounded-xl px-4 py-3 text-center">
-            {auction.winnerNickname ? (
-              <>
-                <p className="text-xs text-gray-400 mb-1">낙찰자</p>
-                <p className="text-base font-black text-gray-800">🎉 {auction.winnerNickname}</p>
-                <p className="text-sm text-orange-500 font-bold mt-0.5">{auction.currentBid}장 낙찰</p>
-              </>
-            ) : (
-              <p className="text-sm text-gray-400 font-medium">유찰됐어요</p>
-            )}
-          </div>
-          {/* 낙찰자에게만 '내 경매'로 이동 버튼 */}
-          {auction.winnerNickname && !!userId && auction.winnerUserId === userId && onGoToMyAuctions && (
-            <button
-              onClick={onGoToMyAuctions}
-              className="w-full mt-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5">
-              📦 배송지 입력하기
-            </button>
-          )}
-          <div className="flex items-center justify-between mt-2">
-            {auction.resultExpiresAt ? (
-              <p className="text-[11px] text-gray-400">
-                배너 종료까지 <span className="font-mono font-semibold text-gray-500">{timeDisplay}</span>
-              </p>
-            ) : <span />}
-            {isAdmin && (
-              <button onClick={handleDismissBanner} disabled={dismissingBanner}
-                className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
-                {dismissingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                배너 종료
+            {auction.winnerNickname && !!userId && auction.winnerUserId === userId && onGoToMyAuctions && (
+              <button onClick={onGoToMyAuctions}
+                className="w-full mt-3 h-11 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-sm font-bold transition-all flex items-center justify-center gap-1.5">
+                📦 배송지 입력하기
               </button>
             )}
+            <div className="flex items-center justify-between mt-2.5">
+              {auction.resultExpiresAt ? (
+                <p className="text-[11px] text-gray-400">
+                  배너 종료까지 <span className="font-mono font-semibold text-gray-500">{timeDisplay}</span>
+                </p>
+              ) : <span />}
+              {isAdmin && (
+                <button onClick={handleDismissBanner} disabled={dismissingBanner}
+                  className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 h-7 px-2.5 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1">
+                  {dismissingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  배너 종료
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
