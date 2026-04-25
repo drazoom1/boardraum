@@ -2080,12 +2080,12 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
               <p className="text-[11px] text-gray-400 font-medium mb-2">참여자 {participants.length}명</p>
               <div className="flex flex-wrap gap-1.5">
                 {participants.map(p => {
-                  const hasBid = bidderIds.includes(p.userId);
+                  const isTopBidder = p.userId === auction.currentBidder;
                   return (
                     <span key={p.userId}
-                      className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-all ${hasBid ? 'text-teal-700 bg-teal-50' : 'text-gray-500 bg-gray-100'}`}
-                      style={hasBid ? { border: '1.5px solid #2dd4bf' } : { border: '1.5px solid transparent' }}>
-                      {p.nickname}{hasBid ? ' 🎯' : ''}
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-all ${isTopBidder ? 'text-teal-700 bg-teal-50' : 'text-gray-500 bg-gray-100'}`}
+                      style={isTopBidder ? { border: '1.5px solid #2dd4bf' } : { border: '1.5px solid transparent' }}>
+                      {p.nickname}{isTopBidder ? ' 🎯' : ''}
                     </span>
                   );
                 })}
