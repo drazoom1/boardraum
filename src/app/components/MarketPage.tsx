@@ -1554,6 +1554,15 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     if (accessToken) { loadCardCount(); loadMyApprovedRequest(); }
   }, [accessToken]);
 
+  // 경매 데이터 폴링: active → 5초, scheduled → 10초, 없음 → 20초
+  const auctionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (auctionPollRef.current) clearInterval(auctionPollRef.current);
+    const interval = auction?.status === 'active' ? 5000 : auction?.status === 'scheduled' ? 10000 : 20000;
+    auctionPollRef.current = setInterval(loadAuction, interval);
+    return () => { if (auctionPollRef.current) clearInterval(auctionPollRef.current); };
+  }, [auction?.status]);
+
   // 채팅 폴링: 경매 active/ended 상태에서 5초마다 갱신
   useEffect(() => {
     if (chatPollRef.current) clearInterval(chatPollRef.current);
