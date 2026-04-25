@@ -3701,12 +3701,15 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts${q}`,
         { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } }
       );
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         const incoming: FeedPost[] = data.posts || [];
         setPosts(incoming);
+      } else {
+        console.error('[Feed] 서버 오류:', res.status, data);
+        toast.error(`피드 오류 (${res.status}): ${data?.error || '알 수 없는 오류'}`);
       }
-    } catch {}
+    } catch (e) { console.error('[Feed] fetch 오류:', e); }
     if (!silent) setLoading(false);
     // ★ posts 첫 로드 완료 마킹 (이후 배너 렌더 허용)
     setPostsEverLoaded(true);
