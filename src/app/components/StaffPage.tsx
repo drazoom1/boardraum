@@ -51,6 +51,7 @@ interface ActivityLog {
   action: string;
   detail?: string;
   recordedAt: string;
+  totalPoints?: number;
 }
 
 interface StaffPageProps {
@@ -1244,9 +1245,14 @@ export default function StaffPage({ accessToken, userId, onExit }: StaffPageProp
                       <p className="text-sm text-gray-800 leading-snug">{log.action}</p>
                       {log.detail && <p className="text-xs text-gray-400 mt-0.5">{log.detail}</p>}
                     </div>
-                    <span className="text-[10px] text-gray-300 whitespace-nowrap mt-0.5">
-                      {timeAgo(log.recordedAt ?? '')}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                      {log.totalPoints != null && (
+                        <span className="text-xs font-bold text-blue-500">+{log.totalPoints}점</span>
+                      )}
+                      <span className="text-[10px] text-gray-300 whitespace-nowrap">
+                        {timeAgo(log.recordedAt ?? '')}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
