@@ -2896,7 +2896,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                   color: bonusCards > 0 ? 'white' : '#9ca3af',
                 }}
               >
-                <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} 사용하기 <span className="opacity-80">({event.cardSuccessRate ?? 100}%)</span></span>
+                <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} <span className="opacity-80">({event.cardSuccessRate ?? 100}%)</span></span>
                 {bonusCards > 0
                   ? <span className="absolute right-3 bg-white text-cyan-600 text-[11px] font-black px-2 py-0.5 rounded-full">{bonusCards}장</span>
                   : <span className="absolute right-3 text-gray-400 text-[11px]">카드 없음</span>
@@ -2923,7 +2923,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         )}
         {!userId && (
           <p className="text-gray-400 text-[10px] mt-2 text-center">
-            타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨! · 자정~오전8시 휴식
+            타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨!
           </p>
         )}
         </div>{/* end collapsible */}
