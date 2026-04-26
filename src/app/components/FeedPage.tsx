@@ -3522,6 +3522,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [showComposer, setShowComposer] = useState(false);
   const [celebrateFirstPost, setCelebrateFirstPost] = useState(false);
   const firstPostId = userId ? (localStorage.getItem(`first_post_id_${userId}`) || null) : null;
+  const seenPostIdsRef = useRef<Set<string> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
@@ -3719,6 +3720,14 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       if (res.ok) {
         const incoming: FeedPost[] = data.posts || [];
         setPosts(incoming);
+        // 폴링 중 새 첫 게시글 감지 → 이벤트 배너에 성공 확률 +3% 안내
+        if (seenPostIdsRef.current !== null) {
+          const newFirst = incoming.filter(p => (p as any).isFirstPost && !seenPostIdsRef.current!.has(p.id) && p.userId !== userId);
+          if (newFirst.length > 0) {
+            toast.success('🎉 생애 첫 게시글 등장! 카드 성공 확률 +3%', { duration: 4000 });
+          }
+        }
+        seenPostIdsRef.current = new Set(incoming.map(p => p.id));
       } else {
         console.error('[Feed] 서버 오류:', res.status, data);
         toast.error(`피드 오류 (${res.status}): ${data?.error || '알 수 없는 오류'}`);

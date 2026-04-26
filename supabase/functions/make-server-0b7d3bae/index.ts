@@ -4157,6 +4157,24 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
             console.log(`🃏 첫게시글 카드 3장 지급(레거시): userId=${user.id} (${current}→${current + 3})`);
           }
         } catch {}
+        // 첫 게시글: 활성 이벤트 카드 성공 확률 +3% (최대 100%)
+        try {
+          const fpEvents: any[] = await kv.get('last_post_events') || [];
+          if (fpEvents.some((e: any) => e.active)) {
+            const boosted = fpEvents.map((e: any) => {
+              if (!e.active) return e;
+              return { ...e, cardSuccessRate: Math.min(100, (e.cardSuccessRate ?? 100) + 3) };
+            });
+            await kv.set('last_post_events', boosted);
+            console.log(`🎲 첫게시글 보너스: 카드 성공 확률 +3% (userId=${user.id})`);
+          } else {
+            const fpSingle = await kv.get('last_post_event');
+            if (fpSingle?.active) {
+              await kv.set('last_post_event', { ...fpSingle, cardSuccessRate: Math.min(100, (fpSingle.cardSuccessRate ?? 100) + 3) });
+              console.log(`🎲 첫게시글 보너스: 카드 성공 확률 +3% (단일, userId=${user.id})`);
+            }
+          }
+        } catch {}
       }
 
       const pts = await addPoints(user.id, 'POST').catch(() => null);
@@ -5600,7 +5618,7 @@ async function readCardCountByEmail(email: string, userIdForLegacy?: string): Pr
 
 // 이메일 기반으로 카드 수 쓰기
 async function writeCardCountByEmail(email: string, count: number): Promise<void> {
-  const safeCount = Math.max(0, Math.floor(count));
+  const safeCount = Math.min(1000, Math.max(0, Math.floor(count)));
   const emailKey = emailToCardKey(email);
   await kv.set(emailKey, { cards: safeCount, updatedAt: Date.now() });
   console.log(`[카드쓰기] emailKey=${emailKey} cards=${safeCount}`);
@@ -5614,7 +5632,7 @@ async function readCardCount(userId: string): Promise<number> {
   } catch { return 0; }
 }
 async function writeCardCount(userId: string, count: number): Promise<void> {
-  const safeCount = Math.max(0, Math.floor(count));
+  const safeCount = Math.min(1000, Math.max(0, Math.floor(count)));
   await kv.set(`bonus_cards_${userId}`, { cards: safeCount, updatedAt: Date.now() });
 }
 
