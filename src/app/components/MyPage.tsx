@@ -47,48 +47,71 @@ interface MyPageProps {
 type MyPageTab = 'owned' | 'wishlist' | 'posts';
 
 
+type ShareViewMode = 'detailed' | 'simple' | 'shelf';
+
 function ShareButton({ userId }: { userId: string }) {
+  const [showModal, setShowModal] = useState(false);
+  const [selectedView, setSelectedView] = useState<ShareViewMode>('shelf');
   const [copied, setCopied] = useState(false);
 
-  const handleShare = async () => {
-    const url = `${window.location.origin}/shared/${userId}`;
-    // Web Share API (모바일 네이티브 공유)
+  const copyUrl = async (view: ShareViewMode) => {
+    const url = `${window.location.origin}/shared/${userId}?view=${view}`;
+    const doFallback = () => {
+      const el = document.createElement('textarea');
+      el.value = url;
+      el.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    };
     if (navigator.share) {
-      try {
-        await navigator.share({ title: '보드라움 컬렉션', url });
-        return;
-      } catch {}
+      try { await navigator.share({ title: '보드라움 컬렉션', url }); setShowModal(false); return; } catch {}
     }
-    // Clipboard API
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      return;
-    } catch {}
-    // 최후 fallback
-    const el = document.createElement('textarea');
-    el.value = url;
-    el.style.cssText = 'position:fixed;left:-9999px;top:0';
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
+    try { await navigator.clipboard.writeText(url); } catch { doFallback(); }
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => { setCopied(false); setShowModal(false); }, 1500);
   };
 
+  const VIEW_OPTIONS: { value: ShareViewMode; label: string; desc: string }[] = [
+    { value: 'shelf', label: '책장', desc: '책장처럼 표지만' },
+    { value: 'simple', label: '간단히', desc: '목록으로 간략히' },
+    { value: 'detailed', label: '상세보기', desc: '카드 형태로 자세히' },
+  ];
+
   return (
-    <button title="자랑하기" onClick={handleShare}
-      className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors relative
-        ${copied ? 'bg-cyan-500 text-white' : 'bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}>
-      <Share2 className="w-4 h-4" />
-      {copied && (
-        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded-lg whitespace-nowrap">
-          링크 복사됨!
-        </span>
+    <>
+      <button title="자랑하기" onClick={() => { setShowModal(true); setCopied(false); }}
+        className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900">
+        <Share2 className="w-4 h-4" />
+      </button>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5">
+            <h3 className="font-bold text-gray-900 mb-1">공유 링크 만들기</h3>
+            <p className="text-xs text-gray-400 mb-4">공유받은 분이 처음 볼 보기방식을 선택하세요</p>
+            <div className="flex gap-2 mb-5">
+              {VIEW_OPTIONS.map(opt => (
+                <button key={opt.value} onClick={() => setSelectedView(opt.value)}
+                  className={`flex-1 py-3 px-2 rounded-xl border-2 text-sm font-semibold transition-all ${selectedView === opt.value ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-100 bg-gray-50 text-gray-600'}`}>
+                  <div>{opt.label}</div>
+                  <div className={`text-xs mt-0.5 font-normal ${selectedView === opt.value ? 'text-gray-300' : 'text-gray-400'}`}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">취소</button>
+              <button onClick={() => copyUrl(selectedView)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors ${copied ? 'bg-cyan-500 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
+                {copied ? '복사됨!' : '링크 복사'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </button>
+    </>
   );
 }
 
@@ -636,6 +659,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
                   userId={userId}
                   userEmail={userEmail}
                   onNavigateToWiki={onNavigateToWiki}
+                  isOwner={!readOnly}
                 />
           ) : activeTab === 'wishlist' ? (
             wishlistGames.length === 0
@@ -645,8 +669,10 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
                   onGamesChange={onWishlistGamesChange || (() => {})}
                   listType="구매 예정"
                   accessToken={accessToken}
+                  userId={userId}
                   onMoveToOwned={onMoveToOwned}
                   onNavigateToWiki={onNavigateToWiki}
+                  isOwner={!readOnly}
                 />
           ) : postsLoading ? (
             <div className="flex justify-center py-12">

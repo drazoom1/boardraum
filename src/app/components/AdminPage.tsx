@@ -2194,6 +2194,9 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [showCardReductionEdit, setShowCardReductionEdit] = useState(false);
   const [editCardReduction, setEditCardReduction] = useState(event.cardReductionSeconds ?? 300);
   const [cardReductionSaving, setCardReductionSaving] = useState(false);
+  const [showSuccessRateEdit, setShowSuccessRateEdit] = useState(false);
+  const [editSuccessRate, setEditSuccessRate] = useState(event.cardSuccessRate ?? 100);
+  const [successRateSaving, setSuccessRateSaving] = useState(false);
   const [showDescEdit, setShowDescEdit] = useState(false);
   const [editDesc, setEditDesc] = useState(event.description ?? '');
   const [descSaving, setDescSaving] = useState(false);
@@ -2315,6 +2318,20 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
       else toast.error('저장 실패');
     } catch { toast.error('오류'); }
     setCardReductionSaving(false);
+  };
+
+  const saveSuccessRate = async () => {
+    setSuccessRateSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'update', eventId: event.id, cardSuccessRate: editSuccessRate }) }
+      );
+      if (res.ok) { toast.success(`성공 확률 ${editSuccessRate}%로 변경!`); setShowSuccessRateEdit(false); }
+      else toast.error('저장 실패');
+    } catch { toast.error('오류'); }
+    setSuccessRateSaving(false);
   };
 
   const saveDesc = async () => {
@@ -2724,6 +2741,50 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
             )}
           </div>
 
+          {/* 보너스카드 성공 확률 수정 */}
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            {!showSuccessRateEdit ? (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  🎲 카드 성공 확률: <span className="font-semibold text-gray-600">{event.cardSuccessRate ?? 100}%</span>
+                </p>
+                <button onClick={() => { setShowSuccessRateEdit(true); setEditSuccessRate(event.cardSuccessRate ?? 100); }}
+                  className="text-xs px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-semibold">
+                  수정
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-700">🎲 보너스카드 성공 확률 수정</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[100, 80, 60, 50, 30].map(rate => (
+                    <button key={rate} onClick={() => setEditSuccessRate(rate)}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold border transition-colors ${editSuccessRate === rate ? 'text-white border-transparent bg-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                      {rate}%
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="range" min={1} max={100} value={editSuccessRate}
+                    onChange={e => setEditSuccessRate(Number(e.target.value))}
+                    className="flex-1 accent-indigo-600" />
+                  <span className="text-xs font-bold text-indigo-600 w-8 text-right">{editSuccessRate}%</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveSuccessRate} disabled={successRateSaving}
+                    className="flex-1 py-1.5 rounded-lg text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1 bg-indigo-600">
+                    {successRateSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    저장
+                  </button>
+                  <button onClick={() => setShowSuccessRateEdit(false)}
+                    className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 이벤트 규칙 수정 */}
           <div className="mt-2 pt-2 border-t border-gray-100">
             {!showDescEdit ? (
@@ -2896,6 +2957,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const [sleepStart, setSleepStart] = useState(0);
   const [sleepEnd, setSleepEnd] = useState(8);
   const [cardReductionSeconds, setCardReductionSeconds] = useState(300);
+  const [cardSuccessRate, setCardSuccessRate] = useState(100);
   const [noticeTitle, setNoticeTitle] = useState('규칙사항');
   const [noticeContent, setNoticeContent] = useState('');
   const [savingNotice, setSavingNotice] = useState(false);
@@ -3006,7 +3068,7 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds }) }
+          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate }) }
       );
       if (res.ok) {
         await loadData();
@@ -3202,6 +3264,32 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
             ))}
           </div>
           <p className="text-[11px] text-gray-400 mt-1">카드 1장 사용 시 타이머가 <span className="font-semibold text-indigo-600">{cardReductionSeconds >= 60 ? `${cardReductionSeconds / 60}분` : `${cardReductionSeconds}초`}</span> 줄어듭니다.</p>
+        </div>
+
+        {/* 보너스카드 성공 확률 */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1">
+            🎲 보너스카드 성공 확률
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            {[100, 80, 60, 50, 30].map(rate => (
+              <button key={rate} onClick={() => setCardSuccessRate(rate)}
+                className={`flex-1 min-w-[48px] py-2 rounded-xl text-sm font-semibold border transition-colors ${cardSuccessRate === rate ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>
+                {rate}%
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <input type="range" min={1} max={100} value={cardSuccessRate}
+              onChange={e => setCardSuccessRate(Number(e.target.value))}
+              className="flex-1 accent-indigo-600" />
+            <span className="text-sm font-bold text-indigo-600 w-10 text-right">{cardSuccessRate}%</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            {cardSuccessRate === 100
+              ? '카드 사용 시 항상 성공합니다.'
+              : `카드 사용 시 ${cardSuccessRate}% 확률로 타이머가 줄어듭니다. 실패해도 카드는 소모됩니다.`}
+          </p>
         </div>
 
         {/* 휴식 시간 */}

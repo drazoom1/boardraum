@@ -35,6 +35,7 @@ interface BoardGameListProps {
   openAddDialog?: boolean; // 외부에서 다이얼로그 열기
   onAddDialogClose?: () => void; // 닫힘 콜백
   readOnly?: boolean; // 읽기 전용 (타인 프로필)
+  isOwner?: boolean; // 본인 페이지 여부 (서버 설정 동기화용)
 }
 
 type SortOption = 'korean-asc' | 'english-asc' | 'recent-asc' | 'recent-desc' | 'rating-desc' | 'releasing';
@@ -189,7 +190,7 @@ function RecommendedGamesSection({
   );
 }
 
-export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki, accessToken, userId, userEmail, onMoveToOwned, onRelease, openAddDialog, onAddDialogClose, readOnly = false }: BoardGameListProps) {
+export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki, accessToken, userId, userEmail, onMoveToOwned, onRelease, openAddDialog, onAddDialogClose, readOnly = false, isOwner = false }: BoardGameListProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -206,8 +207,51 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
   const [viewMode, setViewModeRaw] = useState<ViewMode>(
     () => (localStorage.getItem(viewKey) as ViewMode) || 'detailed'
   );
-  const setSortOption = (v: SortOption) => { localStorage.setItem(sortKey, v); setSortOptionRaw(v); };
-  const setViewMode = (v: ViewMode) => { localStorage.setItem(viewKey, v); setViewModeRaw(v); };
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 본인 페이지: 마운트 시 서버에서 설정 로드
+  useEffect(() => {
+    if (!isOwner || !accessToken || !userId) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/game-view`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.ok ? r.json() : null).then(data => {
+      if (!data?.settings) return;
+      const s = data.settings;
+      const sortField = `sort_${listType}`;
+      const viewField = `view_${listType}`;
+      if (s[sortField]) { setSortOptionRaw(s[sortField]); localStorage.setItem(sortKey, s[sortField]); }
+      if (s[viewField]) { setViewModeRaw(s[viewField]); localStorage.setItem(viewKey, s[viewField]); }
+    }).catch(() => {});
+  }, [isOwner, accessToken, userId, listType]);
+
+  const setSortOption = (v: SortOption) => {
+    localStorage.setItem(sortKey, v);
+    setSortOptionRaw(v);
+    if (isOwner && accessToken) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/game-view`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ [`sort_${listType}`]: v }),
+        }).catch(() => {});
+      }, 800);
+    }
+  };
+  const setViewMode = (v: ViewMode) => {
+    localStorage.setItem(viewKey, v);
+    setViewModeRaw(v);
+    if (isOwner && accessToken) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/game-view`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ [`view_${listType}`]: v }),
+        }).catch(() => {});
+      }, 800);
+    }
+  };
   const [showExpansionsSeparately, setShowExpansionsSeparately] = useState(false);
   const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set());
   const [showShareDialog, setShowShareDialog] = useState(false);

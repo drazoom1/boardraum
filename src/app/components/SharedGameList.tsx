@@ -18,7 +18,20 @@ export function SharedGameList({ userId, highlightPostId }: SharedGameListProps)
   const [userName, setUserName] = useState('');
   const [games, setGames] = useState<BoardGame[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('shelf');
+  const sharedViewKey = `shared-view-${userId}`;
+  const [viewMode, setViewModeRaw] = useState<ViewMode>(() => {
+    // 1순위: 이 기기에서 저장한 설정
+    const saved = localStorage.getItem(sharedViewKey) as ViewMode | null;
+    if (saved && ['shelf', 'simple', 'detailed'].includes(saved)) return saved;
+    // 2순위: URL 파라미터
+    const urlView = new URLSearchParams(window.location.search).get('view') as ViewMode | null;
+    if (urlView && ['shelf', 'simple', 'detailed'].includes(urlView)) return urlView;
+    return 'shelf';
+  });
+  const setViewMode = (v: ViewMode) => {
+    localStorage.setItem(sharedViewKey, v);
+    setViewModeRaw(v);
+  };
   const [shelfModal, setShelfModal] = useState<BoardGame | null>(null);
   const [rankingInfo, setRankingInfo] = useState<{ type: string; rank: number }[]>([]);
   const [tabMode, setTabMode] = useState<TabMode>(highlightPostId ? 'posts' : 'games');

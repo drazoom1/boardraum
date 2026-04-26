@@ -5295,6 +5295,32 @@ app.post("/make-server-0b7d3bae/user/profile", async (c) => {
   }
 });
 
+// 게임 보기/정렬 설정 저장 (GET/PUT)
+app.get("/make-server-0b7d3bae/user/game-view", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const settings = await kv.get(`user_game_view_${user.id}`) ?? {};
+    return c.json({ settings });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+app.put("/make-server-0b7d3bae/user/game-view", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json();
+    const current: any = await kv.get(`user_game_view_${user.id}`) ?? {};
+    const merged = { ...current, ...body, updatedAt: new Date().toISOString() };
+    await kv.set(`user_game_view_${user.id}`, merged);
+    return c.json({ success: true, settings: merged });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // ============================================
 // 🚨 긴급 데이터 복구 API
 // ============================================
@@ -5688,13 +5714,17 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
       const idx = useEvents.findIndex((e: any) => e.active);
       if (idx >= 0) {
         const perCardSecs = useEvents[idx].cardReductionSeconds ?? 300;
+        const successRate = useEvents[idx].cardSuccessRate ?? 100;
+        const roll = Math.random() * 100;
+        const cardFailed = roll >= successRate;
         const usageEntry = {
           userId: user.id,
           userName: cardUserName,
           email: user.email,
           usedAt: new Date().toISOString(),
           cardsAfter: current - 1,
-          reductionSeconds: perCardSecs,
+          reductionSeconds: cardFailed ? 0 : perCardSecs,
+          failed: cardFailed,
         };
         // ★ 쓰기 직전 재조회 — auto-close가 이미 이벤트를 제거했으면 덮어쓰지 않음
         const freshEvents: any[] = await kv.get('last_post_events') || [];
@@ -5702,7 +5732,7 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
         if (freshIdx >= 0) {
           freshEvents[freshIdx] = {
             ...freshEvents[freshIdx],
-            reductionSeconds: (freshEvents[freshIdx].reductionSeconds || 0) + perCardSecs,
+            reductionSeconds: (freshEvents[freshIdx].reductionSeconds || 0) + (cardFailed ? 0 : perCardSecs),
             lastReductionAt: Date.now(),
             lastReductionBy: user.id,
             cardUsageLog: [...(freshEvents[freshIdx].cardUsageLog || []), usageEntry],
@@ -5712,28 +5742,34 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
         } else {
           console.log(`[카드사용] 이벤트 ${useEvents[idx].id} 이미 종료됨 — last_post_events 덮어쓰기 skip`);
         }
+        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true });
       }
     } else {
       const event = await kv.get('last_post_event');
       if (event?.active) {
         const perCardSecs = event.cardReductionSeconds ?? 300;
+        const successRate = event.cardSuccessRate ?? 100;
+        const roll = Math.random() * 100;
+        const cardFailed = roll >= successRate;
         const usageEntry = {
           userId: user.id,
           userName: cardUserName,
           email: user.email,
           usedAt: new Date().toISOString(),
           cardsAfter: current - 1,
-          reductionSeconds: perCardSecs,
+          reductionSeconds: cardFailed ? 0 : perCardSecs,
+          failed: cardFailed,
         };
         const currentReduction = event.reductionSeconds || 0;
         updatedEvent = {
           ...event,
-          reductionSeconds: currentReduction + perCardSecs,
+          reductionSeconds: currentReduction + (cardFailed ? 0 : perCardSecs),
           lastReductionAt: Date.now(),
           lastReductionBy: user.id,
           cardUsageLog: [...(event.cardUsageLog || []), usageEntry],
         };
         await kv.set('last_post_event', updatedEvent);
+        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true });
       }
     }
 
@@ -10931,7 +10967,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
 
     const body = await c.req.json();
-    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, prizeImageUrl, manualCardUser } = body;
+    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate, prizeImageUrl, manualCardUser } = body;
 
     const events: any[] = await kv.get("last_post_events") || [];
 
@@ -11002,6 +11038,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
         if (sleepEnd !== undefined) patch.sleepEnd = Number(sleepEnd);
         if (durationMinutes !== undefined) patch.durationMinutes = Number(durationMinutes);
         if (cardReductionSeconds !== undefined) patch.cardReductionSeconds = Number(cardReductionSeconds);
+        if (cardSuccessRate !== undefined) patch.cardSuccessRate = Math.min(100, Math.max(1, Number(cardSuccessRate)));
         if (description !== undefined) patch.description = description;
         if (prize !== undefined) patch.prize = prize;
         if (eventTitle !== undefined) patch.eventTitle = eventTitle;
@@ -11060,6 +11097,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
       prizeImageUrl: prizeImageUrl || "",
       reductionSeconds: 0,
       cardReductionSeconds: cardReductionSeconds !== undefined ? Number(cardReductionSeconds) : 300,
+      cardSuccessRate: cardSuccessRate !== undefined ? Math.min(100, Math.max(1, Number(cardSuccessRate))) : 100,
       sleepStart: sleepStart !== undefined ? Number(sleepStart) : 0,
       sleepEnd: sleepEnd !== undefined ? Number(sleepEnd) : 8,
       startedAt: new Date().toISOString(),

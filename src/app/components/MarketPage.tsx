@@ -280,6 +280,28 @@ function CommentSection({ listing, accessToken, userId, userNickname, onReservat
       if (!res.ok) throw new Error((await res.json()).error);
       if (parentId) { setReplyContent(''); setReplyTo(null); }
       else { setContent(''); setOfferPrice(''); }
+      // 낙관적 업데이트: 서버 응답 전에 최고 제안가 즉시 반영
+      if (price && !parentId) {
+        setComments(prev => {
+          const optimistic: MarketComment = {
+            id: `optimistic-${Date.now()}`,
+            listingId: listing.id,
+            userId: userId!,
+            userNickname: userNickname!,
+            offerPrice: price,
+            content: text,
+            isSecret: false,
+            createdAt: new Date().toISOString(),
+          };
+          const next = [...prev, optimistic];
+          const offers = next.filter(c => c.offerPrice && c.offerPrice > 0 && !c.parentId);
+          if (offers.length > 0) {
+            const top = offers.reduce((a, b) => a.offerPrice! > b.offerPrice! ? a : b);
+            onTopOfferChange?.({ price: top.offerPrice!, nick: top.userNickname });
+          }
+          return next;
+        });
+      }
       await load();
       toast.success('등록되었습니다');
     } catch (e: any) { toast.error(e.message || '등록 실패'); }
