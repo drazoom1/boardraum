@@ -194,6 +194,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
     } catch {}
     setHomeworkLoading(false);
   };
+  const [bioExpanded, setBioExpanded] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [pwSaving, setPwSaving] = useState(false);
   const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false });
@@ -433,9 +434,21 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
               })()}
             </div>
             <p className="text-xs text-gray-400 truncate mt-0.5">{displayId}</p>
-            <p className="text-sm text-gray-500 truncate mt-0.5">
-              {profile?.bio ? profile.bio.slice(0, 50) : <span className="text-gray-300 italic">소개글이 없어요</span>}
-            </p>
+            {profile?.bio ? (
+              <div className="mt-0.5">
+                <p className={`text-sm text-gray-500 break-words ${bioExpanded ? '' : 'line-clamp-1'}`}>
+                  {profile.bio}
+                </p>
+                {profile.bio.length > 20 && (
+                  <button onClick={() => setBioExpanded(v => !v)}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    {bioExpanded ? '접기' : '더보기'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm mt-0.5"><span className="text-gray-300 italic">소개글이 없어요</span></p>
+            )}
           </div>
           {/* 프로필 이미지 */}
           <div className="w-16 h-16 rounded-full bg-gray-100 flex-shrink-0 ml-4 overflow-hidden border-2 border-gray-100">
