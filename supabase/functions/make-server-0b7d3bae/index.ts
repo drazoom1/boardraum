@@ -10956,15 +10956,27 @@ app.post("/make-server-0b7d3bae/event-congrats/:eventId", async (c) => {
 app.get("/make-server-0b7d3bae/last-post-event", async (c) => {
   try {
     // 다중 이벤트 지원: last_post_events 배열 우선, 없으면 단일 이벤트 fallback
-    const events: any[] = await kv.get("last_post_events") || [];
+    let events: any[] = await kv.get("last_post_events") || [];
     const disqualified: string[] = await kv.get("last_event_disqualified") || [];
     const excludedEntries: any[] = await kv.get("event_excluded_users") || [];
     const excluded: string[] = excludedEntries.map((e: any) => e.userId);
 
     if (events.length > 0) {
-      const active = events.filter((e: any) => e.active);
-      if (active.length === 0) return c.json([]);
-      return c.json(active.map((e: any) => ({ ...e, disqualified, excluded, excludedEntries })));
+      // 예약 이벤트 자동 활성화 체크
+      const now = Date.now();
+      let changed = false;
+      events = events.map((e: any) => {
+        if (e.scheduled && !e.active && e.scheduledAt && new Date(e.scheduledAt).getTime() <= now) {
+          changed = true;
+          return { ...e, active: true, scheduled: false, startedAt: new Date().toISOString() };
+        }
+        return e;
+      });
+      if (changed) await kv.set("last_post_events", events);
+
+      const visible = events.filter((e: any) => e.active || e.scheduled);
+      if (visible.length === 0) return c.json([]);
+      return c.json(visible.map((e: any) => ({ ...e, disqualified, excluded, excludedEntries })));
     }
 
     // fallback: 기존 단일 이벤트
@@ -10985,9 +10997,15 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
 
     const body = await c.req.json();
-    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate, prizeImageUrl, manualCardUser } = body;
+    const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate, prizeImageUrl, manualCardUser, scheduledAt } = body;
 
     const events: any[] = await kv.get("last_post_events") || [];
+
+    if (action === "cancel-schedule") {
+      const updated = events.filter((e: any) => !(e.id === eventId && e.scheduled));
+      await kv.set("last_post_events", updated);
+      return c.json({ success: true });
+    }
 
     if (action === "stop") {
       const history: any[] = await kv.get("last_post_events_history") || [];
@@ -11103,11 +11121,14 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
       return c.json({ success: true, event: resumedEvent });
     }
 
-    // action === 'start' - 새 이벤트 추가
+    // action === 'start' - 새 이벤트 추가 (즉시 또는 예약)
     const newEventId = `evt_${Date.now()}`;
+    const isScheduled = scheduledAt && new Date(scheduledAt).getTime() > Date.now();
     const newEvent = {
       id: newEventId,
-      active: true,
+      active: !isScheduled,
+      scheduled: isScheduled ? true : undefined,
+      scheduledAt: isScheduled ? scheduledAt : undefined,
       prize: prize || "상품",
       eventTitle: eventTitle || "",
       durationMinutes: durationMinutes || 60,
@@ -11118,7 +11139,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
       cardSuccessRate: cardSuccessRate !== undefined ? Math.min(100, Math.max(1, Number(cardSuccessRate))) : 100,
       sleepStart: sleepStart !== undefined ? Number(sleepStart) : 0,
       sleepEnd: sleepEnd !== undefined ? Number(sleepEnd) : 8,
-      startedAt: new Date().toISOString(),
+      startedAt: isScheduled ? undefined : new Date().toISOString(),
       startedBy: user.id,
     };
 

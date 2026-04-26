@@ -2510,6 +2510,51 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
   );
 }
 
+function ScheduledEventBanner({ event }: { event: any }) {
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    const calc = () => {
+      const diff = Math.max(0, Math.floor((new Date(event.scheduledAt).getTime() - Date.now()) / 1000));
+      setRemaining(diff);
+    };
+    calc();
+    const t = setInterval(calc, 1000);
+    return () => clearInterval(t);
+  }, [event.scheduledAt]);
+
+  const h = Math.floor(remaining / 3600);
+  const m = Math.floor((remaining % 3600) / 60);
+  const s = remaining % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+
+  return (
+    <div className="mx-3 mt-2 rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#00BCD4' }}>
+      <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, #e0f7fa 0%, #f0fdff 100%)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🎁</span>
+            <div>
+              <p className="text-xs font-bold" style={{ color: '#00838F' }}>이벤트 예정</p>
+              <p className="text-sm font-bold text-gray-800">{event.eventTitle || event.prize || '마지막글 이벤트'}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-gray-400">시작까지</p>
+            <p className="font-mono font-black text-xl" style={{ color: '#00BCD4' }}>{fmt}</p>
+          </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-cyan-100 flex items-center gap-3 text-[11px] text-gray-500">
+          <span>⏱ {event.durationMinutes}분 타이머</span>
+          <span>🎁 {event.prize}</span>
+          <span>🃏 성공률 {event.cardSuccessRate ?? 100}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, accessToken, compact = false, onAutoClose, onLowTimer, isAdmin = false }: { event: any; posts: any[]; bonusCards?: number; onUseCard?: () => void; userId?: string | null; accessToken?: string; compact?: boolean; onAutoClose?: (eventId: string, winner: any) => void; onLowTimer?: () => void; isAdmin?: boolean }) {
   const [remaining, setRemaining] = useState(-1); // 남은 초 (-1=초기화전)
   const [initialized, setInitialized] = useState(false);
@@ -3505,6 +3550,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
 export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, isStaff = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket, onCardCountChange }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
+  const [scheduledEvents, setScheduledEvents] = useState<any[]>([]);
   const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
   const [referralRankEvent, setReferralRankEvent] = useState<any>(null);
   const [eventWinners, setEventWinners] = useState<any[]>([]);
@@ -3868,7 +3914,9 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         );
         if (res.ok) {
           const data = await res.json();
-          setLastPostEvents(Array.isArray(data) ? data.filter((e: any) => e.active) : (data?.active ? [data] : []));
+          const all = Array.isArray(data) ? data : (data?.active ? [data] : []);
+          setLastPostEvents(all.filter((e: any) => e.active));
+          setScheduledEvents(all.filter((e: any) => e.scheduled && !e.active));
         }
       } catch {}
     };
@@ -4089,6 +4137,9 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {/* 마지막글 이벤트 배너 - 2열 그리드 */}
       {/* ★ postsEverLoaded: posts 첫 fetch 완료 전엔 배너를 마운트하지 않음 */}
       {/* → 이벤트 데이터가 posts보다 먼저 도착해 lastPost=null로 잘못된 타이머를 계산하는 버그 방지 */}
+      {scheduledEvents.map(evt => (
+        <ScheduledEventBanner key={evt.id} event={evt} />
+      ))}
       {postsEverLoaded && lastPostEvents.length > 0 && (
         <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
           {lastPostEvents

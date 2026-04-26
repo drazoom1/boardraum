@@ -2958,6 +2958,8 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const [sleepEnd, setSleepEnd] = useState(8);
   const [cardReductionSeconds, setCardReductionSeconds] = useState(300);
   const [cardSuccessRate, setCardSuccessRate] = useState(100);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
   const [noticeTitle, setNoticeTitle] = useState('규칙사항');
   const [noticeContent, setNoticeContent] = useState('');
   const [savingNotice, setSavingNotice] = useState(false);
@@ -2988,9 +2990,9 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
       if (evRes.ok) {
         const data = await evRes.json();
         const evList = Array.isArray(data)
-          ? data.filter((e: any) => e.active)
+          ? data.filter((e: any) => e.active || e.scheduled)
           : (data?.active ? [data] : []);
-        console.log('[AdminLastPostEvent] active events:', evList.length);
+        console.log('[AdminLastPostEvent] active/scheduled events:', evList.length);
         setEvents(evList);
       } else {
         console.error('[AdminLastPostEvent] event fetch failed:', evRes.status);
@@ -3065,18 +3067,33 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const startEvent = async () => {
     setSaving(true);
     try {
+      const body: any = { action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate };
+      if (scheduleEnabled && scheduledAt) body.scheduledAt = new Date(scheduledAt).toISOString();
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ action: 'start', prize, eventTitle, durationMinutes, description, prizeImageUrl, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate }) }
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(body) }
       );
       if (res.ok) {
         await loadData();
-        toast.success('이벤트 시작!');
+        toast.success(scheduleEnabled && scheduledAt ? '이벤트 예약 완료!' : '이벤트 시작!');
         setPrize(''); setEventTitle(''); setDescription(''); setPrizeImageUrl('');
-        setSleepStart(0); setSleepEnd(8);
+        setSleepStart(0); setSleepEnd(8); setScheduleEnabled(false); setScheduledAt('');
       } else toast.error('실패');
     } catch { toast.error('오류'); }
+    setSaving(false);
+  };
+
+  const cancelSchedule = async (eventId: string) => {
+    if (!confirm('예약된 이벤트를 취소할까요?')) return;
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/last-post-event`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'cancel-schedule', eventId }) }
+      );
+      if (res.ok) { await loadData(); toast.success('예약 취소됨'); }
+    } catch {}
     setSaving(false);
   };
 
@@ -3156,22 +3173,43 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
         </div>
       </div>
 
+      {/* 예약된 이벤트 목록 */}
+      {events.filter((e: any) => e.scheduled).map((ev: any) => (
+        <div key={ev.id} className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-600 text-sm">🕐</span>
+              <p className="text-sm font-bold text-blue-700">예약된 이벤트</p>
+            </div>
+            <button onClick={() => cancelSchedule(ev.id)} disabled={saving}
+              className="text-xs px-3 py-1 rounded-lg bg-red-100 text-red-600 font-bold hover:bg-red-200 disabled:opacity-50">
+              예약 취소
+            </button>
+          </div>
+          <p className="text-xs text-blue-600">
+            ⏰ 시작: {new Date(ev.scheduledAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </p>
+          <p className="text-xs text-gray-600 font-semibold">{ev.eventTitle || ev.prize}</p>
+          <p className="text-xs text-gray-500">타이머 {ev.durationMinutes}분 · 카드 {ev.cardReductionSeconds >= 60 ? `${ev.cardReductionSeconds/60}분` : `${ev.cardReductionSeconds}초`} 감소 · 성공률 {ev.cardSuccessRate ?? 100}%</p>
+        </div>
+      ))}
+
       {/* 진행중 이벤트 목록 */}
-      {events.length > 0 ? (
+      {events.filter((e: any) => e.active).length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-              진행중 이벤트 {events.length}개
+              진행중 이벤트 {events.filter((e: any) => e.active).length}개
             </h3>
-            {events.length > 1 && (
+            {events.filter((e: any) => e.active).length > 1 && (
               <button onClick={() => stopEvent(undefined)} disabled={saving}
                 className="text-xs px-3 py-1 rounded-lg bg-red-100 text-red-600 font-bold hover:bg-red-200 disabled:opacity-50">
                 전체 종료
               </button>
             )}
           </div>
-          {events.map((ev: any) => (
+          {events.filter((e: any) => e.active).map((ev: any) => (
             <AdminEventCard key={ev.id || ev.startedAt} event={ev} posts={posts} onStop={stopEvent} saving={saving} accessToken={accessToken} />
           ))}
         </div>
@@ -3324,10 +3362,40 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
           </p>
         </div>
 
-        <button onClick={startEvent} disabled={saving || !prize.trim()}
+        {/* 예약 시작 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-700">⏰ 예약 시작</label>
+            <button
+              type="button"
+              onClick={() => { setScheduleEnabled(v => !v); setScheduledAt(''); }}
+              className={`relative w-10 h-5 rounded-full transition-colors ${scheduleEnabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${scheduleEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {scheduleEnabled && (
+            <div className="space-y-1.5">
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={e => setScheduledAt(e.target.value)}
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+              />
+              {scheduledAt && (
+                <p className="text-[11px] text-indigo-500">
+                  {new Date(scheduledAt).toLocaleString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })}에 자동 시작
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button onClick={startEvent} disabled={saving || !prize.trim() || (scheduleEnabled && !scheduledAt)}
           className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trophy className="w-4 h-4" />}
-          이벤트 시작
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduleEnabled ? <Clock className="w-4 h-4" /> : <Trophy className="w-4 h-4" />}
+          {scheduleEnabled ? '이벤트 예약' : '이벤트 시작'}
         </button>
       </div>
 
