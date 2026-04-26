@@ -2620,7 +2620,7 @@ app.post("/make-server-0b7d3bae/customs", async (c) => {
     
     await kv.set(kvKey, post);
 
-    // 운영진/관리자 위키 등록 자동 적립 +5점
+    // 운영진/관리자 위키 등록 자동 적립 +10점
     let staffPointsAwarded = 0;
     if (post.postType === 'info' && post.category === 'overview') {
       const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
@@ -2629,21 +2629,21 @@ app.post("/make-server-0b7d3bae/customs", async (c) => {
       if (isMember || isAdminUser) {
         const logs: any[] = (await kv.get(`staff_activity_${user.id}`) as any[]) ?? [];
         logs.unshift({
-          action: '활동점수 합계 5점',
-          detail: `보드위키 등록 1건(+5점) | gameId: ${gameId}`,
-          totalPoints: 5,
+          action: '활동점수 합계 10점',
+          detail: `보드위키 등록 1건(+10점) | gameId: ${gameId}`,
+          totalPoints: 10,
           scores: { wiki: 1 },
           recordedAt: new Date().toISOString(),
           recordedBy: user.id,
         });
         await kv.set(`staff_activity_${user.id}`, logs.slice(0, 200));
-        staffPointsAwarded = 5;
+        staffPointsAwarded = 10;
         await createNotification(user.id, {
           type: 'points',
           fromUserId: user.id,
           fromUserName: '',
           postId: postId,
-          message: `보드위키 등록 +5 운영진 포인트 적립!`,
+          message: `보드위키 등록 +10 운영진 포인트 적립!`,
         }).catch(() => {});
       }
     }
@@ -12713,7 +12713,7 @@ app.get('/make-server-0b7d3bae/staff/monthly-scores', async (c) => {
           // totalPoints 필드가 있으면 그대로, 없으면 scores 객체에서 합산 (하위 호환)
           if (typeof l.totalPoints === 'number') return s + l.totalPoints;
           if (l.scores && typeof l.scores === 'object') {
-            const POINTS: Record<string, number> = { tag: 2, title: 3, wiki: 5, report: 10, mediate: 15, recruit: 20, event: 30, meeting: 10 };
+            const POINTS: Record<string, number> = { tag: 2, title: 3, wiki: 10, report: 10, mediate: 15, recruit: 20, event: 30, meeting: 10 };
             const sub = Object.entries(l.scores as Record<string, number>)
               .reduce((acc: number, [k, v]) => acc + (POINTS[k] ?? 0) * (v ?? 0), 0);
             return s + sub;
