@@ -436,7 +436,8 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
             <p className="text-xs text-gray-400 truncate mt-0.5">{displayId}</p>
             {profile?.bio ? (
               <div className="mt-0.5">
-                <p className={`text-sm text-gray-500 break-words ${bioExpanded ? '' : 'line-clamp-1'}`}>
+                <p className="text-sm text-gray-500 break-words whitespace-pre-wrap"
+                  style={bioExpanded ? undefined : { overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
                   {profile.bio}
                 </p>
                 {profile.bio.length > 20 && (
