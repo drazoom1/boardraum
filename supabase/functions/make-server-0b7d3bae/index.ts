@@ -4500,15 +4500,24 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
       return c.json({ error: 'Post not found' }, 404);
     }
     
-    // Only post author or admin can edit
+    // Only post author, admin, or staff can edit
     const role = await getUserRole(user.id);
     const isAdmin = role === 'admin';
-    if (post.userId !== user.id && !isAdmin) {
+    const staffMembers: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const isStaff = staffMembers.some((m: any) => m.userId === user.id);
+    if (post.userId !== user.id && !isAdmin && !isStaff) {
       return c.json({ error: 'Forbidden: Only post author can edit' }, 403);
     }
-    
+
     const { content, category, images, linkedGame, linkedGames, talentData, isPrivate } = await c.req.json();
-    
+
+    // 운영진(비관리자, 비작성자)은 linkedGames만 수정 가능
+    if (isStaff && !isAdmin && post.userId !== user.id) {
+      if (linkedGames === undefined) {
+        return c.json({ error: 'Forbidden: Staff can only update game tags' }, 403);
+      }
+    }
+
     // isPrivate 또는 linkedGames만 업데이트하는 경우 content 불필요
     if (isPrivate === undefined && linkedGames === undefined && (!content || content.trim().length === 0)) {
       return c.json({ error: 'Content is required' }, 400);
