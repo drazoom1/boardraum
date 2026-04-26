@@ -2510,48 +2510,152 @@ function ReferralRankEventBanner({ event, accessToken }: { event: any; accessTok
   );
 }
 
-function ScheduledEventBanner({ event }: { event: any }) {
+function ScheduledEventBanner({ event, userId, accessToken }: { event: any; userId?: string | null; accessToken?: string }) {
   const [remaining, setRemaining] = useState(0);
+  const [collapsed, setCollapsed] = useState(true);
+  const [showDescModal, setShowDescModal] = useState(false);
+  const [cardGiftData, setCardGiftData] = useState<{ gift: string | null; cardGiftImageUrl: string | null } | null>(null);
 
   useEffect(() => {
-    const calc = () => {
-      const diff = Math.max(0, Math.floor((new Date(event.scheduledAt).getTime() - Date.now()) / 1000));
-      setRemaining(diff);
-    };
+    const calc = () => setRemaining(Math.max(0, Math.floor((new Date(event.scheduledAt).getTime() - Date.now()) / 1000)));
     calc();
     const t = setInterval(calc, 1000);
     return () => clearInterval(t);
   }, [event.scheduledAt]);
 
-  const h = Math.floor(remaining / 3600);
-  const m = Math.floor((remaining % 3600) / 60);
-  const s = remaining % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const fmt = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  useEffect(() => {
+    if (!event?.id) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/card-stats?eventId=${event.id}`, {
+      headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` },
+    }).then(r => r.json()).then(d => setCardGiftData({ gift: d.gift || null, cardGiftImageUrl: d.cardGiftImageUrl || null })).catch(() => {});
+  }, [event?.id]);
+
+  const fmt = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+      : `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+
+  const cardGift = cardGiftData?.gift || null;
+  const cardGiftImageUrl = cardGiftData?.cardGiftImageUrl || null;
 
   return (
-    <div className="mx-3 mt-2 rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#00BCD4' }}>
-      <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, #e0f7fa 0%, #f0fdff 100%)' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🎁</span>
-            <div>
-              <p className="text-xs font-bold" style={{ color: '#00838F' }}>이벤트 예정</p>
-              <p className="text-sm font-bold text-gray-800">{event.eventTitle || event.prize || '마지막글 이벤트'}</p>
-            </div>
+    <>
+    <div className="rounded-2xl mb-3 overflow-hidden shadow-sm bg-white" style={{ border: '2px solid #00BCD4' }}>
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between" style={{ marginBottom: collapsed ? 0 : 12 }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-2xl leading-none font-black select-none" style={{ color: '#00BCD4', fontFamily: 'Georgia, serif', lineHeight: 1 }}>❝</span>
+            <span className="text-gray-900 font-bold text-sm">{event.eventTitle || '마지막글 이벤트'}</span>
+            <span className="text-[10px] bg-cyan-50 text-cyan-600 font-bold px-1.5 py-0.5 rounded-full border border-cyan-200">예정</span>
+            {event.description && (
+              <button onClick={() => setShowDescModal(true)}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-black"
+                style={{ background: 'rgba(0,0,0,0.25)' }}>!</button>
+            )}
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-400">시작까지</p>
-            <p className="font-mono font-black text-xl" style={{ color: '#00BCD4' }}>{fmt}</p>
+          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+            <div className="text-right">
+              <p className="text-gray-400 text-[10px]">시작까지</p>
+              <div className="font-mono font-black text-3xl tracking-tight" style={{ color: '#00BCD4' }}>{fmt(remaining)}</div>
+            </div>
+            <button onClick={() => setCollapsed(c => !c)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+              {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </button>
           </div>
         </div>
-        <div className="mt-2 pt-2 border-t border-cyan-100 flex items-center gap-3 text-[11px] text-gray-500">
-          <span>⏱ {event.durationMinutes}분 타이머</span>
-          <span>🎁 {event.prize}</span>
-          <span>🃏 성공률 {event.cardSuccessRate ?? 100}%</span>
+
+        <div style={{ overflow: 'hidden', maxHeight: collapsed ? 0 : '800px', transition: 'max-height 0.3s ease' }}>
+          {/* 현재 선두 → 예정 */}
+          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-gray-400 text-[10px] mb-0.5">🏆 현재 선두</p>
+              <p className="text-gray-400 font-bold text-sm">이벤트 시작 후 결정</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-gray-400 text-[10px] mb-0.5">상품</p>
+                <p className="font-bold text-xs" style={{ color: '#00BCD4' }}>{event.prize}</p>
+              </div>
+              {event.prizeImageUrl && (
+                <img src={event.prizeImageUrl} alt="상품" className="w-14 h-14 object-contain rounded-xl bg-white border border-gray-100 flex-shrink-0" />
+              )}
+            </div>
+          </div>
+
+          {/* 카드 선물 */}
+          {(cardGift || cardGiftImageUrl) && (
+            <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 flex items-center justify-between gap-2 mt-2">
+              <div>
+                <p className="text-gray-400 text-[10px] mb-0.5">🃏 최다 카드 선물</p>
+                <p className="text-gray-400 text-sm font-bold">이벤트 시작 후 결정</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {cardGift && (
+                  <div className="text-right">
+                    <p className="text-gray-400 text-[10px] mb-0.5">선물</p>
+                    <p className="font-bold text-xs" style={{ color: '#00BCD4' }}>{cardGift}</p>
+                  </div>
+                )}
+                {cardGiftImageUrl && (
+                  <img src={cardGiftImageUrl} alt="선물" className="w-14 h-14 object-contain rounded-xl bg-white border border-gray-100 flex-shrink-0" />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 버튼 영역 */}
+          {userId && (
+            <div className="mt-3">
+              <div className="flex gap-2">
+                <button disabled className="relative flex flex-col items-center justify-center gap-0.5 py-2.5 rounded-2xl font-bold text-xs flex-shrink-0 opacity-40 cursor-not-allowed"
+                  style={{ width: '20%', background: '#F0FDFF', border: '1.5px solid #B2EBF2', color: '#00BCD4' }}>
+                  <span className="text-base leading-none">🃏</span>
+                  <span className="text-[10px] font-bold leading-none">카드얻기</span>
+                </button>
+                <button disabled
+                  className="relative flex items-center justify-center gap-2 py-2.5 rounded-2xl font-bold text-sm flex-1 cursor-not-allowed opacity-40"
+                  style={{ background: '#f3f4f6', border: '1.5px solid #e5e7eb', color: '#9ca3af' }}>
+                  <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} <span className="opacity-80">({event.cardSuccessRate ?? 100}%)</span></span>
+                  <span className="absolute right-3 text-gray-400 text-[11px]">이벤트 시작 후</span>
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="text-gray-400 text-[10px] text-center mt-1.5">
+            생애 첫 게시글이 올라오면 보너스카드 성공률 3% 증가!
+          </p>
         </div>
       </div>
     </div>
+
+    {showDescModal && (
+      <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end justify-center sm:items-center sm:p-4" onClick={() => setShowDescModal(false)}>
+        <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm flex flex-col" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+          <div className="flex-shrink-0 px-6 pt-6 pb-4 text-center border-b border-gray-100">
+            <div className="text-3xl mb-2">🏆</div>
+            <h3 className="text-lg font-bold text-gray-900">{event.prize}</h3>
+          </div>
+          <div className="overflow-y-auto flex-1 px-6 py-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-bold text-gray-700 mb-2">📋 이벤트 규칙</p>
+              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{event.description}</p>
+            </div>
+            <div className="text-xs text-gray-400 space-y-1 mt-4">
+              <p>⏱ 타이머: {event.durationMinutes}분</p>
+              <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
+            </div>
+          </div>
+          <div className="flex-shrink-0 px-6 pb-6 pt-2">
+            <button onClick={() => setShowDescModal(false)} className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold">확인</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -4138,7 +4242,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {/* ★ postsEverLoaded: posts 첫 fetch 완료 전엔 배너를 마운트하지 않음 */}
       {/* → 이벤트 데이터가 posts보다 먼저 도착해 lastPost=null로 잘못된 타이머를 계산하는 버그 방지 */}
       {scheduledEvents.map(evt => (
-        <ScheduledEventBanner key={evt.id} event={evt} />
+        <ScheduledEventBanner key={evt.id} event={evt} userId={userId} accessToken={accessToken} />
       ))}
       {postsEverLoaded && lastPostEvents.length > 0 && (
         <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
