@@ -2917,13 +2917,13 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               );
             })()}
             <p className="text-gray-400 text-[10px] text-center mt-1.5">
-              타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨!
+              생애 첫 게시글이 올라오면 보너스카드 성공률 3% 증가!
             </p>
           </div>
         )}
         {!userId && (
           <p className="text-gray-400 text-[10px] mt-2 text-center">
-            타이머가 00:00이 될 때까지 새 글이 없으면 현재 선두가 당첨!
+            생애 첫 게시글이 올라오면 보너스카드 성공률 3% 증가!
           </p>
         )}
         </div>{/* end collapsible */}
