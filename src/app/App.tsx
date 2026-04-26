@@ -413,6 +413,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [noticeIsNew, setNoticeIsNew] = useState(false);
   const [noticeRefreshKey, setNoticeRefreshKey] = useState(0);
   const [bonusCardCount, setBonusCardCount] = useState<number | null>(null);
+  const [cardDeductAnim, setCardDeductAnim] = useState(false);
+  const prevCardCountRef = useRef<number | null>(null);
+  const cardAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightFeedPostId, setHighlightFeedPostId] = useState<string | null>(null);
   const [notificationPost, setNotificationPost] = useState<FeedPost | null>(null); // 알림 클릭 시 모달로 보여줄 포스트
   const [notificationPostLoading, setNotificationPostLoading] = useState(false);
@@ -439,6 +442,18 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then(r => r.ok ? r.json() : null).then(d => { if (d) setBonusCardCount(d.cards ?? 0); }).catch(() => {});
   }, [accessToken]);
+
+  useEffect(() => {
+    if (bonusCardCount !== null && prevCardCountRef.current !== null && bonusCardCount < prevCardCountRef.current) {
+      setCardDeductAnim(false);
+      requestAnimationFrame(() => {
+        setCardDeductAnim(true);
+        if (cardAnimTimerRef.current) clearTimeout(cardAnimTimerRef.current);
+        cardAnimTimerRef.current = setTimeout(() => setCardDeductAnim(false), 700);
+      });
+    }
+    prevCardCountRef.current = bonusCardCount;
+  }, [bonusCardCount]);
 
   // /post/:postId URL 진입 시 게시물 모달로 직접 열기
   useEffect(() => {
@@ -1770,7 +1785,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               {/* 보너스카드 + 공지 버튼 */}
               <div className="flex flex-col items-center gap-2">
                 {accessToken && bonusCardCount !== null && (
-                  <div className="flex flex-col items-center leading-none">
+                  <div className={`flex flex-col items-center leading-none${cardDeductAnim ? ' animate-card-deduct' : ''}`}>
                     <span className="text-[22px]">🃏</span>
                     <span className="text-[13px] text-gray-600 font-medium">{bonusCardCount}</span>
                   </div>
@@ -1850,7 +1865,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               </button>
               <div className="flex items-center gap-1">
                 {accessToken && bonusCardCount !== null && (
-                  <span className="text-[13px] text-gray-600 font-medium px-1"><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
+                  <span className={`text-[13px] text-gray-600 font-medium px-1${cardDeductAnim ? ' animate-card-deduct' : ''}`}><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
                 )}
                 <button onClick={() => setShowNoticeModal(true)}
                   className="relative w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
@@ -2090,6 +2105,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 }}
                 onGuestAction={() => setShowGuestModal(true)}
                 onNavigateToMarket={() => setActiveTab('market')}
+                onCardCountChange={(count) => setBonusCardCount(count)}
                 noticeRefreshKey={noticeRefreshKey}
                 wishlistGames={wishlistGames}
                 onRemoveFromWishlist={(gameId) => {

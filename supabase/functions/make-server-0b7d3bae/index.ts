@@ -5742,7 +5742,7 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
         } else {
           console.log(`[카드사용] 이벤트 ${useEvents[idx].id} 이미 종료됨 — last_post_events 덮어쓰기 skip`);
         }
-        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true });
+        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true, updatedEvent });
       }
     } else {
       const event = await kv.get('last_post_event');
@@ -5769,7 +5769,7 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
           cardUsageLog: [...(event.cardUsageLog || []), usageEntry],
         };
         await kv.set('last_post_event', updatedEvent);
-        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true });
+        if (cardFailed) return c.json({ success: true, cards: current - 1, cardFailed: true, updatedEvent });
       }
     }
 

@@ -70,6 +70,7 @@ interface FeedPageProps {
   onGuestAction?: () => void;
   noticeRefreshKey?: number;
   onNavigateToMarket?: () => void;
+  onCardCountChange?: (count: number) => void;
 }
 
 // ─── 시간 포맷 ──��
@@ -2910,7 +2911,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               const reductionSecs = currentUsages.length * (event.cardReductionSeconds ?? 300);
               return (
                 <p className="text-[10px] text-center mt-1" style={{ color: '#00BCD4' }}>
-                  🃏 이번 선두 이후 카드 <span className="font-black">{currentUsages.length}회</span> 사용됨
+                  🃏 이번 선두 카드 <span className="font-black">{currentUsages.length}회</span> 사용됨
                   <span className="text-gray-400"> · -{Math.floor(reductionSecs / 60)}분 {reductionSecs % 60 > 0 ? `${reductionSecs % 60}초` : ''} 감축</span>
                 </p>
               );
@@ -3501,7 +3502,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
   );
 }
 
-export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, isStaff = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket }: FeedPageProps) {
+export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, isStaff = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket, onCardCountChange }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
   const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
@@ -3817,17 +3818,18 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       });
       if (res.ok) {
         const data = await res.json();
-        // 서버에서 반환된 값으로 즉시 반영 후, 서버와 재동기화
-        setBonusCards(typeof data.cards === 'number' ? data.cards : 0);
+        const newCount = typeof data.cards === 'number' ? data.cards : 0;
+        setBonusCards(newCount);
+        onCardCountChange?.(newCount);
+        // 성공/실패 모두 updatedEvent 즉시 반영 (카드 사용 횟수 배너 즉시 갱신)
+        if (data.updatedEvent) {
+          setLastPostEvents(prev =>
+            prev.map(e => e.id === data.updatedEvent.id ? data.updatedEvent : e)
+          );
+        }
         if (data.cardFailed) {
           toast.error('아쉽게도 효과사용에 실패하였습니다.');
         } else {
-          // 서버에서 반환된 업데이트된 이벤트로 즉시 타이머 반영
-          if (data.updatedEvent) {
-            setLastPostEvents(prev =>
-              prev.map(e => e.id === data.updatedEvent.id ? data.updatedEvent : e)
-            );
-          }
           const secs: number = data.updatedEvent?.cardReductionSeconds ?? 300;
           const reductionLabel = secs >= 60 ? `${Math.round(secs / 60)}분` : `${secs}초`;
           toast.success(`⏱ 타이머가 ${reductionLabel} 줄었어요!`);
