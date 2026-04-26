@@ -61,6 +61,7 @@ interface FeedPageProps {
   openComposer?: boolean;
   onComposerClose?: () => void;
   isAdmin?: boolean;
+  isStaff?: boolean;
   onCommentingChange?: (isCommenting: boolean) => void;
   onGameClick?: (gameId: string, gameName: string, imageUrl?: string) => void;
   wishlistGames?: { id: string; bggId?: string; koreanName?: string; englishName?: string; imageUrl?: string }[];
@@ -1002,7 +1003,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false, staffGradeMap = {} }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, isStaff, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false, staffGradeMap = {} }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -1022,6 +1023,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   onOptimisticComment?: (postId: string, comment: any) => void;
   onOptimisticDeleteComment?: (commentId: string) => void;
   isAdmin?: boolean;
+  isStaff?: boolean;
   onCommentOpen?: (postId: string) => void;
   onCommentClose?: (postId: string) => void;
   onGameClick?: (gameId: string, gameName: string, imageUrl?: string) => void;
@@ -1543,7 +1545,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
             </div>
             <span className="text-xs text-gray-400">{timeAgo(post.createdAt)}</span>
           </div>
-          {(post.userId === userId || isAdmin) && (
+          {(post.userId === userId || isAdmin || isStaff) && (
             <div className="relative flex-shrink-0">
               <button onClick={() => setShowMenu(!showMenu)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
@@ -1629,6 +1631,15 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                             🎉 첫 게시글로 지정
                           </button>
                         )}
+                        <div className="border-t border-gray-100 my-1" />
+                      </>
+                    )}
+                    {!isAdmin && isStaff && (
+                      <>
+                        <button onClick={() => { setShowMenu(false); setAdminTagQueue(post.linkedGames || []); setShowAdminGameTag(true); }}
+                          className="w-full px-4 py-2 text-left text-sm text-cyan-600 hover:bg-cyan-50 transition-colors">
+                          🎲 게임태그 추가/수정
+                        </button>
                         <div className="border-t border-gray-100 my-1" />
                       </>
                     )}
@@ -3488,7 +3499,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
   );
 }
 
-export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket }: FeedPageProps) {
+export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onViewProfile, highlightPostId, onHighlightClear, openComposer, onComposerClose, isAdmin = false, isStaff = false, onCommentingChange, onGameClick, onGuestAction, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, noticeRefreshKey, onNavigateToMarket }: FeedPageProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [lastPostEvents, setLastPostEvents] = useState<any[]>([]);
   const [eventFastPoll, setEventFastPoll] = useState(false); // 타이머 < 120s일 때 3s 빠른 폴링
@@ -4606,6 +4617,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                     myAvatarUrl={avatarUrl} myRankPoints={myPoints}
                     ownedGames={ownedGames} userEmail={userEmail} userProfile={userProfile}
                     isAdmin={isAdmin}
+                    isStaff={isStaff}
                     onOptimisticDelete={optimisticDeletePost}
                     onOptimisticLike={optimisticLike}
                     onOptimisticComment={(comment) => optimisticAddComment(post.id, comment)}

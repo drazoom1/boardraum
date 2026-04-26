@@ -2078,6 +2078,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 openComposer={triggerComposer}
                 onComposerClose={() => setTriggerComposer(false)}
                 isAdmin={userRole === 'admin'}
+                isStaff={isStaff}
                 onCommentingChange={setIsCommenting}
                 onViewProfile={(targetUserId, isMe) => {
                   setViewingUserId(isMe ? null : targetUserId);
