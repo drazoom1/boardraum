@@ -1653,8 +1653,10 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                         </button>
                       </>
                     )}
-                    <button onClick={handleDelete}
-                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors">삭제</button>
+                    {(post.userId === userId || isAdmin) && (
+                      <button onClick={handleDelete}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors">삭제</button>
+                    )}
                   </div>
                 </>
               )}
