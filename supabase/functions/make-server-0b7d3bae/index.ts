@@ -12521,9 +12521,18 @@ app.post('/make-server-0b7d3bae/staff/equity', async (c) => {
 
 app.get('/make-server-0b7d3bae/staff/activity/:userId', async (c) => {
   try {
-    const auth = await requireStaffAdmin(c);
-    if (auth instanceof Response) return auth;
+    const token = (c.req.header('Authorization') ?? '').replace('Bearer ', '').trim();
+    if (!token) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const userId = c.req.param('userId');
+    // 관리자 또는 본인만 조회 가능
+    const role = await getUserRole(user.id, user.email ?? '');
+    const members: any[] = (await kv.get('staff_members') as any[]) ?? [];
+    const isSelf = user.id === userId;
+    const isAdminUser = role === 'admin';
+    const isStaffMember = members.some((m: any) => m.userId === user.id);
+    if (!isAdminUser && !isSelf && !isStaffMember) return c.json({ error: 'Forbidden' }, 403);
     const logs = (await kv.get(`staff_activity_${userId}`)) ?? [];
     return c.json({ logs });
   } catch (e) { return c.json({ error: String(e) }, 500); }
