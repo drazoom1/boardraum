@@ -4564,9 +4564,12 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     if (isPrivate !== undefined) updatedPost.isPrivate = isPrivate;
     
     await kv.set(`beta_post_${postId}`, updatedPost);
-    if (updatedPost.linkedGames?.length > 0) {
-      await kv.del('trending_games_cache').catch(() => {});
-    }
+    // 피드 캐시 무효화 (전체 + 해당 카테고리)
+    await Promise.all([
+      kv.del('feed_cache_전체').catch(() => {}),
+      kv.del(`feed_cache_${updatedPost.category}`).catch(() => {}),
+      kv.del('trending_games_cache').catch(() => {}),
+    ]);
 
     // 운영진 태그 자동 적립: 운영진/관리자가 게임 태그 추가한 경우 +2점
     let staffPointsAwarded = 0;
