@@ -2896,7 +2896,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                   color: bonusCards > 0 ? 'white' : '#9ca3af',
                 }}
               >
-                <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} 사용하기</span>
+                <span>⏱ -{(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} 사용하기 <span className="opacity-80">({event.cardSuccessRate ?? 100}%)</span></span>
                 {bonusCards > 0
                   ? <span className="absolute right-3 bg-white text-cyan-600 text-[11px] font-black px-2 py-0.5 rounded-full">{bonusCards}장</span>
                   : <span className="absolute right-3 text-gray-400 text-[11px]">카드 없음</span>
