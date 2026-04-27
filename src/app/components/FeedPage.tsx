@@ -4037,8 +4037,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       } catch {}
     };
     fetchEvent();
-    // 타이머 120초 미만이면 6초, 아니면 20초 폴링
-    const interval = eventFastPoll ? 6000 : 20000;
+    // 타이머 120초 미만이면 10초, 아니면 30초 폴링
+    const interval = eventFastPoll ? 10000 : 30000;
     const t = setInterval(fetchEvent, interval);
     return () => clearInterval(t);
   }, [accessToken, eventFastPoll]);
@@ -4074,15 +4074,15 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       } catch {}
     };
     fetchWinners();
-    const t = setInterval(fetchWinners, 10000); // 10초마다 폴링 (당첨 배너 빠른 감지)
+    const t = setInterval(fetchWinners, 20000); // 20초마다 폴링 (당첨 배너 감지)
     return () => clearInterval(t);
   }, [accessToken]);
 
-  // 보너스카드 폴링 (15초마다) + 탭 포커스 즉시 갱신
+  // 보너스카드 폴링 (60초마다) + 탭 포커스 즉시 갱신
   useEffect(() => {
     loadBonusCards();
     if (!accessToken || accessToken.split('.').length !== 3) return;
-    const t = setInterval(loadBonusCards, 15000);
+    const t = setInterval(loadBonusCards, 60000);
     const onVisible = () => { if (document.visibilityState === 'visible') loadBonusCards(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
