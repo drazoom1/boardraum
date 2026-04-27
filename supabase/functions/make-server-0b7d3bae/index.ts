@@ -4842,17 +4842,6 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
           message: `${commenterName}님이 내 댓글에 답글을 달았어요`,
         }).catch(() => {});
       }
-      // 대댓글인 경우 게시물 작성자에게도 알림 (부모 댓글 작성자와 다르고, 본인이 아닌 경우)
-      if (post.userId && post.userId !== user.id && (!parentComment || parentComment.userId !== post.userId)) {
-        await createNotification(post.userId, {
-          type: 'comment',
-          fromUserId: user.id,
-          fromUserName: commenterName,
-          postId,
-          postContent: (post.content || '').slice(0, 30),
-          message: `${commenterName}님이 내 글에 답글을 달았어요`,
-        }).catch(() => {});
-      }
     }
 
     // ── 3. @멘션 알림: 댓글 내용에서 @username 추출해서 각 유저에게 알림
