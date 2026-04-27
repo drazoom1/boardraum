@@ -6066,7 +6066,7 @@ app.get("/make-server-0b7d3bae/admin/users/:targetUserId/card-history", async (c
   }
 });
 
-// 관리자 - 여러 유저 보너스카드 수량 일괄 조회
+// 관리자 - 여러 유저 보너스카드 수량 일괄 조회 (getByPrefix 2회로 처리)
 app.post("/make-server-0b7d3bae/admin/users/bulk-bonus-cards", async (c) => {
   try {
     const accessToken = c.req.header('Authorization')?.split(' ')[1];
@@ -6077,17 +6077,41 @@ app.post("/make-server-0b7d3bae/admin/users/bulk-bonus-cards", async (c) => {
     const { userIds } = await c.req.json();
     if (!Array.isArray(userIds)) return c.json({ error: 'userIds required' }, 400);
 
-    const results = await Promise.all(userIds.map(async (uid: string) => {
-      try {
-        const betaEntry = await kv.get(`beta_user_${uid}`).catch(() => null) as any;
-        const email = betaEntry?.email;
-        const cards = email ? await readCardCountByEmail(email, uid) : await readCardCount(uid);
-        return { uid, cards };
-      } catch { return { uid, cards: 0 }; }
-    }));
+    const userIdSet = new Set<string>(userIds);
+
+    // 1번 스캔: 모든 beta_user_ 항목으로 userId→email 맵 구성
+    const [betaEntries, emailCardEntries, legacyCardEntries] = await Promise.all([
+      getByPrefix('beta_user_'),
+      getByPrefix('bonus_cards_email_'),
+      getByPrefix('bonus_cards_'),
+    ]);
+
+    const userEmailMap: Record<string, string> = {};
+    for (const { key, value } of betaEntries as any[]) {
+      const uid = key.replace('beta_user_', '');
+      if (userIdSet.has(uid) && value?.email) userEmailMap[uid] = value.email.toLowerCase().trim();
+    }
+
+    const emailCardMap: Record<string, number> = {};
+    for (const { key, value } of emailCardEntries as any[]) {
+      const email = key.replace('bonus_cards_email_', '');
+      emailCardMap[email] = parseCardCount(value);
+    }
+
+    const legacyCardMap: Record<string, number> = {};
+    for (const { key, value } of legacyCardEntries as any[]) {
+      const uid = key.replace('bonus_cards_', '');
+      if (!uid.includes('@')) legacyCardMap[uid] = parseCardCount(value);
+    }
 
     const cardMap: Record<string, number> = {};
-    results.forEach(({ uid, cards }) => { cardMap[uid] = cards; });
+    for (const uid of userIds) {
+      const email = userEmailMap[uid];
+      const byEmail = email ? (emailCardMap[email] ?? 0) : 0;
+      const byLegacy = legacyCardMap[uid] ?? 0;
+      cardMap[uid] = byEmail > 0 ? byEmail : byLegacy;
+    }
+
     return c.json({ cards: cardMap });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
