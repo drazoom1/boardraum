@@ -3253,7 +3253,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <h3 className="text-base font-bold text-gray-900">현재 선두가 아닌데요</h3>
             <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
               지금 선두는 <span className="font-bold text-gray-700">{lastPost ? lastPost.userName : '없음'}</span>님이에요.<br/>
-              카드를 쓰면 타이머가 30초 줄어 선두에게 유리해져요.
+              카드를 쓰면 타이머가 {(event.cardReductionSeconds ?? 300) >= 60 ? `${Math.round((event.cardReductionSeconds ?? 300) / 60)}분` : `${event.cardReductionSeconds ?? 300}초`} 줄어 선두에게 유리해져요.
             </p>
           </div>
           <div className="px-6 py-4">
