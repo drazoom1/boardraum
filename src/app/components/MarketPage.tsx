@@ -1500,6 +1500,8 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const loadRequestVersionRef = useRef(0);
+  const consecutiveNullsRef = useRef(0);
+  const loadAuctionRef = useRef<() => Promise<void>>();
 
   const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
 
@@ -1509,15 +1511,29 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       const res = await fetch(`${API}/auction/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) return; // 서버 오류 시 현재 상태 유지
       const d = await res.json();
-      setAuction(d.auction || null);
-      const pts: { userId: string; nickname: string }[] = d.participants || [];
-      setParticipants(pts);
-      setBidderIds(d.bidderIds || []);
-      if (userId) setJoined(pts.some(p => p.userId === userId));
+      if (d.auction) {
+        consecutiveNullsRef.current = 0;
+        setAuction(d.auction);
+        const pts: { userId: string; nickname: string }[] = d.participants || [];
+        setParticipants(pts);
+        setBidderIds(d.bidderIds || []);
+        if (userId) setJoined(pts.some(p => p.userId === userId));
+      } else {
+        // 일시적 KV 오류 대비: 현재 active 경매가 있으면 3회 연속 null이어야 초기화
+        consecutiveNullsRef.current += 1;
+        if (consecutiveNullsRef.current >= 3) {
+          setAuction(null);
+          setParticipants([]);
+          setBidderIds([]);
+        }
+      }
     } catch {}
     setLoading(false);
   }
+  // 항상 최신 loadAuction을 ref에 유지 (stale closure 방지)
+  loadAuctionRef.current = loadAuction;
 
   async function loadCardCount() {
     if (!accessToken) return;
@@ -1577,12 +1593,13 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     if (accessToken) { loadCardCount(); loadMyApprovedRequest(); }
   }, [accessToken]);
 
-  // 경매 데이터 폴링: active → 5초, scheduled → 10초, 없음 → 20초
+  // 경매 데이터 폴링: active → 2초, scheduled → 10초, 없음 → 20초
+  // loadAuctionRef를 통해 호출 → 항상 최신 accessToken/userId 사용 (stale closure 방지)
   const auctionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (auctionPollRef.current) clearInterval(auctionPollRef.current);
     const interval = auction?.status === 'active' ? 2000 : auction?.status === 'scheduled' ? 10000 : 20000;
-    auctionPollRef.current = setInterval(loadAuction, interval);
+    auctionPollRef.current = setInterval(() => loadAuctionRef.current?.(), interval);
     return () => { if (auctionPollRef.current) clearInterval(auctionPollRef.current); };
   }, [auction?.status]);
 

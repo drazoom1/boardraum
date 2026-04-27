@@ -9659,9 +9659,9 @@ async function checkIsAdmin(userId: string): Promise<boolean> {
 // GET /auction/active — 현재/최근 경매 조회 (공개)
 app.get("/make-server-0b7d3bae/auction/active", async (c) => {
   try {
-    const activeId = await kv.get("auction_active_id") as string | null;
+    const activeId = await kvGetWithRetry<string>("auction_active_id");
     if (!activeId) return c.json({ auction: null });
-    const auction = await kv.get(`auction_${activeId}`) as any | null;
+    const auction = await kvGetWithRetry<any>(`auction_${activeId}`);
     if (!auction) return c.json({ auction: null });
 
     const now = new Date().toISOString();
