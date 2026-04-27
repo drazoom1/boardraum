@@ -2595,6 +2595,8 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
   const [showMyAuctions, setShowMyAuctions] = useState(false);
   const [search, setSearch] = useState('');
   const [showMyGamesModal, setShowMyGamesModal] = useState(false);
+  const [pendingTrackingCount, setPendingTrackingCount] = useState(0);
+  const [showTrackingAlert, setShowTrackingAlert] = useState(false);
   const myAuctionsSectionRef = useRef<HTMLDivElement | null>(null);
 
   function goToMyAuctions() {
@@ -2618,6 +2620,21 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
     })();
   }, []);
 
+  // 송장 미입력 경매 체크
+  useEffect(() => {
+    if (!accessToken) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/my/auction-trades`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      const pending = (d.trades || []).filter((t: any) =>
+        t.role === 'host' && !t.trackingNumber && t.escrowStatus !== 'released'
+      ).length;
+      setPendingTrackingCount(pending);
+      if (pending > 0) setShowTrackingAlert(true);
+    }).catch(() => {});
+  }, [accessToken]);
+
   const filtered = listings
     .filter(l => {
       if (filter === 'mine') return l.userId === userId;
@@ -2640,6 +2657,35 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
 
   return (
     <div className="max-w-2xl mx-auto space-y-3">
+
+      {/* 송장 미입력 알림 모달 */}
+      {showTrackingAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
+            <div className="text-center mb-4">
+              <p className="text-2xl mb-2">🚚</p>
+              <p className="text-base font-bold text-gray-800 mb-1">송장번호 입력이 필요해요</p>
+              <p className="text-sm text-gray-500">
+                낙찰된 경매 {pendingTrackingCount}건의 운송장 번호가 미입력 상태예요.<br />
+                '내 경매' 탭에서 확인하고 입력해 주세요.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowTrackingAlert(false)}
+                className="flex-1 h-10 text-sm font-semibold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 active:scale-95 transition-all">
+                나중에
+              </button>
+              <button
+                onClick={() => { setShowTrackingAlert(false); goToMyAuctions(); }}
+                className="flex-1 h-10 text-sm font-bold text-white bg-orange-500 rounded-xl hover:bg-orange-600 active:scale-95 transition-all">
+                바로 입력하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 경매 배너 섹션 */}
       <AuctionSection
         accessToken={accessToken}
@@ -2671,8 +2717,11 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
           ))}
           {accessToken && (
             <button onClick={() => setShowMyAuctions(v => !v)}
-              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${showMyAuctions ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>
+              className={`relative px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${showMyAuctions ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>
               내 경매
+              {pendingTrackingCount > 0 && !showMyAuctions && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
+              )}
             </button>
           )}
           <span className="ml-auto text-sm text-gray-400">{!showMyAuctions ? filtered.length : ''}개</span>
