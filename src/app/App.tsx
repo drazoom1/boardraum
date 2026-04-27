@@ -454,7 +454,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       }).catch(() => {});
     };
     check();
-    const id = setInterval(check, 15000);
+    const id = setInterval(check, 30000);
     return () => clearInterval(id);
   }, []);
 
@@ -1454,60 +1454,18 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       } catch {}
     };
     check();
-    const timer = setInterval(check, 30000);
+    const timer = setInterval(check, 60000);
     return () => clearInterval(timer);
   }, [accessToken, userId]);
 
-  // Check for unread messages periodically
+  // 새 피드 글 감지 → unreadMessageCount 업데이트 (latest-ts 재활용, 무거운 posts 전체조회 제거)
   useEffect(() => {
-    if (!accessToken || !userId || betaTesterStatus !== 'approved') {
-      return;
+    if (!accessToken || !userId || betaTesterStatus !== 'approved') return;
+    const lastReadKey = `lastReadMessage_${userId}`;
+    const lastReadTime = localStorage.getItem(lastReadKey);
+    if (lastReadTime && lastFeedPostAtRef.current && new Date(lastFeedPostAtRef.current) > new Date(lastReadTime)) {
+      setUnreadMessageCount(prev => (prev > 0 ? prev : 1));
     }
-
-    const checkUnreadMessages = async () => {
-      try {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const messages = (data.posts || []).filter((msg: any) => {
-            return msg && msg.id && msg.userId && msg.content && msg.createdAt;
-          });
-
-          // Get last read timestamp from localStorage
-          const lastReadKey = `lastReadMessage_${userId}`;
-          const lastReadTime = localStorage.getItem(lastReadKey);
-
-          if (!lastReadTime) {
-            // First time - don't mark as read, show unread count
-            const unreadCount = messages.filter((msg: any) => msg.userId !== userId).length;
-            setUnreadMessageCount(unreadCount);
-          } else {
-            // Count messages after last read time
-            const unreadCount = messages.filter((msg: any) => {
-              return new Date(msg.createdAt) > new Date(lastReadTime);
-            }).length;
-            setUnreadMessageCount(unreadCount);
-          }
-        }
-      } catch (error) {
-        // 네트워크 오류 시 조용히 무시 (콘솔 노출 안 함)
-      }
-    };
-
-    // Check immediately
-    checkUnreadMessages();
-
-    // Check every 60 seconds
-    const interval = setInterval(checkUnreadMessages, 60000);
-
-    return () => {
-      clearInterval(interval);
-    };
   }, [accessToken, userId, betaTesterStatus]);
 
   // 팝업: 오늘 하루 닫기 처리 + 팝업 수정 시 재표시
@@ -1567,7 +1525,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
     };
 
     sendHeartbeat(); // 즉시 1회
-    const interval = setInterval(sendHeartbeat, 30_000); // 30초마다
+    const interval = setInterval(sendHeartbeat, 60_000); // 60초마다
     return () => clearInterval(interval);
   }, [accessToken, userId]);
 

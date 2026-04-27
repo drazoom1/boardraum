@@ -1599,7 +1599,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const auctionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (auctionPollRef.current) clearInterval(auctionPollRef.current);
-    const interval = auction?.status === 'active' ? 2000 : auction?.status === 'scheduled' ? 10000 : 20000;
+    const interval = auction?.status === 'active' ? 5000 : auction?.status === 'scheduled' ? 15000 : 30000;
     auctionPollRef.current = setInterval(() => loadAuctionRef.current?.(), interval);
     return () => { if (auctionPollRef.current) clearInterval(auctionPollRef.current); };
   }, [auction?.status]);

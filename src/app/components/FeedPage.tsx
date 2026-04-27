@@ -3435,7 +3435,7 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
 
   useEffect(() => {
     loadCongrats();
-    const t = setInterval(loadCongrats, 15000);
+    const t = setInterval(loadCongrats, 30000);
     return () => clearInterval(t);
   }, [winner.eventId, accessToken]);
 
