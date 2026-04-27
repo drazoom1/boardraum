@@ -3882,7 +3882,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         seenPostIdsRef.current = new Set(incoming.map(p => p.id));
       } else {
         console.error('[Feed] 서버 오류:', res.status, data);
-        toast.error(`피드 오류 (${res.status}): ${data?.error || '알 수 없는 오류'}`);
+        // 5xx는 일시적 서버 오류 — 폴링 중(silent)이면 toast 생략, 다음 폴링 때 자동 복구
+        if (!silent && res.status < 500) {
+          toast.error(`피드 오류 (${res.status}): ${data?.error || '알 수 없는 오류'}`);
+        }
       }
     } catch (e) { console.error('[Feed] fetch 오류:', e); }
     if (!silent) setLoading(false);
@@ -4027,8 +4030,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       } catch {}
     };
     fetchEvent();
-    // 타이머 120초 미만이면 3초, 아니면 15초 폴링
-    const interval = eventFastPoll ? 3000 : 15000;
+    // 타이머 120초 미만이면 6초, 아니면 20초 폴링
+    const interval = eventFastPoll ? 6000 : 20000;
     const t = setInterval(fetchEvent, interval);
     return () => clearInterval(t);
   }, [accessToken, eventFastPoll]);
@@ -4078,12 +4081,17 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [accessToken]);
 
-  // 실시간 폴링: 5초마다 갱신
+  // 피드 폴링: 45초마다 (요청 분산을 위해 랜덤 지터 추가)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const jitter = Math.floor(Math.random() * 10000); // 0~10초 랜덤 지연
+    const timer = setTimeout(() => {
+      const interval = setInterval(() => {
+        loadPosts(true, openCommentPostIdsRef.current);
+      }, 45000);
       loadPosts(true, openCommentPostIdsRef.current);
-    }, 30000);
-    return () => clearInterval(interval);
+      return () => clearInterval(interval);
+    }, jitter);
+    return () => clearTimeout(timer);
   }, [loadPosts]);
 
   // 하이라이트 게시물로 스크롤 + SEO 메타태그 업데이트
