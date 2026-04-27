@@ -31,6 +31,21 @@ const logError = (...args: any[]) => {
   console.error(...args);
 };
 
+// ==================== 인메모리 캐시 ====================
+const memCache = new Map<string, { data: any; expiry: number }>();
+function cacheGet(key: string): any | null {
+  const hit = memCache.get(key);
+  if (hit && hit.expiry > Date.now()) return hit.data;
+  memCache.delete(key);
+  return null;
+}
+function cacheSet(key: string, data: any, ttlMs: number) {
+  memCache.set(key, { data, expiry: Date.now() + ttlMs });
+}
+function cacheDelete(key: string) {
+  memCache.delete(key);
+}
+
 // ==================== 🆕 NEW: KV store retry helper (502 에러 대응) ====================
 async function kvGetWithRetry<T>(key: string, maxRetries = 3, delayMs = 500): Promise<T | null> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -9659,10 +9674,13 @@ async function checkIsAdmin(userId: string): Promise<boolean> {
 // GET /auction/active — 현재/최근 경매 조회 (공개)
 app.get("/make-server-0b7d3bae/auction/active", async (c) => {
   try {
+    const cached = cacheGet("auction_active_response");
+    if (cached) return c.json(cached);
+
     const activeId = await kvGetWithRetry<string>("auction_active_id");
-    if (!activeId) return c.json({ auction: null });
+    if (!activeId) { const r = { auction: null }; cacheSet("auction_active_response", r, 10000); return c.json(r); }
     const auction = await kvGetWithRetry<any>(`auction_${activeId}`);
-    if (!auction) return c.json({ auction: null });
+    if (!auction) { const r = { auction: null }; cacheSet("auction_active_response", r, 10000); return c.json(r); }
 
     const now = new Date().toISOString();
     let updated = false;
@@ -9719,10 +9737,16 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
 
     // 결과 배너 만료 시 빈 응답
     if (auction.status === 'ended' && auction.resultExpiresAt && now > auction.resultExpiresAt) {
-      return c.json({ auction: null });
+      const r = { auction: null }; cacheSet("auction_active_response", r, 10000); return c.json(r);
     }
 
-    return c.json({ auction, participants, bidderIds });
+    const response = { auction, participants, bidderIds };
+    // 상태 전환이 일어난 경우 캐시 스킵 (다음 폴링이 즉시 변경된 상태를 반영)
+    if (!updated) {
+      const ttl = auction.status === 'active' ? 4000 : auction.status === 'scheduled' ? 8000 : 5000;
+      cacheSet("auction_active_response", response, ttl);
+    }
+    return c.json(response);
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
@@ -9796,6 +9820,7 @@ app.post("/make-server-0b7d3bae/auction", async (c) => {
 
     await kv.set(`auction_${auctionId}`, auction);
     await kv.set('auction_active_id', auctionId);
+    cacheDelete("auction_active_response"); // 새 경매 등록 시 캐시 무효화
     return c.json({ success: true, auction });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
@@ -9976,6 +10001,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     auction.endAt = newEndAt;
     if (auction.status === 'scheduled') auction.status = 'active';
     await kv.set(`auction_${auctionId}`, auction);
+    cacheDelete("auction_active_response"); // 입찰 시 캐시 무효화
 
     // 입찰 시 자동 참여 등록
     const participants = (await kv.get(`auction_participants_${auctionId}`) as any[] | null) || [];
@@ -10021,6 +10047,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
       }
       participants.push({ userId: user.id, nickname: resolvedNickname, joinedAt: new Date().toISOString() });
       await kv.set(`auction_participants_${auctionId}`, participants);
+      cacheDelete("auction_active_response"); // 참여 시 캐시 무효화
     }
     return c.json({ success: true, participants });
   } catch (e) { return c.json({ error: String(e) }, 500); }
@@ -10079,6 +10106,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
     }
 
     await kv.set(`auction_${auctionId}`, auction);
+    cacheDelete("auction_active_response"); // 종료 시 캐시 무효화
     return c.json({ success: true, auction });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
@@ -10094,6 +10122,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/dismiss-banner", async (c) =>
     if (auction.status !== 'ended') return c.json({ error: '종료된 경매가 아니에요' }, 400);
     auction.resultExpiresAt = new Date(Date.now() - 1000).toISOString();
     await kv.set(`auction_${auctionId}`, auction);
+    cacheDelete("auction_active_response");
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
