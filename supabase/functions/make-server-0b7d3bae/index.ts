@@ -6079,11 +6079,11 @@ app.post("/make-server-0b7d3bae/admin/users/bulk-bonus-cards", async (c) => {
 
     const userIdSet = new Set<string>(userIds);
 
-    // 1번 스캔: 모든 beta_user_ 항목으로 userId→email 맵 구성
+    // getByPrefixWithKeys로 key+value 함께 스캔
     const [betaEntries, emailCardEntries, legacyCardEntries] = await Promise.all([
-      getByPrefix('beta_user_'),
-      getByPrefix('bonus_cards_email_'),
-      getByPrefix('bonus_cards_'),
+      kv.getByPrefixWithKeys('beta_user_'),
+      kv.getByPrefixWithKeys('bonus_cards_email_'),
+      kv.getByPrefixWithKeys('bonus_cards_'),
     ]);
 
     const userEmailMap: Record<string, string> = {};
