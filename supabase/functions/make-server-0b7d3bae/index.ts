@@ -6044,6 +6044,32 @@ app.get("/make-server-0b7d3bae/admin/users/:targetUserId/card-history", async (c
   }
 });
 
+// 관리자 - 여러 유저 보너스카드 수량 일괄 조회
+app.post("/make-server-0b7d3bae/admin/users/bulk-bonus-cards", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+
+    const { userIds } = await c.req.json();
+    if (!Array.isArray(userIds)) return c.json({ error: 'userIds required' }, 400);
+
+    const results = await Promise.all(userIds.map(async (uid: string) => {
+      try {
+        const betaEntry = await kv.get(`beta_user_${uid}`).catch(() => null) as any;
+        const email = betaEntry?.email;
+        const cards = email ? await readCardCountByEmail(email, uid) : await readCardCount(uid);
+        return { uid, cards };
+      } catch { return { uid, cards: 0 }; }
+    }));
+
+    const cardMap: Record<string, number> = {};
+    results.forEach(({ uid, cards }) => { cardMap[uid] = cards; });
+    return c.json({ cards: cardMap });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // 관리자 - 특정 유저 보너스카드 수량 조회
 app.get("/make-server-0b7d3bae/admin/users/:targetUserId/bonus-cards", async (c) => {
   try {

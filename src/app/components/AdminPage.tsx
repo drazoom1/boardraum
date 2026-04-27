@@ -397,25 +397,21 @@ function MembersSection({ accessToken }: { accessToken: string }) {
     } finally { setLoading(false); }
   };
 
-  // 여러 유저의 카드 수를 배치 조회 (3개씩 끊어서 서버 과부하 방지)
+  // 여러 유저의 카드 수를 bulk API로 한 번에 조회
   const loadAllCardCounts = async (userIds: string[]) => {
+    if (userIds.length === 0) return;
     setCardCountsLoading(true);
-    const map: Record<string, number> = {};
-    const batchSize = 3;
-    for (let i = 0; i < userIds.length; i += batchSize) {
-      const batch = userIds.slice(i, i + batchSize);
-      const results = await Promise.allSettled(
-        batch.map(uid =>
-          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/users/${uid}/bonus-cards`,
-            { headers: { Authorization: `Bearer ${accessToken}` } })
-            .then(r => r.json())
-            .then(d => ({ uid, cards: typeof d.cards === 'number' ? d.cards : 0 }))
-        )
-      );
-      results.forEach(r => { if (r.status === 'fulfilled') map[r.value.uid] = r.value.cards; });
-      if (i + batchSize < userIds.length) await new Promise(res => setTimeout(res, 150));
-    }
-    setCardCounts(prev => ({ ...prev, ...map }));
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/users/bulk-bonus-cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ userIds }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setCardCounts(prev => ({ ...prev, ...(d.cards || {}) }));
+      }
+    } catch {}
     setCardCountsLoading(false);
   };
 
