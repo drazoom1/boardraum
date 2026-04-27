@@ -3647,6 +3647,28 @@ app.get("/make-server-0b7d3bae/admin/debug-user/:userId", async (c) => {
   }
 });
 
+// 관리자 - 특정 닉네임 유저 게시글 조회 (draft 포함)
+app.get("/make-server-0b7d3bae/admin/posts-by-username", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+
+    const username = c.req.query('username') || '';
+    if (!username) return c.json({ error: 'username 파라미터 필요' }, 400);
+
+    const allPosts = await getByPrefix('beta_post_');
+    const matched = allPosts
+      .map((d: any) => d.value)
+      .filter((p: any) => p && (p.userName === username || p.authorName === username))
+      .map((p: any) => ({ id: p.id, title: p.content?.slice(0, 30), createdAt: p.createdAt, isDraft: !!p.isDraft }))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return c.json({ count: matched.length, posts: matched });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // Get all beta testers (admin only)
 app.get("/make-server-0b7d3bae/admin/beta-testers", async (c) => {
   try {
