@@ -2628,7 +2628,7 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
     }).then(r => r.ok ? r.json() : null).then(d => {
       if (!d) return;
       const pending = (d.trades || []).filter((t: any) =>
-        t.role === 'host' && !t.trackingNumber && t.escrowStatus !== 'released'
+        (t.role === 'host' || t.role === 'admin') && !t.trackingNumber && t.escrowStatus !== 'released' && t.winnerUserId
       ).length;
       setPendingTrackingCount(pending);
       if (pending > 0) setShowTrackingAlert(true);

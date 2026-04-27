@@ -9703,6 +9703,7 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
           prize: auction.prize, boxCondition: auction.boxCondition,
           winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
           hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
+          createdBy: auction.createdBy || null,
           finalBid: auction.currentBid, startPrice: auction.startPrice,
           participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
           escrowAmount: auction.escrowAmount ?? auction.currentBid, escrowStatus: 'pending',
@@ -10066,6 +10067,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
         prize: auction.prize, boxCondition: auction.boxCondition,
         winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
         hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
+        createdBy: auction.createdBy || null,
         finalBid: auction.currentBid, startPrice: auction.startPrice,
         participantCount: endParticipants.length, endedAt: endedNow, createdAt: auction.createdAt,
       });
@@ -10278,7 +10280,7 @@ app.get("/make-server-0b7d3bae/my/auction-trades", async (c) => {
         releasedAt: auction?.releasedAt || trade.releasedAt,
         winnerAddress: delivery?.address || null,
         winnerAddressAt: delivery?.submittedAt || null,
-        role: trade.winnerUserId === user.id ? 'winner' : (trade.hostUserId === user.id ? 'host' : 'admin'),
+        role: trade.winnerUserId === user.id ? 'winner' : (trade.hostUserId === user.id || auction?.createdBy === user.id ? 'host' : 'admin'),
       };
     }));
     return c.json({ trades: tradesWithDelivery });
