@@ -1134,13 +1134,14 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
       scrollEl.addEventListener('scroll', handleScroll);
       return () => scrollEl.removeEventListener('scroll', handleScroll);
     }
-  }, [images.length]);
+  }, [images.length, pinnedExpanded]);
 
   // 화살표 클릭으로 이미지 이동
   const scrollToImage = (index: number) => {
     if (!imageScrollRef.current) return;
     const itemWidth = imageScrollRef.current.offsetWidth;
     imageScrollRef.current.scrollTo({ left: itemWidth * index, behavior: 'smooth' });
+    setCurrentImageIndex(index);
   };
 
   const vote = async (optionIndex: number) => {
