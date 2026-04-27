@@ -1045,7 +1045,7 @@ function AnalyticsSection({ accessToken }: { accessToken: string }) {
   const loadUsers = async () => {
     setUsersLoading(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/beta-testers`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/beta-testers`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (res.ok) { const d = await res.json(); setBetaUsers(Array.isArray(d) ? d : (d.testers ?? d.users ?? [])); }
     } catch {}
     finally { setUsersLoading(false); }
@@ -1098,8 +1098,11 @@ function AnalyticsSection({ accessToken }: { accessToken: string }) {
   };
 
   useEffect(() => {
-    loadStats(); loadOnline(); loadUsers(); loadPosts();
-    const interval = setInterval(loadOnline, 30_000);
+    loadStats();
+    setTimeout(() => loadOnline(), 500);
+    setTimeout(() => loadUsers(), 1000);
+    setTimeout(() => loadPosts(), 1500);
+    const interval = setInterval(loadOnline, 60_000);
     return () => clearInterval(interval);
   }, []);
 
