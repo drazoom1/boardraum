@@ -5247,7 +5247,9 @@ app.get("/make-server-0b7d3bae/user/profile", async (c) => {
       mergedProfile.name = betaTesterInfo.name.trim();
     }
 
-    return c.json({ profile: mergedProfile });
+    // resolvedName: getUserName()과 동일한 로직 — 낙관적 업데이트와 서버 저장값 일치
+    const resolvedName = await getUserName(user.id);
+    return c.json({ profile: { ...mergedProfile, resolvedName } });
   } catch (error) {
     console.error('Get profile error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);

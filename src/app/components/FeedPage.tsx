@@ -3802,11 +3802,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     }).catch(() => {});
   }, [accessToken]);
   const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
-  const [userProfile, setUserProfile] = useState<{ username: string; profileImage?: string; staffLevel?: number | null } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ username: string; resolvedName?: string; profileImage?: string; staffLevel?: number | null } | null>(null);
   const [staffGradeMap, setStaffGradeMap] = useState<Record<string, number>>({});
   const [myPoints, setMyPoints] = useState<{ points: number; posts: number; comments: number; likesReceived: number }>({ points: 0, posts: 0, comments: 0, likesReceived: 0 });
 
-  const userName = userProfile?.username || userEmail?.split('@')[0] || '회원';
+  // resolvedName = 서버 getUserName()과 동일 — 낙관적 업데이트/서버 저장값 불일치 방지
+  const userName = userProfile?.resolvedName || userProfile?.username || userEmail?.split('@')[0] || '회원';
   const avatarUrl = userProfile?.profileImage;
 
   // 사용자 프로필 로드
@@ -3842,6 +3843,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           if (data.profile) {
             setUserProfile({
               username: data.profile.username || data.profile.name || userEmail?.split('@')[0] || '회원',
+              resolvedName: data.profile.resolvedName || undefined,
               profileImage: data.profile.profileImage,
               staffLevel,
             });
