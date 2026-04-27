@@ -10981,6 +10981,9 @@ app.post("/make-server-0b7d3bae/event-congrats/:eventId", async (c) => {
 // 이벤트 상태 조회 (공개)
 app.get("/make-server-0b7d3bae/last-post-event", async (c) => {
   try {
+    const cached = cacheGet("last_post_event_response");
+    if (cached) return c.json(cached);
+
     // 다중 이벤트 지원: last_post_events 배열 우선, 없으면 단일 이벤트 fallback
     let events: any[] = await kv.get("last_post_events") || [];
     const disqualified: string[] = await kv.get("last_event_disqualified") || [];
@@ -11001,14 +11004,19 @@ app.get("/make-server-0b7d3bae/last-post-event", async (c) => {
       if (changed) await kv.set("last_post_events", events);
 
       const visible = events.filter((e: any) => e.active || e.scheduled);
-      if (visible.length === 0) return c.json([]);
-      return c.json(visible.map((e: any) => ({ ...e, disqualified, excluded, excludedEntries })));
+      if (visible.length === 0) { cacheSet("last_post_event_response", [], 5000); return c.json([]); }
+      const result = visible.map((e: any) => ({ ...e, disqualified, excluded, excludedEntries }));
+      // 상태 전환 시 캐시 스킵, 그 외 5초 캐시
+      if (!changed) cacheSet("last_post_event_response", result, 5000);
+      return c.json(result);
     }
 
     // fallback: 기존 단일 이벤트
     const event = await kv.get("last_post_event") || null;
-    if (!event?.active) return c.json([]);
-    return c.json([{ ...event, disqualified, excluded, excludedEntries }]);
+    if (!event?.active) { cacheSet("last_post_event_response", [], 5000); return c.json([]); }
+    const result = [{ ...event, disqualified, excluded, excludedEntries }];
+    cacheSet("last_post_event_response", result, 5000);
+    return c.json(result);
   } catch { return c.json([]); }
 });
 
@@ -11021,6 +11029,9 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
     const role = await getUserRole(user.id);
     if (role !== "admin" && user.email !== "sityplanner2@naver.com") return c.json({ error: "Forbidden" }, 403);
+
+    // 관리자 액션은 항상 캐시 무효화
+    cacheDelete("last_post_event_response");
 
     const body = await c.req.json();
     const { action, prize, eventTitle, durationMinutes, description, eventId, sleepStart, sleepEnd, cardReductionSeconds, cardSuccessRate, prizeImageUrl, manualCardUser, scheduledAt } = body;
