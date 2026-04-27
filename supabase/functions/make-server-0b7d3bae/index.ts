@@ -9698,17 +9698,19 @@ app.get("/make-server-0b7d3bae/auction/active", async (c) => {
           auction.escrowStatus = 'pending';
         }
         const results = (await kv.get('auction_results') as any[] | null) || [];
-        results.unshift({
-          auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
-          prize: auction.prize, boxCondition: auction.boxCondition,
-          winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
-          hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
-          createdBy: auction.createdBy || null,
-          finalBid: auction.currentBid, startPrice: auction.startPrice,
-          participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
-          escrowAmount: auction.escrowAmount ?? auction.currentBid, escrowStatus: 'pending',
-        });
-        await kv.set('auction_results', results);
+        if (!results.some((r: any) => r.auctionId === auction.auctionId)) {
+          results.unshift({
+            auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
+            prize: auction.prize, boxCondition: auction.boxCondition,
+            winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+            hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
+            createdBy: auction.createdBy || null,
+            finalBid: auction.currentBid, startPrice: auction.startPrice,
+            participantCount: participants.length, endedAt: now, createdAt: auction.createdAt,
+            escrowAmount: auction.escrowAmount ?? auction.currentBid, escrowStatus: 'pending',
+          });
+          await kv.set('auction_results', results);
+        }
       }
       await kv.set(`auction_${activeId}`, auction);
     } else if (updated) {
@@ -10062,16 +10064,18 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/end", async (c) => {
     if (!auction.archived) {
       auction.archived = true;
       const results = (await kv.get('auction_results') as any[] | null) || [];
-      results.unshift({
-        auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
-        prize: auction.prize, boxCondition: auction.boxCondition,
-        winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
-        hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
-        createdBy: auction.createdBy || null,
-        finalBid: auction.currentBid, startPrice: auction.startPrice,
-        participantCount: endParticipants.length, endedAt: endedNow, createdAt: auction.createdAt,
-      });
-      await kv.set('auction_results', results);
+      if (!results.some((r: any) => r.auctionId === auction.auctionId)) {
+        results.unshift({
+          auctionId: auction.auctionId, title: auction.title, imageUrl: auction.imageUrl,
+          prize: auction.prize, boxCondition: auction.boxCondition,
+          winnerUserId: auction.winnerUserId, winnerNickname: auction.winnerNickname,
+          hostUserId: auction.hostUserId, hostNickname: auction.hostNickname,
+          createdBy: auction.createdBy || null,
+          finalBid: auction.currentBid, startPrice: auction.startPrice,
+          participantCount: endParticipants.length, endedAt: endedNow, createdAt: auction.createdAt,
+        });
+        await kv.set('auction_results', results);
+      }
     }
 
     await kv.set(`auction_${auctionId}`, auction);

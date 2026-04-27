@@ -2414,7 +2414,17 @@ function MyAuctionTrades({ accessToken, userId, isAdmin }: {
       const r = await fetch(`${API}/my/auction-trades`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (r.ok) { const d = await r.json(); setTrades(d.trades || []); }
+      if (r.ok) {
+        const d = await r.json();
+        // auctionId 기준 중복 제거 (race condition으로 생긴 중복 방어)
+        const seen = new Set<string>();
+        const deduped = (d.trades || []).filter((t: any) => {
+          if (seen.has(t.auctionId)) return false;
+          seen.add(t.auctionId);
+          return true;
+        });
+        setTrades(deduped);
+      }
     } catch {}
     setLoading(false);
   }
