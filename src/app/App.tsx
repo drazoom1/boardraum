@@ -413,6 +413,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [noticeIsNew, setNoticeIsNew] = useState(false);
   const [noticeRefreshKey, setNoticeRefreshKey] = useState(0);
   const [bonusCardCount, setBonusCardCount] = useState<number | null>(null);
+  const [hasActiveAuction, setHasActiveAuction] = useState(false);
   const [cardDeductAnim, setCardDeductAnim] = useState(false);
   const prevCardCountRef = useRef<number | null>(null);
   const cardAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -442,6 +443,20 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then(r => r.ok ? r.json() : null).then(d => { if (d) setBonusCardCount(d.cards ?? 0); }).catch(() => {});
   }, [accessToken]);
+
+  // 경매 활성 여부 폴링 (탭 뱃지용)
+  useEffect(() => {
+    const check = () => {
+      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/auction/active`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` },
+      }).then(r => r.ok ? r.json() : null).then(d => {
+        setHasActiveAuction(!!(d?.auction && d.auction.status === 'active'));
+      }).catch(() => {});
+    };
+    check();
+    const id = setInterval(check, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (bonusCardCount !== null && prevCardCountRef.current !== null && bonusCardCount < prevCardCountRef.current) {
@@ -1764,8 +1779,11 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
             {/* 카트 = 방출 마켓 */}
             <button onClick={() => setActiveTab('market')}
-              className="w-12 h-12 flex items-center justify-center" title="방출 마켓">
+              className="w-12 h-12 flex items-center justify-center relative" title="방출 마켓">
               <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-8 h-8 object-contain" />
+              {hasActiveAuction && activeTab !== 'market' && (
+                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
+              )}
             </button>
 
             {/* 사람 = 마이페이지 */}
@@ -1959,8 +1977,11 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={icon_plus_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 카트=방출마켓 */}
-              <button onClick={() => setActiveTab('market')} className="flex flex-col items-center gap-1">
+              <button onClick={() => setActiveTab('market')} className="flex flex-col items-center gap-1 relative">
                 <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-11 h-11 object-contain" />
+                {hasActiveAuction && activeTab !== 'market' && (
+                  <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
+                )}
               </button>
               {/* 사람=마이페이지 */}
               <button onClick={() => requireAuth(() => {
