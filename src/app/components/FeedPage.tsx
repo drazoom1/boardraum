@@ -633,7 +633,7 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
         body: JSON.stringify({ content: sentText, userName, isSecret: sentSecret, parentId: sentParentId, images: sentImages, linkedGame: sentGames[0] || null, linkedGames: sentGames }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || '댓글 등록 실패');
+      if (!res.ok) { const err: any = new Error(data.error || '댓글 등록 실패'); err.status = res.status; throw err; }
       const realComment = data.comment || tempComment;
       setLocalComments(prev => prev.map(c => c.id === tempId ? realComment : c));
       const pts = data.pointsEarned ?? 3;
@@ -649,8 +649,34 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
         if (cardData.granted) setShowCommentCardWon(true);
       } catch { /* 카드 실패해도 무시 */ }
     } catch (e: any) {
-      toast.error(e.message || '댓글 등록 실패');
-      setLocalComments(prev => prev.filter(c => c.id !== tempId));
+      const is503 = e.message?.includes('503') || e.status === 503 || String(e).includes('503');
+      if (is503) {
+        // 503: 서버가 저장했을 수 있으므로 3초 후 실제 저장 여부 확인
+        toast.error('서버가 바빠요. 잠시 후 댓글을 확인할게요...');
+        setTimeout(async () => {
+          try {
+            const checkRes = await fetch(
+              `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${post.id}`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (checkRes.ok) {
+              const checkData = await checkRes.json();
+              const comments: any[] = checkData.comments || checkData.post?.comments || [];
+              const saved = comments.find((c: any) => c.userId === userId && c.content === sentText && !c.id?.startsWith('temp-'));
+              if (saved) {
+                setLocalComments(prev => prev.map(c => c.id === tempId ? saved : c));
+                toast.success('댓글이 등록됐어요 (+3pt)');
+                return;
+              }
+            }
+          } catch {}
+          setLocalComments(prev => prev.filter(c => c.id !== tempId));
+          toast.error('댓글 등록 실패. 다시 시도해주세요.');
+        }, 3000);
+      } else {
+        toast.error(e.message || '댓글 등록 실패');
+        setLocalComments(prev => prev.filter(c => c.id !== tempId));
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
