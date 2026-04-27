@@ -1500,6 +1500,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const loadRequestVersionRef = useRef(0);
+  const userScrolledUpRef = useRef(false);
   const consecutiveNullsRef = useRef(0);
   const loadAuctionRef = useRef<() => Promise<void>>();
 
@@ -1611,6 +1612,13 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
     chatPollRef.current = setInterval(() => loadChat(auction.auctionId), 5000);
     return () => { if (chatPollRef.current) clearInterval(chatPollRef.current); };
   }, [auction?.auctionId, accessToken]);
+
+  // 새 메시지 도착 시 자동 스크롤 (사용자가 위로 스크롤 중이면 유지)
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el || userScrolledUpRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [chatMessages]);
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -2183,7 +2191,14 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
         <div className="border-t border-orange-100 px-5 pt-3 pb-5">
           <p className="text-[11px] font-semibold text-gray-400 mb-2">💬 대화</p>
           <div className="bg-white rounded-xl px-4 pt-3 pb-3">
-            <div ref={chatContainerRef} className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1">
+            <div
+              ref={chatContainerRef}
+              className="h-[128px] overflow-y-auto space-y-2 mb-3 pr-1"
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                userScrolledUpRef.current = el.scrollTop + el.clientHeight < el.scrollHeight - 20;
+              }}
+            >
               {chatMessages.length === 0 ? (
                 <p className="text-[11px] text-gray-300 text-center pt-8">경매 진행 중인 상품에 대해 아무거나 물어보세요.</p>
               ) : (
