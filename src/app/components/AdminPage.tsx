@@ -369,6 +369,7 @@ function MembersSection({ accessToken }: { accessToken: string }) {
   const [grantLoading, setGrantLoading] = useState(false);
   // 유저별 보너스카드 수 캐시 (userId → count)
   const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
+  const [cardCountsLoading, setCardCountsLoading] = useState(false);
   // 카드 이력 모달
   const [cardHistoryTarget, setCardHistoryTarget] = useState<{ userId: string; userName: string } | null>(null);
   const [cardHistory, setCardHistory] = useState<any[]>([]);
@@ -398,6 +399,7 @@ function MembersSection({ accessToken }: { accessToken: string }) {
 
   // 여러 유저의 카드 수를 배치 조회 (3개씩 끊어서 서버 과부하 방지)
   const loadAllCardCounts = async (userIds: string[]) => {
+    setCardCountsLoading(true);
     const map: Record<string, number> = {};
     const batchSize = 3;
     for (let i = 0; i < userIds.length; i += batchSize) {
@@ -414,6 +416,7 @@ function MembersSection({ accessToken }: { accessToken: string }) {
       if (i + batchSize < userIds.length) await new Promise(res => setTimeout(res, 150));
     }
     setCardCounts(prev => ({ ...prev, ...map }));
+    setCardCountsLoading(false);
   };
 
   // 카드 이력 모달 열기
@@ -752,12 +755,17 @@ function MembersSection({ accessToken }: { accessToken: string }) {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <select value={sort} onChange={e => { setSort(e.target.value as any); setDisplayCount(PAGE_SIZE); }}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400">
-            <option value="newest">최신순</option>
-            <option value="oldest">오래된순</option>
-            <option value="cards">🃏 카드 많은순</option>
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select value={sort} onChange={e => { setSort(e.target.value as any); setDisplayCount(PAGE_SIZE); }}
+              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400">
+              <option value="newest">최신순</option>
+              <option value="oldest">오래된순</option>
+              <option value="cards">🃏 카드 많은순</option>
+            </select>
+            {cardCountsLoading && sort === 'cards' && (
+              <span className="text-[10px] text-orange-400 animate-pulse">카드 로딩중...</span>
+            )}
+          </div>
           <button onClick={load} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100">
             <RefreshCw className="w-3.5 h-3.5" /> 새로고침
           </button>
