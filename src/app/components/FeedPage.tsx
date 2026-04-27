@@ -4334,21 +4334,6 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {referralRankEvent && (
         <ReferralRankEventBanner event={referralRankEvent} accessToken={accessToken} />
       )}
-      {/* 비로그인 배너 */}
-      {!userId && (
-        <div className="bg-gray-900 rounded-2xl px-5 py-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-white font-bold text-sm">보드라움 회원이 되어보세요 🎲</p>
-            <p className="text-gray-400 text-xs mt-0.5">좋아요, 댓글, 컬렉션 관리를 해보세요.</p>
-            <p className="text-gray-400 text-xs mt-0.5">다양한 이벤트도 진행됩니다.</p>
-          </div>
-          <button
-            onClick={() => onGuestAction?.()}
-            className="flex-shrink-0 bg-white text-gray-900 text-xs font-bold px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors">
-            15초 가입
-          </button>
-        </div>
-      )}
       {/* 카테고리 헤더 */}
       <div className="bg-white rounded-2xl shadow-sm relative">
         <div className="flex items-center gap-2 px-4 py-3">
