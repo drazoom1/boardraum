@@ -1620,7 +1620,9 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       const now = Date.now();
       if (auction.status === 'scheduled') {
         const target = new Date(auction.startAt).getTime();
-        setTimeDisplay(formatCountdown(target - now));
+        const remaining = target - now;
+        setTimeDisplay(formatCountdown(remaining));
+        if (remaining <= 0) loadAuctionRef.current?.();
       } else if (auction.status === 'active') {
         const ms = new Date(auction.endAt).getTime() - now;
         setTimeDisplay(formatCountdown(ms));
