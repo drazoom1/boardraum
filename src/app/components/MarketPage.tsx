@@ -1478,6 +1478,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
   const [cardCount, setCardCount] = useState(0);
   const [bidding, setBidding] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showForceEndConfirm, setShowForceEndConfirm] = useState(false);
@@ -1759,7 +1760,7 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
 
   const nextBid = auction ? auction.currentBid + auction.bidUnit : 0;
   const isMyBid = auction?.currentBidder === userId;
-  const isHost = !!userId && userId === (auction as any)?.hostUserId;
+  const isHost = !!userId && (userId === (auction as any)?.hostUserId || userId === (auction as any)?.createdBy);
   const canBid = !!accessToken && auction?.status === 'active' && !isMyBid && !isHost && cardCount >= nextBid;
 
   return (
@@ -2082,23 +2083,58 @@ function AuctionSection({ accessToken, userId, userNickname, isAdmin, ownedGames
       {auction && auction.status !== 'ended' && (
         <div className="px-5 pb-4 border-t border-orange-100 pt-3">
           {accessToken && !joined && (
-            <button onClick={isHost ? undefined : handleJoin} disabled={joining || isHost}
-              className={`w-full h-9 mb-3 rounded-xl border-2 text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                isHost
-                  ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
-                  : 'border-orange-200 text-orange-600 hover:bg-orange-50 active:scale-95 bg-white'
-              }`}>
-              {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isHost ? (
-                '🙋 경매 참여하기 (주최자는 참여 불가)'
-              ) : (
-                <>
-                  🙋 경매 참여하기
-                  {(auction?.entryFee ?? 0) > 0 && (
-                    <span className="text-xs font-normal text-orange-400">(참가비 {auction!.entryFee}장)</span>
-                  )}
-                </>
+            <>
+              <button
+                onClick={isHost ? undefined : () => {
+                  if ((auction?.entryFee ?? 0) > 0) setShowJoinConfirm(true);
+                  else handleJoin();
+                }}
+                disabled={joining || isHost}
+                className={`w-full h-9 mb-3 rounded-xl border-2 text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  isHost
+                    ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                    : 'border-orange-200 text-orange-600 hover:bg-orange-50 active:scale-95 bg-white'
+                }`}>
+                {joining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isHost ? (
+                  '🙋 경매 참여하기 (주최자는 참여 불가)'
+                ) : (
+                  <>
+                    🙋 경매 참여하기
+                    {(auction?.entryFee ?? 0) > 0 && (
+                      <span className="text-xs font-normal text-orange-400">(참가비 {auction!.entryFee}장)</span>
+                    )}
+                  </>
+                )}
+              </button>
+
+              {/* 참가비 동의 모달 */}
+              {showJoinConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5">
+                    <p className="text-base font-bold text-gray-800 text-center mb-1">경매 참여 확인</p>
+                    <p className="text-sm text-gray-500 text-center mb-4">참가비가 즉시 차감돼요.</p>
+                    <div className="bg-orange-50 rounded-xl px-4 py-3 mb-4 text-center">
+                      <p className="text-xs text-orange-500 font-medium mb-0.5">참가비</p>
+                      <p className="text-2xl font-extrabold text-orange-600">{auction!.entryFee}장</p>
+                      <p className="text-xs text-gray-400 mt-1">보유 {cardCount}장 → {cardCount - auction!.entryFee}장</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowJoinConfirm(false)}
+                        className="flex-1 h-10 text-sm font-semibold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 active:scale-95 transition-all">
+                        취소
+                      </button>
+                      <button
+                        onClick={() => { setShowJoinConfirm(false); handleJoin(); }}
+                        disabled={cardCount < auction!.entryFee}
+                        className="flex-1 h-10 text-sm font-bold text-white bg-orange-500 rounded-xl hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        {cardCount < auction!.entryFee ? '카드 부족' : '참여하기'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
-            </button>
+            </>
           )}
           {participants.length > 0 && (
             <div>

@@ -9942,7 +9942,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/bid", async (c) => {
     const now = new Date().toISOString();
     if (auction.status === 'ended' || now >= auction.endAt) return c.json({ error: '종료된 경매예요' }, 400);
     if (auction.status === 'scheduled' && now < auction.startAt) return c.json({ error: '아직 경매가 시작되지 않았어요' }, 400);
-    if (auction.hostUserId && auction.hostUserId === user.id) return c.json({ error: '경매 주체자는 입찰할 수 없어요' }, 403);
+    if ((auction.hostUserId && auction.hostUserId === user.id) || (auction.createdBy && auction.createdBy === user.id)) return c.json({ error: '경매 주체자는 입찰할 수 없어요' }, 403);
     if (auction.currentBidder === user.id) return c.json({ error: '이미 최고 입찰자예요' }, 400);
 
     const { nickname, amount } = await c.req.json();
@@ -9997,7 +9997,7 @@ app.post("/make-server-0b7d3bae/auction/:auctionId/join", async (c) => {
     const auction = await kv.get(`auction_${auctionId}`) as any | null;
     if (!auction) return c.json({ error: '경매를 찾을 수 없어요' }, 404);
     if (auction.status === 'ended') return c.json({ error: '종료된 경매예요' }, 400);
-    if (auction.hostUserId && auction.hostUserId === user.id) return c.json({ error: '경매 주체자는 참여할 수 없어요' }, 403);
+    if ((auction.hostUserId && auction.hostUserId === user.id) || (auction.createdBy && auction.createdBy === user.id)) return c.json({ error: '경매 주체자는 참여할 수 없어요' }, 403);
 
     const { nickname } = await c.req.json();
     const noEmail2 = (s: any) => (s && typeof s === 'string' && !s.includes('@')) ? s : null;
