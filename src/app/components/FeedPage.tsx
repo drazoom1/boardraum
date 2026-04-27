@@ -2692,6 +2692,8 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [showHowToGetModal, setShowHowToGetModal] = useState(false);
   const [showDescModal, setShowDescModal] = useState(false);
   const [showNotLeaderModal, setShowNotLeaderModal] = useState(false);
+  const [showCardConfirmModal, setShowCardConfirmModal] = useState(false);
+  const [pendingUseCard, setPendingUseCard] = useState(false); // 선두아님 확인 후 카드 사용 대기
   const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
@@ -3058,7 +3060,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                     if (!isMyPost) {
                       setShowNotLeaderModal(true);
                     } else {
-                      onUseCard?.();
+                      setShowCardConfirmModal(true);
                     }
                   } else {
                     setShowNoCardModal(true);
@@ -3269,8 +3271,40 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <button
               onClick={() => {
                 setShowNotLeaderModal(false);
-                onUseCard?.();
+                setShowCardConfirmModal(true);
               }}
+              className="flex-1 py-2.5 rounded-2xl text-sm text-white font-bold transition-all active:scale-95"
+              style={{ background: '#00BCD4' }}
+            >
+              🃏 사용하기
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {/* 카드 사용 성공률 확인 모달 */}
+    {showCardConfirmModal && (
+      <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={() => setShowCardConfirmModal(false)}>
+        <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="px-6 pt-6 pb-4 text-center" style={{ borderBottom: '1px solid #f0f0f0' }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3" style={{ background: 'linear-gradient(135deg, #E0F7FA, #B2EBF2)' }}>🃏</div>
+            <h3 className="text-base font-bold text-gray-900">카드를 사용할까요?</h3>
+            <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+              현재 성공률은 <span className="font-black text-cyan-500">{event.cardSuccessRate ?? 100}%</span>입니다.
+            </p>
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              카드 성공 확률은 홈피드에 생애 첫 게시물이<br/>달릴 때마다 증가합니다.
+            </p>
+          </div>
+          <div className="px-6 pb-6 flex gap-2 mt-4">
+            <button
+              onClick={() => setShowCardConfirmModal(false)}
+              className="flex-1 py-2.5 rounded-2xl text-sm text-gray-400 font-medium border border-gray-100 hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              onClick={() => { setShowCardConfirmModal(false); onUseCard?.(); }}
               className="flex-1 py-2.5 rounded-2xl text-sm text-white font-bold transition-all active:scale-95"
               style={{ background: '#00BCD4' }}
             >
