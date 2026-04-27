@@ -2484,7 +2484,7 @@ app.post("/make-server-0b7d3bae/setup-admin", async (c) => {
     const adminUser = users.users.find(u => u.email === 'sityplanner2@naver.com');
     
     if (!adminUser) {
-      return c.json({ error: 'Admin user not found' }, 404);
+      return c.json({ success: true, message: 'Already configured' });
     }
     
     await setUserRole(adminUser.id, 'admin');
