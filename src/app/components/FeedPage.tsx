@@ -426,7 +426,7 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
               <Heart className={`w-3 h-3 ${isLiked ? 'fill-current' : ''}`} />
               {likeCount > 0 && <span>{likeCount}</span>}
             </button>
-            {(comment.userId === userId || isAdmin) && (
+            {(comment.userId === userId || isAdmin) && !comment.id?.startsWith('temp-') && (
               <>
                 {comment.userId === userId && (
                   <button onClick={() => setEditing(true)}
