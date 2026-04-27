@@ -3776,12 +3776,14 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           setHwIsNew(hasNew);
         }
       }
-    // 당첨자 조회
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    ).then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.winner) setHwWinner(d.winner);
-    }).catch(() => {});
+    // 당첨자 조회 — 1초 뒤 별도 로드 (categories와 동시 발사 방지)
+    setTimeout(() => {
+      fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/homework/winner`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ).then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.winner) setHwWinner(d.winner);
+      }).catch(() => {});
+    }, 1000);
     }).catch(() => {});
   }, [accessToken]);
 
@@ -3810,18 +3812,16 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const userName = userProfile?.resolvedName || userProfile?.username || userEmail?.split('@')[0] || '회원';
   const avatarUrl = userProfile?.profileImage;
 
-  // 사용자 프로필 로드
+  // 사용자 프로필 로드 — 요청을 순차적으로 분리해 동시 과부하 방지
   useEffect(() => {
     const loadUserProfile = async () => {
       try {
-        const [profileRes, staffRes, gradeMapRes] = await Promise.all([
-          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }),
-          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/me`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }),
-          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/grade-map`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }),
-        ]);
+        // 1단계: profile + staff/me (핵심 데이터 먼저)
+        const profileRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/user/profile`,
+          { headers: { Authorization: `Bearer ${accessToken}` } });
+        const staffRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/me`,
+          { headers: { Authorization: `Bearer ${accessToken}` } });
+
         let staffLevel: number | null = null;
         let myStaffUserId: string | null = null;
         if (staffRes.ok) {
@@ -3830,13 +3830,6 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             staffLevel = sd.member.level ?? 1;
             myStaffUserId = sd.member.userId;
           }
-        }
-        if (gradeMapRes.ok) {
-          const gd = await gradeMapRes.json();
-          const map = gd.map ?? {};
-          // 현재 유저가 운영진/관리자면 map에 직접 추가 (관리자는 staff_members에 없음)
-          if (myStaffUserId && staffLevel) map[myStaffUserId] = staffLevel;
-          setStaffGradeMap(map);
         }
         if (profileRes.ok) {
           const data = await profileRes.json();
@@ -3848,6 +3841,17 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               staffLevel,
             });
           }
+        }
+
+        // 2단계: grade-map은 500ms 뒤에 별도 로드 (낮은 우선순위)
+        await new Promise(r => setTimeout(r, 500));
+        const gradeMapRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/staff/grade-map`,
+          { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (gradeMapRes.ok) {
+          const gd = await gradeMapRes.json();
+          const map = gd.map ?? {};
+          if (myStaffUserId && staffLevel) map[myStaffUserId] = staffLevel;
+          setStaffGradeMap(map);
         }
       } catch (error) {
         console.error('Failed to load user profile:', error);
@@ -3923,7 +3927,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   }, []);
 
   useEffect(() => {
-    setLoading(true); loadPosts();
+    setLoading(true);
+    // 300ms 지연 — 프로필/이벤트 요청과 동시 발사 방지
+    const t = setTimeout(() => loadPosts(), 300);
+    return () => clearTimeout(t);
   }, [category, subCategory]);
 
   // 피드 로드 후 현재 유저의 좋아요 초기 상태를 서버(캐시 우회)에서 재확인
