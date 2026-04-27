@@ -3734,21 +3734,24 @@ app.get("/make-server-0b7d3bae/admin/beta-testers", async (c) => {
             wikiCount: ownedWithWiki,
           };
         }))
-      : paginatedUsers.map((user: any) => ({
-          // 게임 데이터 제외 (빠름)
-          userId: user.userId,
-          email: user.email,
-          name: user.name,
-          username: user.username || '',
-          phone: user.phone,
-          reason: user.reason,
-          status: user.status,
-          created_at: user.created_at,
-          reviewed_at: user.reviewed_at,
-          rejection_reason: user.rejection_reason,
-          ownedCount: 0,
-          wishlistCount: 0,
-          wikiCount: 0,
+      : await Promise.all(paginatedUsers.map(async (user: any) => {
+          // user_profile_에서 최신 닉네임을 fallback으로 읽음 (beta_user_ username이 오래된 경우 대비)
+          const profile = await kv.get(`user_profile_${user.userId}`).catch(() => null) as any;
+          return {
+            userId: user.userId,
+            email: user.email,
+            name: user.name,
+            username: profile?.username || user.username || '',
+            phone: user.phone,
+            reason: user.reason,
+            status: user.status,
+            created_at: user.created_at,
+            reviewed_at: user.reviewed_at,
+            rejection_reason: user.rejection_reason,
+            ownedCount: 0,
+            wishlistCount: 0,
+            wikiCount: 0,
+          };
         }));
     
     return c.json({ 
