@@ -2796,11 +2796,12 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
     ? [...posts]
         .filter(p => {
           const createdMs = new Date(p.createdAt).getTime();
-          const pKstHour = (new Date(createdMs).getUTCHours() + 9) % 24;
+          const pd = new Date(createdMs);
+          const pKstH = ((pd.getUTCHours() + 9) % 24) + pd.getUTCMinutes() / 60;
           const pIsSleep = evSleepStartH !== evSleepEndH && (
             evSleepStartH < evSleepEndH
-              ? pKstHour >= evSleepStartH && pKstHour < evSleepEndH
-              : pKstHour >= evSleepStartH || pKstHour < evSleepEndH
+              ? pKstH >= evSleepStartH && pKstH < evSleepEndH
+              : pKstH >= evSleepStartH || pKstH < evSleepEndH
           );
           return (
             p.category === '이벤트' &&
@@ -2881,7 +2882,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         if (diff === 0 && !autoCloseCalledRef.current) {
           autoCloseCalledRef.current = true;
           // ★ 즉시 낙관적 업데이트 — 로컬 상태로 배너 즉시 표시 (API 응답 불필요)
-          const optimistic = { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString() };
+          const optimistic = { eventId: ev.id, winnerUserName: null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString(), approved: false };
           onAutoClose?.(ev.id, optimistic);
           // 백그라운드에서 서버 확인 (당첨자 정보 업데이트)
           fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/auto-close`, {
@@ -2912,8 +2913,8 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       // 타이머 0 → 즉시 낙관적 업데이트 + 백그라운드 서버 확인
       if (diff === 0 && !autoCloseCalledRef.current) {
         autoCloseCalledRef.current = true;
-        // ★ 즉시 낙관적 업데이트 — 로컬 lastPost 기반으로 당첨자 배너 즉시 표시
-        const optimistic = { eventId: ev.id, winnerUserName: lp?.userName || null, winnerUserId: lp?.userId || null, winnerPostId: lp?.id || null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString() };
+        // ★ 즉시 낙관적 업데이트 — 로컬 lastPost 기반으로 당첨자 배너 즉시 표시 (검토 중 상태)
+        const optimistic = { eventId: ev.id, winnerUserName: lp?.userName || null, winnerUserId: lp?.userId || null, winnerPostId: lp?.id || null, prize: ev.prize, prizeImageUrl: ev.prizeImageUrl || '', eventTitle: ev.eventTitle || '', description: ev.description || '', closedAt: new Date().toISOString(), approved: false };
         onAutoClose?.(ev.id, optimistic);
         // 백그라운드에서 서버 확인 (서버 계산 당첨자로 업데이트)
         fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/last-post-event/auto-close`, {
