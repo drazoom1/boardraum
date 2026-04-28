@@ -3121,7 +3121,8 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
         await loadData();
         toast.success(scheduleEnabled && scheduledAt ? '이벤트 예약 완료!' : '이벤트 시작!');
         setPrize(''); setEventTitle(''); setDescription(''); setPrizeImageUrl('');
-        setSleepStart(0); setSleepEnd(8); setScheduleEnabled(false); setScheduledAt('');
+        setSleepStartH(0); setSleepStartM(0); setSleepEndH(8); setSleepEndM(0);
+        setScheduleEnabled(false); setScheduledAt('');
       } else toast.error('실패');
     } catch { toast.error('오류'); }
     setSaving(false);
