@@ -48,6 +48,7 @@ export interface FeedPost {
   pinned?: boolean;
   isHomework?: boolean;
   isPrivate?: boolean;
+  pinnedExpandedDefault?: boolean;
 }
 
 interface FeedPageProps {
@@ -1075,12 +1076,13 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const isPinned = post.pinned && !post.isHomework;
   const pinnedLines = (post.content || '').split('\n');
   const pinnedNeedsCollapse = isPinned && (pinnedLines.length > 5 || (post.content || '').length > 300);
-  const [pinnedExpanded, setPinnedExpanded] = useState(false);
+  const [pinnedExpanded, setPinnedExpanded] = useState(post.pinnedExpandedDefault ?? false);
   useEffect(() => {
-    setPinnedExpanded(noticeInfo?.expanded ?? false);
-  // noticeInfo가 로드된 후 초기값을 서버 값으로 동기화
+    // noticeInfo(공지 등록) 또는 post.pinnedExpandedDefault(pinned 고정) 중 하나라도 있으면 적용
+    const val = noticeInfo?.expanded ?? post.pinnedExpandedDefault ?? false;
+    setPinnedExpanded(val);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noticeInfo?.expanded]);
+  }, [noticeInfo?.expanded, post.pinnedExpandedDefault]);
   const [bookmarking, setBookmarking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showNoticePinInput, setShowNoticePinInput] = useState(false);
@@ -1450,6 +1452,19 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('설정 실패'); }
   };
 
+  const handlePinnedExpandToggle = async (expanded: boolean) => {
+    setShowMenu(false);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${post.id}/pin`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ pinned: post.pinned, isHomework: post.isHomework, pinnedExpandedDefault: expanded }) }
+      );
+      if (res.ok) { toast.success(expanded ? '펼침으로 고정했어요' : '닫힘으로 고정했어요'); onUpdate(); }
+      else toast.error('설정 실패');
+    } catch { toast.error('설정 실패'); }
+  };
+
   const CATEGORY_COLORS: Record<string, string> = {
     '정보': 'bg-blue-50 text-blue-600', '소식': 'bg-green-50 text-green-600',
     '게임리뷰': 'bg-amber-50 text-amber-600', '자유': 'bg-gray-100 text-gray-500',
@@ -1638,10 +1653,18 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                             )}
                           </>
                         ) : (
-                          <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setNoticePinExpanded(false); setShowNoticePinInput(true); }}
-                            className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
-                            📢 공지 등록
-                          </button>
+                          <>
+                            <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setNoticePinExpanded(false); setShowNoticePinInput(true); }}
+                              className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
+                              📢 공지 등록
+                            </button>
+                            {post.pinned && pinnedNeedsCollapse && (
+                              <button onClick={() => handlePinnedExpandToggle(!post.pinnedExpandedDefault)}
+                                className="w-full px-4 py-2 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors">
+                                {post.pinnedExpandedDefault ? '📄 닫힘으로 고정' : '📖 펼침으로 고정'}
+                              </button>
+                            )}
+                          </>
                         )}
                         {(post as any).isFirstPost ? (
                           <button onClick={async () => {

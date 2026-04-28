@@ -10601,10 +10601,11 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId/pin", async (c) => {
   if (error) return error;
   try {
     const postId = c.req.param('postId');
-    const { pinned, isHomework } = await c.req.json();
+    const { pinned, isHomework, pinnedExpandedDefault } = await c.req.json();
     const post = await kv.get(`beta_post_${postId}`) as any;
     if (!post) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
-    const updated = { ...post, pinned: !!pinned, isHomework: !!isHomework };
+    const updated: any = { ...post, pinned: !!pinned, isHomework: !!isHomework };
+    if (pinnedExpandedDefault !== undefined) updated.pinnedExpandedDefault = !!pinnedExpandedDefault;
     await kv.set(`beta_post_${postId}`, updated);
     return c.json({ success: true, post: updated });
   } catch (e) { return c.json({ error: String(e) }, 500); }
