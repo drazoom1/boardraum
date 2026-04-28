@@ -5696,20 +5696,23 @@ app.get("/make-server-0b7d3bae/bonus-cards/me", async (c) => {
 // Helper: 가장 최근 수면 종료 시각(ms) 반환 — 휴식 없으면 0
 function getLastWakeTimestamp(sleepStartH: number, sleepEndH: number): number {
   if (sleepStartH === sleepEndH) return 0;
-  const wakeUTCH = (sleepEndH - 9 + 24) % 24;
+  const wakeUTCDecimal = (sleepEndH - 9 + 24) % 24;
+  const wakeUTCH = Math.floor(wakeUTCDecimal);
+  const wakeUTCM = Math.round((wakeUTCDecimal % 1) * 60);
   const candidate = new Date();
-  candidate.setUTCHours(wakeUTCH, 0, 0, 0);
+  candidate.setUTCHours(wakeUTCH, wakeUTCM, 0, 0);
   if (candidate.getTime() > Date.now()) candidate.setUTCDate(candidate.getUTCDate() - 1);
   return candidate.getTime();
 }
 
-// Helper: 특정 시각이 이벤트 휴식 시간인지 확인 (KST 기준)
+// Helper: 특정 시각이 이벤트 휴식 시간인지 확인 (KST 기준, 분 단위 지원)
 function isSleepTime(createdAtMs: number, sleepStartH: number, sleepEndH: number): boolean {
   if (sleepStartH === sleepEndH) return false;
-  const kstHour = (new Date(createdAtMs).getUTCHours() + 9) % 24;
+  const d = new Date(createdAtMs);
+  const kstH = ((d.getUTCHours() + 9) % 24) + d.getUTCMinutes() / 60;
   return sleepStartH < sleepEndH
-    ? kstHour >= sleepStartH && kstHour < sleepEndH
-    : kstHour >= sleepStartH || kstHour < sleepEndH;
+    ? kstH >= sleepStartH && kstH < sleepEndH
+    : kstH >= sleepStartH || kstH < sleepEndH;
 }
 
 // Helper: 이벤트 당첨자(마지막 이벤트글 작성자) 계산

@@ -52,6 +52,12 @@ interface BackupData {
   backups: BackupEntry[];
 }
 
+function fmtSleepHour(h: number): string {
+  const hh = Math.floor(h);
+  const mm = Math.round((h % 1) * 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
 const CATEGORIES: { [key: string]: string } = {
   sleeve: '슬리브', organizer: '오거나이저', component: '컴포 업그레이드',
   rulebook: '설명서/룰북', '3dprint': '3D프린팅', storage: '보관/케이스',
@@ -2197,8 +2203,12 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
   const [remaining, setRemaining] = useState(-999);
   const [initialized, setInitialized] = useState(false);
   const [showSleepEdit, setShowSleepEdit] = useState(false);
-  const [editSleepStart, setEditSleepStart] = useState(event.sleepStart ?? 0);
-  const [editSleepEnd, setEditSleepEnd] = useState(event.sleepEnd ?? 8);
+  const [editSleepStartH, setEditSleepStartH] = useState(Math.floor(event.sleepStart ?? 0));
+  const [editSleepStartM, setEditSleepStartM] = useState(Math.round(((event.sleepStart ?? 0) % 1) * 60));
+  const [editSleepEndH, setEditSleepEndH] = useState(Math.floor(event.sleepEnd ?? 8));
+  const [editSleepEndM, setEditSleepEndM] = useState(Math.round(((event.sleepEnd ?? 8) % 1) * 60));
+  const editSleepStart = editSleepStartH + editSleepStartM / 60;
+  const editSleepEnd = editSleepEndH + editSleepEndM / 60;
   const [sleepSaving, setSleepSaving] = useState(false);
   const [showDurationEdit, setShowDurationEdit] = useState(false);
   const [editDuration, setEditDuration] = useState(event.durationMinutes ?? 60);
@@ -2374,16 +2384,18 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
 
   useEffect(() => {
     const calc = () => {
-      const kstHour = (new Date().getUTCHours() + 9) % 24;
+      const now0 = new Date();
+      const kstDecimal = ((now0.getUTCHours() + 9) % 24) + now0.getUTCMinutes() / 60;
       const sleepStartH = event.sleepStart ?? 0;
       const sleepEndH = event.sleepEnd ?? 8;
       const isSleepTime = sleepStartH < sleepEndH
-        ? kstHour >= sleepStartH && kstHour < sleepEndH
-        : kstHour >= sleepStartH || kstHour < sleepEndH;
+        ? kstDecimal >= sleepStartH && kstDecimal < sleepEndH
+        : kstDecimal >= sleepStartH || kstDecimal < sleepEndH;
       if (isSleepTime) {
         const now = new Date();
         const nextWake = new Date();
-        nextWake.setUTCHours((sleepEndH - 9 + 24) % 24, 0, 0, 0);
+        const wakeUTCDecimal = (sleepEndH - 9 + 24) % 24;
+        nextWake.setUTCHours(Math.floor(wakeUTCDecimal), Math.round((wakeUTCDecimal % 1) * 60), 0, 0);
         if (nextWake <= now) nextWake.setUTCDate(nextWake.getUTCDate() + 1);
         setRemaining(-Math.floor((nextWake.getTime() - now.getTime()) / 1000));
         setInitialized(true);
@@ -2675,7 +2687,7 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
             {!showSleepEdit ? (
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-400">
-                  💤 휴식: {String(event.sleepStart ?? 0).padStart(2,'0')}:00 ~ {String(event.sleepEnd ?? 8).padStart(2,'0')}:00 (KST)
+                  💤 휴식: {fmtSleepHour(event.sleepStart ?? 0)} ~ {fmtSleepHour(event.sleepEnd ?? 8)} (KST)
                 </p>
                 <button onClick={() => setShowSleepEdit(true)}
                   className="text-xs px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-semibold">
@@ -2686,19 +2698,35 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-700">💤 휴식 시간 수정</p>
                 <div className="flex items-center gap-2">
-                  <select value={editSleepStart} onChange={e => setEditSleepStart(Number(e.target.value))}
-                    className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                    ))}
-                  </select>
-                  <span className="text-gray-400 text-xs">~</span>
-                  <select value={editSleepEnd} onChange={e => setEditSleepEnd(Number(e.target.value))}
-                    className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                    ))}
-                  </select>
+                  <div className="flex-1 flex gap-1">
+                    <select value={editSleepStartH} onChange={e => setEditSleepStartH(Number(e.target.value))}
+                      className="flex-1 h-9 px-1 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, '0')}시</option>
+                      ))}
+                    </select>
+                    <select value={editSleepStartM} onChange={e => setEditSleepStartM(Number(e.target.value))}
+                      className="w-14 h-9 px-1 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                      {[0, 10, 15, 20, 30, 40, 45, 50].map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')}분</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="text-gray-400 text-xs flex-shrink-0">~</span>
+                  <div className="flex-1 flex gap-1">
+                    <select value={editSleepEndH} onChange={e => setEditSleepEndH(Number(e.target.value))}
+                      className="flex-1 h-9 px-1 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, '0')}시</option>
+                      ))}
+                    </select>
+                    <select value={editSleepEndM} onChange={e => setEditSleepEndM(Number(e.target.value))}
+                      className="w-14 h-9 px-1 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                      {[0, 10, 15, 20, 30, 40, 45, 50].map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')}분</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={saveSleepTime} disabled={sleepSaving}
@@ -2706,7 +2734,7 @@ function AdminEventCard({ event, posts, onStop, saving, accessToken }: { event: 
                     {sleepSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                     저장
                   </button>
-                  <button onClick={() => { setShowSleepEdit(false); setEditSleepStart(event.sleepStart ?? 0); setEditSleepEnd(event.sleepEnd ?? 8); }}
+                  <button onClick={() => { setShowSleepEdit(false); setEditSleepStartH(Math.floor(event.sleepStart ?? 0)); setEditSleepStartM(Math.round(((event.sleepStart ?? 0) % 1) * 60)); setEditSleepEndH(Math.floor(event.sleepEnd ?? 8)); setEditSleepEndM(Math.round(((event.sleepEnd ?? 8) % 1) * 60)); }}
                     className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold">
                     취소
                   </button>
@@ -2966,8 +2994,12 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
   const [description, setDescription] = useState('');
   const [prizeImageUrl, setPrizeImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [sleepStart, setSleepStart] = useState(0);
-  const [sleepEnd, setSleepEnd] = useState(8);
+  const [sleepStartH, setSleepStartH] = useState(0);
+  const [sleepStartM, setSleepStartM] = useState(0);
+  const [sleepEndH, setSleepEndH] = useState(8);
+  const [sleepEndM, setSleepEndM] = useState(0);
+  const sleepStart = sleepStartH + sleepStartM / 60;
+  const sleepEnd = sleepEndH + sleepEndM / 60;
   const [cardReductionSeconds, setCardReductionSeconds] = useState(300);
   const [cardSuccessRate, setCardSuccessRate] = useState(100);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -3347,29 +3379,45 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
           <label className="text-sm font-medium text-gray-700 block mb-1">
             💤 휴식 시간 <span className="text-gray-400 text-xs">(KST 기준, 해당 시간대 타이머 자동 멈춤)</span>
           </label>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div className="flex-1">
-              <p className="text-[11px] text-gray-400 mb-1">시작 (시)</p>
-              <select value={sleepStart} onChange={e => setSleepStart(Number(e.target.value))}
-                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                ))}
-              </select>
+              <p className="text-[11px] text-gray-400 mb-1">시작</p>
+              <div className="flex gap-1">
+                <select value={sleepStartH} onChange={e => setSleepStartH(Number(e.target.value))}
+                  className="flex-1 h-10 px-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{String(i).padStart(2, '0')}시</option>
+                  ))}
+                </select>
+                <select value={sleepStartM} onChange={e => setSleepStartM(Number(e.target.value))}
+                  className="w-16 h-10 px-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                  {[0, 10, 15, 20, 30, 40, 45, 50].map(m => (
+                    <option key={m} value={m}>{String(m).padStart(2, '0')}분</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <span className="text-gray-400 text-sm mt-4">~</span>
             <div className="flex-1">
-              <p className="text-[11px] text-gray-400 mb-1">종료 (시)</p>
-              <select value={sleepEnd} onChange={e => setSleepEnd(Number(e.target.value))}
-                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                ))}
-              </select>
+              <p className="text-[11px] text-gray-400 mb-1">종료</p>
+              <div className="flex gap-1">
+                <select value={sleepEndH} onChange={e => setSleepEndH(Number(e.target.value))}
+                  className="flex-1 h-10 px-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{String(i).padStart(2, '0')}시</option>
+                  ))}
+                </select>
+                <select value={sleepEndM} onChange={e => setSleepEndM(Number(e.target.value))}
+                  className="w-16 h-10 px-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                  {[0, 10, 15, 20, 30, 40, 45, 50].map(m => (
+                    <option key={m} value={m}>{String(m).padStart(2, '0')}분</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           <p className="text-[11px] text-gray-400 mt-1">
-            현재 설정: 오전 {String(sleepStart).padStart(2,'0')}:00 ~ 오전 {String(sleepEnd).padStart(2,'0')}:00 휴식
+            현재 설정: {fmtSleepHour(sleepStart)} ~ {fmtSleepHour(sleepEnd)} 휴식
             {sleepStart === sleepEnd && <span className="text-amber-500 ml-1">⚠ 시작=종료 시 휴식 없음</span>}
           </p>
         </div>

@@ -2721,7 +2721,7 @@ function ScheduledEventBanner({ event, userId, accessToken }: { event: any; user
             </div>
             <div className="text-xs text-gray-400 space-y-1 mt-4">
               <p>⏱ 타이머: {event.durationMinutes}분</p>
-              <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
+              <p>💤 {fmtSleepHour(event.sleepStart ?? 0)}~{fmtSleepHour(event.sleepEnd ?? 8)}(KST) 타이머 자동 멈춤</p>
             </div>
           </div>
           <div className="flex-shrink-0 px-6 pb-6 pt-2">
@@ -2844,18 +2844,19 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
       const lp = lastPostRef.current;
       if (!ev?.active) return;
 
-      const kstHour = getKSTHour();
+      const kstDecimal = getKSTDecimal();
       const sleepStartH = ev.sleepStart ?? 0;
       const sleepEndH = ev.sleepEnd ?? 8;
       const isSleep = sleepStartH < sleepEndH
-        ? kstHour >= sleepStartH && kstHour < sleepEndH
-        : kstHour >= sleepStartH || kstHour < sleepEndH; // 자정 넘는 경우(예: 23~6)
+        ? kstDecimal >= sleepStartH && kstDecimal < sleepEndH
+        : kstDecimal >= sleepStartH || kstDecimal < sleepEndH;
 
       if (isSleep) {
         // 다음 sleepEnd 시각까지 남은 시간
         const now = new Date();
         const nextWake = new Date();
-        nextWake.setUTCHours((sleepEndH - 9 + 24) % 24, 0, 0, 0);
+        const wakeUTCDecimal = (sleepEndH - 9 + 24) % 24;
+        nextWake.setUTCHours(Math.floor(wakeUTCDecimal), Math.round((wakeUTCDecimal % 1) * 60), 0, 0);
         if (nextWake <= now) nextWake.setUTCDate(nextWake.getUTCDate() + 1);
         setRemaining(-Math.floor((nextWake.getTime() - now.getTime()) / 1000)); // 음수 = 휴식
         setInitialized(true);
@@ -3013,7 +3014,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               </div>
             </div>
             <p className="text-gray-400 text-[10px] mt-2 text-center">
-              오전 {event.sleepEnd ?? 8}시 재개 후 타이머 시작 · 현재 선두 유지 시 당첨!
+              {fmtSleepHour(event.sleepEnd ?? 8)} 재개 후 타이머 시작 · 현재 선두 유지 시 당첨!
             </p>
           </div>
         </div>
@@ -3185,7 +3186,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             </div>
             <div className="text-xs text-gray-400 space-y-1">
               <p>⏱ 타이머: {event.durationMinutes}분</p>
-              <p>💤 오전 {event.sleepStart ?? 0}시~오전 {event.sleepEnd ?? 8}시(KST) 타이머 자동 멈춤</p>
+              <p>💤 {fmtSleepHour(event.sleepStart ?? 0)}~{fmtSleepHour(event.sleepEnd ?? 8)}(KST) 타이머 자동 멈춤</p>
             </div>
           </div>
           <div className="flex-shrink-0 px-6 pb-6 pt-2">
@@ -3456,41 +3457,54 @@ function getKSTHour() {
   const now = new Date();
   return (now.getUTCHours() + 9) % 24;
 }
+function getKSTDecimal() {
+  const now = new Date();
+  return ((now.getUTCHours() + 9) % 24) + now.getUTCMinutes() / 60;
+}
+// 소수점 시간(ex: 8.5)을 HH:MM 문자열로 변환
+function fmtSleepHour(h: number): string {
+  const hh = Math.floor(h);
+  const mm = Math.round((h % 1) * 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
 
 // 가장 최근 수면 종료 시각(ms) 반환 — 휴식 없으면 0
 // 재개 시각 이후부터 타이머를 계산하기 위해 sinceMs의 하한선으로 사용
 function getLastWakeTime(sleepStartH: number, sleepEndH: number): number {
   if (sleepStartH === sleepEndH) return 0;
-  const wakeUTCH = (sleepEndH - 9 + 24) % 24;
+  const wakeUTCDecimal = (sleepEndH - 9 + 24) % 24;
+  const wakeUTCH = Math.floor(wakeUTCDecimal);
+  const wakeUTCM = Math.round((wakeUTCDecimal % 1) * 60);
   const candidate = new Date();
-  candidate.setUTCHours(wakeUTCH, 0, 0, 0);
+  candidate.setUTCHours(wakeUTCH, wakeUTCM, 0, 0);
   if (candidate.getTime() > Date.now()) candidate.setUTCDate(candidate.getUTCDate() - 1);
   return candidate.getTime();
 }
 
 // 수면 구간을 제외한 실제 활성 경과 시간(ms) 계산
-// sinceMs 이후부터 지금까지 "깨어있는 시간"만 누적
+// sinceMs 이후부터 지금까지 "깨어있는 시간"만 누적 (분 단위 지원)
 function calcAwakeElapsedMs(sinceMs: number, sleepStartH: number, sleepEndH: number): number {
   let elapsed = 0;
   let cursor = sinceMs;
   const now = Date.now();
-  const maxIter = 30 * 24;
+  const maxIter = 30 * 24 * 4;
   let iter = 0;
   while (cursor < now && iter++ < maxIter) {
-    const cursorKST = (new Date(cursor).getUTCHours() + 9) % 24;
+    const d = new Date(cursor);
+    const cursorKST = ((d.getUTCHours() + 9) % 24) + d.getUTCMinutes() / 60;
     const inSleep = sleepStartH < sleepEndH
       ? cursorKST >= sleepStartH && cursorKST < sleepEndH
       : cursorKST >= sleepStartH || cursorKST < sleepEndH;
     if (inSleep) {
-      const nextWakeUTCHour = (sleepEndH - 9 + 24) % 24;
+      const wakeUTCDecimal = (sleepEndH - 9 + 24) % 24;
       const nextWake = new Date(cursor);
-      nextWake.setUTCHours(nextWakeUTCHour, 0, 0, 0);
+      nextWake.setUTCHours(Math.floor(wakeUTCDecimal), Math.round((wakeUTCDecimal % 1) * 60), 0, 0);
       if (nextWake.getTime() <= cursor) nextWake.setUTCDate(nextWake.getUTCDate() + 1);
       cursor = Math.min(nextWake.getTime(), now);
     } else {
-      const sleepStartUTCHour = (sleepStartH - 9 + 24) % 24;
+      const sleepUTCDecimal = (sleepStartH - 9 + 24) % 24;
       const nextSleep = new Date(cursor);
-      nextSleep.setUTCHours(sleepStartUTCHour, 0, 0, 0);
+      nextSleep.setUTCHours(Math.floor(sleepUTCDecimal), Math.round((sleepUTCDecimal % 1) * 60), 0, 0);
       if (nextSleep.getTime() <= cursor) nextSleep.setUTCDate(nextSleep.getUTCDate() + 1);
       const awakeUntil = Math.min(nextSleep.getTime(), now);
       elapsed += awakeUntil - cursor;
