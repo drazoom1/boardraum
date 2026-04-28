@@ -5693,6 +5693,16 @@ app.get("/make-server-0b7d3bae/bonus-cards/me", async (c) => {
   }
 });
 
+// Helper: 가장 최근 수면 종료 시각(ms) 반환 — 휴식 없으면 0
+function getLastWakeTimestamp(sleepStartH: number, sleepEndH: number): number {
+  if (sleepStartH === sleepEndH) return 0;
+  const wakeUTCH = (sleepEndH - 9 + 24) % 24;
+  const candidate = new Date();
+  candidate.setUTCHours(wakeUTCH, 0, 0, 0);
+  if (candidate.getTime() > Date.now()) candidate.setUTCDate(candidate.getUTCDate() - 1);
+  return candidate.getTime();
+}
+
 // Helper: 특정 시각이 이벤트 휴식 시간인지 확인 (KST 기준)
 function isSleepTime(createdAtMs: number, sleepStartH: number, sleepEndH: number): boolean {
   if (sleepStartH === sleepEndH) return false;
@@ -10928,9 +10938,10 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
     const leaderPost = eligiblePosts[0] || null;
 
     // ── 4) 조기 종료 방지: 서버가 직접 sinceTimestamp 계산 ──
-    // 선두 글이 있으면 createdAt, 없으면 이벤트 startedAt 기준
-    // ★ reductionSeconds(보너스카드 감소량)를 반영한 유효 duration으로 검증
-    const sinceMs          = leaderPost ? new Date(leaderPost.createdAt).getTime() : startedAtMs;
+    // 휴식 재개 시각이 마지막 글보다 늦으면 재개 시각부터 계산 (휴식 후 타이머 리셋)
+    const rawSinceMs       = leaderPost ? new Date(leaderPost.createdAt).getTime() : startedAtMs;
+    const lastWakeMs       = getLastWakeTimestamp(event.sleepStart ?? 0, event.sleepEnd ?? 8);
+    const sinceMs          = Math.max(rawSinceMs, lastWakeMs);
     const elapsedMs        = Date.now() - sinceMs;
     const durationMs       = (event.durationMinutes || 60) * 60 * 1000;
     const effectiveDurMs   = Math.max(durationMs - reductionMs, 60 * 1000); // 최소 1분

@@ -2816,11 +2816,13 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
 
       if (!lp) {
         // 이벤트 시작 이후 글이 없으면 시작 시점부터 타이머
-        // ★ 수면 시간을 제외한 실제 활성 경과 시간으로 계산
+        // ★ 재개 시각이 이벤트 시작보다 늦으면 재개 시각부터 카운트 (휴식 후 타이머 리셋 효과)
         const startTime = new Date(ev.startedAt).getTime();
+        const lastWakeMs = getLastWakeTime(sleepStartH, sleepEndH);
+        const sinceMs0 = Math.max(startTime, lastWakeMs);
         const reduction = (ev.reductionSeconds || 0) * 1000;
         const totalActiveMs = ev.durationMinutes * 60 * 1000 - reduction;
-        const awakeElapsed = calcAwakeElapsedMs(startTime, sleepStartH, sleepEndH);
+        const awakeElapsed = calcAwakeElapsedMs(sinceMs0, sleepStartH, sleepEndH);
         const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
         setRemaining(diff);
         setInitialized(true);
@@ -2846,11 +2848,13 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
         return;
       }
 
-      // ★ 수면 시간을 제외한 실제 활성 경과 시간으로 계산
+      // ★ 재개 시각이 마지막 글보다 늦으면 재개 시각부터 카운트 (휴식 후 타이머 리셋 효과)
       const lastTime = new Date(lp.createdAt).getTime();
+      const lastWakeMs2 = getLastWakeTime(sleepStartH, sleepEndH);
+      const sinceMs1 = Math.max(lastTime, lastWakeMs2);
       const reduction = (ev.reductionSeconds || 0) * 1000;
       const totalActiveMs = ev.durationMinutes * 60 * 1000 - reduction;
-      const awakeElapsed = calcAwakeElapsedMs(lastTime, sleepStartH, sleepEndH);
+      const awakeElapsed = calcAwakeElapsedMs(sinceMs1, sleepStartH, sleepEndH);
       const diff = Math.max(0, Math.floor((totalActiveMs - awakeElapsed) / 1000));
       setRemaining(diff);
       setInitialized(true);
@@ -3403,6 +3407,17 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
 function getKSTHour() {
   const now = new Date();
   return (now.getUTCHours() + 9) % 24;
+}
+
+// 가장 최근 수면 종료 시각(ms) 반환 — 휴식 없으면 0
+// 재개 시각 이후부터 타이머를 계산하기 위해 sinceMs의 하한선으로 사용
+function getLastWakeTime(sleepStartH: number, sleepEndH: number): number {
+  if (sleepStartH === sleepEndH) return 0;
+  const wakeUTCH = (sleepEndH - 9 + 24) % 24;
+  const candidate = new Date();
+  candidate.setUTCHours(wakeUTCH, 0, 0, 0);
+  if (candidate.getTime() > Date.now()) candidate.setUTCDate(candidate.getUTCDate() - 1);
+  return candidate.getTime();
 }
 
 // 수면 구간을 제외한 실제 활성 경과 시간(ms) 계산
