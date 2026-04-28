@@ -9089,7 +9089,7 @@ app.post("/make-server-0b7d3bae/post-notices", async (c) => {
   const { user, error } = await requireAdmin(c);
   if (error) return error;
   try {
-    const { postId, title: customTitle } = await c.req.json();
+    const { postId, title: customTitle, expanded } = await c.req.json();
     const post = await kv.get(`beta_post_${postId}`) as any;
     if (!post) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
     const notice = {
@@ -9097,6 +9097,7 @@ app.post("/make-server-0b7d3bae/post-notices", async (c) => {
       title: (customTitle && customTitle.trim()) ? customTitle.trim() : (post.content || '').slice(0, 60),
       content: post.content || '',
       showInFeed: true,
+      expanded: !!expanded,
       createdAt: new Date().toISOString(),
       pinnedBy: user.id,
     };
@@ -9117,6 +9118,7 @@ app.patch("/make-server-0b7d3bae/post-notices/:postId", async (c) => {
     const updated: any = { ...notice };
     if (body.showInFeed !== undefined) updated.showInFeed = !!body.showInFeed;
     if (body.title !== undefined) updated.title = body.title;
+    if (body.expanded !== undefined) updated.expanded = !!body.expanded;
     await kv.set(`notice_${postId}`, updated);
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }

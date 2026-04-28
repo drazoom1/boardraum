@@ -1063,7 +1063,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   onCategoryClick?: (category: string) => void;
   isWinner?: boolean;
   isLeading?: boolean;
-  noticeInfo?: { showInFeed: boolean } | null;
+  noticeInfo?: { showInFeed: boolean; expanded?: boolean } | null;
   onNoticeChange?: () => void;
   isCelebrating?: boolean;
   isOwnFirstPost?: boolean;
@@ -1075,11 +1075,12 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const isPinned = post.pinned && !post.isHomework;
   const pinnedLines = (post.content || '').split('\n');
   const pinnedNeedsCollapse = isPinned && (pinnedLines.length > 5 || (post.content || '').length > 300);
-  const [pinnedExpanded, setPinnedExpanded] = useState(false);
+  const [pinnedExpanded, setPinnedExpanded] = useState(() => noticeInfo?.expanded ?? false);
   const [bookmarking, setBookmarking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showNoticePinInput, setShowNoticePinInput] = useState(false);
   const [noticePinTitle, setNoticePinTitle] = useState('');
+  const [noticePinExpanded, setNoticePinExpanded] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showEditComposer, setShowEditComposer] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -1393,13 +1394,13 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('처리 실패'); }
   };
 
-  const handleNoticePin = async (title?: string) => {
+  const handleNoticePin = async (title?: string, expanded?: boolean) => {
     setShowNoticePinInput(false);
     try {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ postId: post.id, title: title?.trim() || undefined }) }
+          body: JSON.stringify({ postId: post.id, title: title?.trim() || undefined, expanded: expanded ?? false }) }
       );
       if (res.ok) { toast.success('📢 공지로 등록했어요'); onNoticeChange?.(); }
       else toast.error('공지 등록 실패');
@@ -1613,7 +1614,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                             </button>
                           </>
                         ) : (
-                          <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setShowNoticePinInput(true); }}
+                          <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setNoticePinExpanded(false); setShowNoticePinInput(true); }}
                             className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
                             📢 공지 등록
                           </button>
@@ -2235,13 +2236,32 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               value={noticePinTitle}
               onChange={e => setNoticePinTitle(e.target.value)}
               placeholder="공지 제목을 입력하세요"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400 mb-4"
-              onKeyDown={e => { if (e.key === 'Enter') handleNoticePin(noticePinTitle); if (e.key === 'Escape') setShowNoticePinInput(false); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400 mb-3"
+              onKeyDown={e => { if (e.key === 'Enter') handleNoticePin(noticePinTitle, noticePinExpanded); if (e.key === 'Escape') setShowNoticePinInput(false); }}
             />
+            {pinnedNeedsCollapse && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-2">내용이 길어요. 기본 표시 방식을 선택해주세요.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setNoticePinExpanded(false)}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-colors ${!noticePinExpanded ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    📄 접힌 상태 (더보기)
+                  </button>
+                  <button
+                    onClick={() => setNoticePinExpanded(true)}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-colors ${noticePinExpanded ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    📖 펼친 상태
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setShowNoticePinInput(false)}
                 className="flex-1 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">취소</button>
-              <button onClick={() => handleNoticePin(noticePinTitle)}
+              <button onClick={() => handleNoticePin(noticePinTitle, noticePinExpanded)}
                 className="flex-1 py-2 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-700">등록</button>
             </div>
           </div>
@@ -3814,7 +3834,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const openCommentPostIdsRef = useRef<Set<string>>(new Set());
 
   // 공지 목록 (postId → {showInFeed})
-  const [noticeMap, setNoticeMap] = useState<Record<string, { showInFeed: boolean }>>({});
+  const [noticeMap, setNoticeMap] = useState<Record<string, { showInFeed: boolean; expanded?: boolean }>>({});
   const loadNotices = useCallback(async () => {
     try {
       const res = await fetch(
@@ -3823,8 +3843,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       );
       if (res.ok) {
         const data = await res.json();
-        const map: Record<string, { showInFeed: boolean }> = {};
-        for (const n of (data.notices || [])) map[n.postId] = { showInFeed: n.showInFeed };
+        const map: Record<string, { showInFeed: boolean; expanded?: boolean }> = {};
+        for (const n of (data.notices || [])) map[n.postId] = { showInFeed: n.showInFeed, expanded: n.expanded };
         setNoticeMap(map);
       }
     } catch {}
