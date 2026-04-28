@@ -1437,6 +1437,19 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('설정 실패'); }
   };
 
+  const handleNoticeToggleExpanded = async (expanded: boolean) => {
+    setShowMenu(false);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/post-notices/${post.id}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ expanded }) }
+      );
+      if (res.ok) { toast.success(expanded ? '펼침으로 고정했어요' : '닫힘으로 고정했어요'); onNoticeChange?.(); }
+      else toast.error('설정 실패');
+    } catch { toast.error('설정 실패'); }
+  };
+
   const CATEGORY_COLORS: Record<string, string> = {
     '정보': 'bg-blue-50 text-blue-600', '소식': 'bg-green-50 text-green-600',
     '게임리뷰': 'bg-amber-50 text-amber-600', '자유': 'bg-gray-100 text-gray-500',
@@ -1617,6 +1630,12 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                               className="w-full px-4 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
                               {noticeInfo.showInFeed ? '👁 게시판에서 숨기기' : '👁 게시판에 보이게 하기'}
                             </button>
+                            {pinnedNeedsCollapse && (
+                              <button onClick={() => handleNoticeToggleExpanded(!noticeInfo.expanded)}
+                                className="w-full px-4 py-2 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors">
+                                {noticeInfo.expanded ? '📄 닫힘으로 고정' : '📖 펼침으로 고정'}
+                              </button>
+                            )}
                           </>
                         ) : (
                           <button onClick={() => { setShowMenu(false); setNoticePinTitle(''); setNoticePinExpanded(false); setShowNoticePinInput(true); }}
@@ -2241,32 +2260,13 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               value={noticePinTitle}
               onChange={e => setNoticePinTitle(e.target.value)}
               placeholder="공지 제목을 입력하세요"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400 mb-3"
-              onKeyDown={e => { if (e.key === 'Enter') handleNoticePin(noticePinTitle, noticePinExpanded); if (e.key === 'Escape') setShowNoticePinInput(false); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400 mb-4"
+              onKeyDown={e => { if (e.key === 'Enter') handleNoticePin(noticePinTitle); if (e.key === 'Escape') setShowNoticePinInput(false); }}
             />
-            {pinnedNeedsCollapse && (
-              <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">내용이 길어요. 기본 표시 방식을 선택해주세요.</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setNoticePinExpanded(false)}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-colors ${!noticePinExpanded ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                  >
-                    📄 접힌 상태 (더보기)
-                  </button>
-                  <button
-                    onClick={() => setNoticePinExpanded(true)}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-colors ${noticePinExpanded ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                  >
-                    📖 펼친 상태
-                  </button>
-                </div>
-              </div>
-            )}
             <div className="flex gap-2">
               <button onClick={() => setShowNoticePinInput(false)}
                 className="flex-1 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">취소</button>
-              <button onClick={() => handleNoticePin(noticePinTitle, noticePinExpanded)}
+              <button onClick={() => handleNoticePin(noticePinTitle)}
                 className="flex-1 py-2 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-700">등록</button>
             </div>
           </div>
