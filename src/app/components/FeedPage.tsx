@@ -2738,18 +2738,30 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const intervalRef = useRef<any>(null);
   const [autoClosing, setAutoClosing] = useState(false); // auto-close 진행 중 (unmount 방지)
 
-  // 마지막 글 - 이벤트 시작 이후 + 실격자·참여제외자 제외 + '이벤트' 카테고리만
+  // 마지막 글 - 이벤트 시작 이후 + 실격자·참여제외자 제외 + '이벤트' 카테고리만 + 휴식 중 글 제외
   const eventStartTime = event?.startedAt ? new Date(event.startedAt).getTime() : 0;
   const disqualified: string[] = event?.disqualified || [];
   const excluded: string[] = event?.excluded || [];
+  const evSleepStartH = event?.sleepStart ?? 0;
+  const evSleepEndH = event?.sleepEnd ?? 8;
   const lastPost = posts.length > 0
     ? [...posts]
-        .filter(p =>
-          p.category === '이벤트' &&
-          new Date(p.createdAt).getTime() >= eventStartTime &&
-          !disqualified.includes(p.userId) &&
-          !excluded.includes(p.userId)
-        )
+        .filter(p => {
+          const createdMs = new Date(p.createdAt).getTime();
+          const pKstHour = (new Date(createdMs).getUTCHours() + 9) % 24;
+          const pIsSleep = evSleepStartH !== evSleepEndH && (
+            evSleepStartH < evSleepEndH
+              ? pKstHour >= evSleepStartH && pKstHour < evSleepEndH
+              : pKstHour >= evSleepStartH || pKstHour < evSleepEndH
+          );
+          return (
+            p.category === '이벤트' &&
+            createdMs >= eventStartTime &&
+            !disqualified.includes(p.userId) &&
+            !excluded.includes(p.userId) &&
+            !pIsSleep
+          );
+        })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
     : null;
 
