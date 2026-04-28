@@ -3470,60 +3470,87 @@ function LastPostEventSection({ accessToken }: { accessToken: string }) {
 
       {/* 현재 활성 당첨 배너 (3시간 이내 자동 표시 중) */}
       {recentWinners.length > 0 && (
-        <div className="bg-white rounded-2xl border border-green-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-yellow-200 overflow-hidden">
           <div className="px-5 py-4 flex items-center justify-between">
-            <h3 className="font-bold text-green-700 text-sm flex items-center gap-2">
+            <h3 className="font-bold text-yellow-700 text-sm flex items-center gap-2">
               <span className="text-base">🏆</span>
-              현재 당첨 배너 (홈피드 표시 중)
-              <span className="text-xs font-normal text-green-500 bg-green-50 px-2 py-0.5 rounded-full">{recentWinners.length}건</span>
+              이벤트 마감 현황
+              <span className="text-xs font-normal text-yellow-500 bg-yellow-50 px-2 py-0.5 rounded-full">{recentWinners.length}건</span>
             </h3>
           </div>
-          <div className="border-t border-green-100 divide-y divide-green-50">
-            {recentWinners.map((w: any, idx: number) => (
-              <div key={w.eventId || idx} className="px-5 py-4">
-                <div className="flex items-start gap-3">
-                  {w.prizeImageUrl && (
-                    <img src={w.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-green-100" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="inline-flex items-center gap-1 text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                        📢 배너 표시 중
-                      </span>
-                      {w.eventTitle && (
-                        <span className="text-xs font-bold text-gray-700 truncate">{w.eventTitle}</span>
+          <div className="border-t border-yellow-100 divide-y divide-yellow-50">
+            {recentWinners.map((w: any, idx: number) => {
+              const isPending = w.approved === false;
+              return (
+                <div key={w.eventId || idx} className="px-5 py-4">
+                  <div className="flex items-start gap-3">
+                    {w.prizeImageUrl && (
+                      <img src={w.prizeImageUrl} className={`w-12 h-12 rounded-xl object-cover flex-shrink-0 border ${isPending ? 'border-yellow-200' : 'border-green-100'}`} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {isPending ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">
+                            🔍 검토 중
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                            📢 배너 표시 중
+                          </span>
+                        )}
+                        {w.eventTitle && (
+                          <span className="text-xs font-bold text-gray-700 truncate">{w.eventTitle}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900">🏆 {w.prize || '상품'}</p>
+                      {w.winnerUserName ? (
+                        <p className="text-[11px] text-gray-700 mt-0.5 font-medium">당첨자: {w.winnerUserName}</p>
+                      ) : (
+                        <p className="text-[11px] text-amber-500 mt-0.5">당첨자 없음</p>
                       )}
+                      {w.closedAt && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          종료: {new Date(w.closedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          {!isPending && <span className="ml-1 text-gray-300">(3시간 후 자동 사라짐)</span>}
+                        </p>
+                      )}
+                      <div className="flex gap-2 mt-2">
+                        {isPending && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`"${w.winnerUserName || '당첨자 없음'}"을 당첨자로 공개할까요?\n모든 유저에게 당첨 배너가 표시됩니다.`)) return;
+                              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/event-winner/${w.eventId}/approve`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${accessToken}` },
+                              });
+                              if (res.ok) { await loadData(true); toast.success('당첨자를 공개했어요! 🎉'); }
+                              else toast.error('실패했어요.');
+                            }}
+                            className="text-xs px-3 py-1 rounded-lg font-bold text-white bg-cyan-500 hover:bg-cyan-600 flex items-center gap-1"
+                          >
+                            🎉 당첨자 공개
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!confirm(isPending ? '검토를 취소하고 이 이벤트 결과를 삭제할까요?' : '이 당첨 배너를 지금 내릴까요?')) return;
+                            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/event-winner/${w.eventId}`, {
+                              method: 'DELETE',
+                              headers: { Authorization: `Bearer ${accessToken}` },
+                            });
+                            if (res.ok) { await loadData(true); toast.success(isPending ? '이벤트 결과를 삭제했어요.' : '배너를 내렸어요.'); }
+                            else toast.error('실패했어요.');
+                          }}
+                          className="text-xs px-3 py-1 rounded-lg font-bold text-white flex items-center gap-1 bg-red-400 hover:bg-red-500"
+                        >
+                          {isPending ? '결과 삭제' : '배너 내리기'}
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900">🏆 {w.prize || '상품'}</p>
-                    {w.winnerUserName ? (
-                      <p className="text-[11px] text-gray-700 mt-0.5 font-medium">당첨자: {w.winnerUserName}</p>
-                    ) : (
-                      <p className="text-[11px] text-amber-500 mt-0.5">당첨자 없음</p>
-                    )}
-                    {w.closedAt && (
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        종료: {new Date(w.closedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        <span className="ml-1 text-gray-300">(3시간 후 자동 사라짐)</span>
-                      </p>
-                    )}
-                    <button
-                      onClick={async () => {
-                        if (!confirm('이 당첨 배너를 지금 내릴까요?')) return;
-                        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/event-winner/${w.eventId}`, {
-                          method: 'DELETE',
-                          headers: { Authorization: `Bearer ${accessToken}` },
-                        });
-                        if (res.ok) { await loadData(true); toast.success('배너를 내렸어요.'); }
-                        else toast.error('실패했어요.');
-                      }}
-                      className="mt-2 text-xs px-3 py-1 rounded-lg font-bold text-white flex items-center gap-1 bg-red-400 hover:bg-red-500"
-                    >
-                      배너 내리기
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

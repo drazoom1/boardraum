@@ -10852,7 +10852,11 @@ app.get("/make-server-0b7d3bae/last-post-event/winner", async (c) => {
     const winners: any[] = await kv.get("last_event_winners") || [];
     const THREE_HOURS = 3 * 60 * 60 * 1000;
     const now = Date.now();
-    const recent = winners.filter((w: any) => now - new Date(w.closedAt).getTime() < THREE_HOURS);
+    // approved: false(검토 중)는 자동 삭제하지 않음; approved: true만 3시간 후 삭제
+    const recent = winners.filter((w: any) => {
+      if (w.approved === false) return true;
+      return now - new Date(w.closedAt).getTime() < THREE_HOURS;
+    });
     if (recent.length !== winners.length) {
       await kv.set("last_event_winners", recent);
     }
@@ -10977,6 +10981,7 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
       winnerUserName: leaderPost?.userName || null,
       winnerPostId:   leaderPost?.id       || null,
       closedAt: new Date().toISOString(),
+      approved: false,
     };
     await kv.set("last_event_winners", [...currentWinners, winnerEntry]);
 
@@ -11020,6 +11025,22 @@ app.delete("/make-server-0b7d3bae/admin/event-winner/:eventId", async (c) => {
   } catch (e) {
     return c.json({ error: String(e) }, 500);
   }
+});
+
+// 관리자 - 당첨자 공개 (검토 완료 → approved: true)
+app.post("/make-server-0b7d3bae/admin/event-winner/:eventId/approve", async (c) => {
+  const { user, error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const eventId = c.req.param("eventId");
+    const winners: any[] = await kv.get("last_event_winners") || [];
+    const idx = winners.findIndex((w: any) => w.eventId === eventId);
+    if (idx === -1) return c.json({ error: '이벤트를 찾을 수 없어요' }, 404);
+    winners[idx] = { ...winners[idx], approved: true, approvedAt: new Date().toISOString() };
+    await kv.set("last_event_winners", winners);
+    console.log("[admin] 당첨자 공개 승인:", eventId);
+    return c.json({ success: true, winner: winners[idx] });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
 // 축하 댓글 조회
@@ -11145,7 +11166,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
           const histEntry = { ...toStop, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id, autoClose: false, winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId };
           await kv.set("last_post_events_history", [histEntry, ...history].slice(0, 100));
           const filteredWinners = winners.filter((w: any) => w.eventId !== eventId);
-          filteredWinners.push({ eventId, prize: toStop.prize, eventTitle: toStop.eventTitle || "", prizeImageUrl: toStop.prizeImageUrl || "", description: toStop.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString() });
+          filteredWinners.push({ eventId, prize: toStop.prize, eventTitle: toStop.eventTitle || "", prizeImageUrl: toStop.prizeImageUrl || "", description: toStop.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString(), approved: false });
           await kv.set("last_event_winners", filteredWinners);
         }
         const updated = events.filter((e: any) => e.id !== eventId);
@@ -11158,7 +11179,7 @@ app.post("/make-server-0b7d3bae/admin/last-post-event", async (c) => {
           const winnerInfo = await findEventWinner(e);
           newEntries.push({ ...e, active: false, stoppedAt: new Date().toISOString(), stoppedBy: user.id, autoClose: false, winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId });
           const fw = newWinners.filter((w: any) => w.eventId !== e.id);
-          fw.push({ eventId: e.id, prize: e.prize, eventTitle: e.eventTitle || "", prizeImageUrl: e.prizeImageUrl || "", description: e.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString() });
+          fw.push({ eventId: e.id, prize: e.prize, eventTitle: e.eventTitle || "", prizeImageUrl: e.prizeImageUrl || "", description: e.description || "", winnerUserName: winnerInfo.winnerUserName, winnerUserId: winnerInfo.winnerUserId, winnerPostId: winnerInfo.winnerPostId, closedAt: new Date().toISOString(), approved: false });
           newWinners.length = 0;
           newWinners.push(...fw);
         }

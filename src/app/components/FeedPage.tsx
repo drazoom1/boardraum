@@ -3524,6 +3524,7 @@ function CardLogsToggle({ logs }: { logs: { usedAt: string }[] }) {
 
 // ── 당첨 배너 (서버 저장 기반, 3시간 유지) ──
 function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClose }: { winner: any; userId?: string | null; accessToken?: string; isAdmin?: boolean; onAdminClose?: (eventId: string) => void }) {
+  const isPending = winner.approved === false;
   const [congrats, setCongrats] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -3624,6 +3625,25 @@ function WinnerBanner({ winner, userId, accessToken, isAdmin = false, onAdminClo
 
   const hasWinner = !!winner.winnerUserName;
   const SHOW_COUNT = 3;
+
+  if (isPending) {
+    return (
+      <div className="rounded-2xl overflow-hidden shadow-sm mb-3 bg-white" style={{ border: '2px solid #e2e8f0' }}>
+        <div className="px-5 py-4 flex gap-3 items-start">
+          {winner.prizeImageUrl ? (
+            <img src={winner.prizeImageUrl} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-gray-100" />
+          ) : (
+            <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 text-xl">🔍</div>
+          )}
+          <div className="flex-1 min-w-0">
+            {winner.eventTitle && <p className="text-xs font-bold text-gray-500 mb-0.5 truncate">{winner.eventTitle}</p>}
+            <p className="text-sm font-bold text-gray-700 mb-1">🏆 {winner.prize || '이벤트'} 마감</p>
+            <p className="text-xs text-gray-500 leading-relaxed">이벤트가 마감되어 당첨자를 확인하고 있습니다.<br />어뷰징 또는 오류가 없을 경우 당첨자 안내를 공지하도록 하겠습니다.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl overflow-hidden shadow-md mb-3 bg-white" style={{ border: '2px solid #fbbf24' }}>
