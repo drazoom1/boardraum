@@ -2742,6 +2742,7 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
   const [showDescModal, setShowDescModal] = useState(false);
   const [showNotLeaderModal, setShowNotLeaderModal] = useState(false);
   const [showCardConfirmModal, setShowCardConfirmModal] = useState(false);
+  const [cardConfirmDontShow, setCardConfirmDontShow] = useState(false);
   const [pendingUseCard, setPendingUseCard] = useState(false); // 선두아님 확인 후 카드 사용 대기
   const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -3126,7 +3127,10 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
                     const isMyPost = lastPost?.userId === userId;
                     if (!isMyPost) {
                       setShowNotLeaderModal(true);
+                    } else if (localStorage.getItem('card_confirm_skip') === '1') {
+                      onUseCard?.();
                     } else {
+                      setCardConfirmDontShow(false);
                       setShowCardConfirmModal(true);
                     }
                   } else {
@@ -3338,7 +3342,12 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
             <button
               onClick={() => {
                 setShowNotLeaderModal(false);
-                setShowCardConfirmModal(true);
+                if (localStorage.getItem('card_confirm_skip') === '1') {
+                  onUseCard?.();
+                } else {
+                  setCardConfirmDontShow(false);
+                  setShowCardConfirmModal(true);
+                }
               }}
               className="flex-1 py-2.5 rounded-2xl text-sm text-white font-bold transition-all active:scale-95"
               style={{ background: '#00BCD4' }}
@@ -3363,7 +3372,18 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               카드 성공 확률은 홈피드에 생애 첫 게시물이<br/>달릴 때마다 증가합니다.
             </p>
           </div>
-          <div className="px-6 pb-6 flex gap-2 mt-4">
+          <div className="px-6 pt-3 pb-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none justify-center">
+              <input
+                type="checkbox"
+                checked={cardConfirmDontShow}
+                onChange={e => setCardConfirmDontShow(e.target.checked)}
+                className="w-4 h-4 accent-cyan-500 rounded"
+              />
+              <span className="text-xs text-gray-400">다시 보지 않기</span>
+            </label>
+          </div>
+          <div className="px-6 pb-6 flex gap-2 mt-3">
             <button
               onClick={() => setShowCardConfirmModal(false)}
               className="flex-1 py-2.5 rounded-2xl text-sm text-gray-400 font-medium border border-gray-100 hover:bg-gray-50 transition-colors"
@@ -3371,7 +3391,11 @@ function LastPostEventBanner({ event, posts, bonusCards = 0, onUseCard, userId, 
               취소
             </button>
             <button
-              onClick={() => { setShowCardConfirmModal(false); onUseCard?.(); }}
+              onClick={() => {
+                if (cardConfirmDontShow) localStorage.setItem('card_confirm_skip', '1');
+                setShowCardConfirmModal(false);
+                onUseCard?.();
+              }}
               className="flex-1 py-2.5 rounded-2xl text-sm text-white font-bold transition-all active:scale-95"
               style={{ background: '#00BCD4' }}
             >
