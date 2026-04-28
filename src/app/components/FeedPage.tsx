@@ -1075,7 +1075,12 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const isPinned = post.pinned && !post.isHomework;
   const pinnedLines = (post.content || '').split('\n');
   const pinnedNeedsCollapse = isPinned && (pinnedLines.length > 5 || (post.content || '').length > 300);
-  const [pinnedExpanded, setPinnedExpanded] = useState(() => noticeInfo?.expanded ?? false);
+  const [pinnedExpanded, setPinnedExpanded] = useState(false);
+  useEffect(() => {
+    setPinnedExpanded(noticeInfo?.expanded ?? false);
+  // noticeInfo가 로드된 후 초기값을 서버 값으로 동기화
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticeInfo?.expanded]);
   const [bookmarking, setBookmarking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showNoticePinInput, setShowNoticePinInput] = useState(false);
