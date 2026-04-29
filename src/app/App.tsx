@@ -785,6 +785,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         setUserEmail(null);
         setUserId(null); userIdRef.current = null;
         setUserRole('user');
+        setIsStaff(false);
         setBetaTesterStatus(null);
         setOwnedGames([]);
         setWishlistGames([]);
@@ -1790,13 +1791,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
                   <div className="fixed left-[80px] bottom-4 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 py-1 overflow-hidden">
                     <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100 truncate">{userEmail}</div>
-                    {(userRole === 'admin' || isAdminEmail(userEmail)) && (
+                    {accessToken && (userRole === 'admin' || isAdminEmail(userEmail)) && (
                       <button onClick={() => { setActiveTab('admin'); setShowUserMenu(false); }}
                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50">
                         <Shield className="w-4 h-4" /> 관리자 페이지
                       </button>
                     )}
-                    {(isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
+                    {accessToken && (isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
                       <button onClick={() => { setActiveTab('staff'); setShowUserMenu(false); }}
                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-orange-600 hover:bg-orange-50">
                         <Shield className="w-4 h-4" /> 운영진 페이지
@@ -1873,13 +1874,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   </div>
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-sm text-gray-600 truncate">{userEmail}</div>
                   <div className="p-2 space-y-1">
-                    {(userRole === 'admin' || isAdminEmail(userEmail)) && (
+                    {accessToken && (userRole === 'admin' || isAdminEmail(userEmail)) && (
                       <button onClick={() => { setActiveTab('admin'); setShowUserMenu(false); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 rounded-xl">
                         <Shield className="w-4 h-4" /> 관리자 페이지
                       </button>
                     )}
-                    {(isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
+                    {accessToken && (isStaff || userRole === 'admin' || isAdminEmail(userEmail)) && (
                       <button onClick={() => { setActiveTab('staff'); setShowUserMenu(false); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-orange-600 hover:bg-orange-50 rounded-xl">
                         <Shield className="w-4 h-4" /> 운영진 페이지
