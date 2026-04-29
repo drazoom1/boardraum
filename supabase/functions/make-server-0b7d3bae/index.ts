@@ -1552,6 +1552,7 @@ app.post("/make-server-0b7d3bae/auth/verify-code", async (c) => {
 app.post("/make-server-0b7d3bae/auth/signup", async (c) => {
   try {
     const { email, password, name, username, phone, reason, referralCode } = await c.req.json();
+    const signupIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0].trim() || c.req.header('x-real-ip') || null;
     
     if (!email || !password || !name || !phone) {
       return c.json({ error: 'Email, password, name, and phone are required' }, 400);
@@ -1601,6 +1602,7 @@ app.post("/make-server-0b7d3bae/auth/signup", async (c) => {
         reason: reason || '',
         status: 'approved', // 베타 종료 — 가입 즉시 승인
         created_at: new Date().toISOString(),
+        signup_ip: signupIp,
       };
       
       await kv.set(`beta_user_${userId}`, betaTesterInfo);

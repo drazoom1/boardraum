@@ -28,7 +28,7 @@ interface BetaTester {
   userId: string; email: string; name: string; username: string;
   phone: string; reason: string; status: 'pending' | 'approved' | 'rejected';
   created_at: string; reviewed_at?: string; rejection_reason?: string;
-  ownedCount?: number; wishlistCount?: number;
+  ownedCount?: number; wishlistCount?: number; signup_ip?: string | null;
 }
 
 interface AnalyticsStats {
@@ -793,6 +793,7 @@ function MembersSection({ accessToken }: { accessToken: string }) {
                 <p className="text-xs text-gray-500 truncate mt-0.5">{t.email}</p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="text-[10px] text-gray-400">{new Date(t.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })} 가입</span>
+                  {t.signup_ip && <span className="text-[10px] text-gray-400 font-mono bg-gray-50 px-1.5 py-0.5 rounded">IP: {t.signup_ip}</span>}
                   {t.ownedCount !== undefined && t.ownedCount > 0 && (
                     <span className="flex items-center gap-0.5 text-[10px] text-gray-500 font-medium">
                       <Trophy className="w-3 h-3 text-yellow-400" />{t.ownedCount}보유
