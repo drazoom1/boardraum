@@ -12864,7 +12864,10 @@ app.get('/make-server-0b7d3bae/staff/me', async (c) => {
     if (!member) {
       const role = await getUserRole(user.id, user.email ?? '');
       if (role === 'admin') {
-        return c.json({ member: { userId: user.id, nickname: '관리자', level: 1, joinedAt: new Date().toISOString(), isAdmin: true } });
+        const adminMember = { userId: user.id, nickname: '관리자', level: 1, joinedAt: new Date().toISOString(), isAdmin: true };
+        members.push(adminMember);
+        await kv.set('staff_members', members);
+        return c.json({ member: adminMember });
       }
       return c.json({ member: null });
     }
