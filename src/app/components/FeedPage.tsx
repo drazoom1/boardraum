@@ -644,7 +644,7 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
         const cardRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/activity`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ type: 'comment' }),
+          body: JSON.stringify({ type: 'comment', sourceId: realComment.id }),
         });
         const cardData = await cardRes.json().catch(() => ({}));
         if (cardData.granted) setShowCommentCardWon(true);

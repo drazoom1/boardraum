@@ -639,7 +639,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
             const cardRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/activity`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-              body: JSON.stringify({ type: 'post' }),
+              body: JSON.stringify({ type: 'post', sourceId: resData.post?.id }),
             });
             const cardData = await cardRes.json().catch(() => ({}));
             if (cardData.granted) cardGranted = true;

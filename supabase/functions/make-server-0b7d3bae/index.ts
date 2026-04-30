@@ -4591,7 +4591,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
       if (g?.id) kv.del(`game_feed_cache_${g.id.replace(/^bgg_/, '')}`).catch(() => {});
     }
 
-    // 본인이 삭제한 경우에만 포인트 회수 (임시저장 제외)
+    // 본인이 삭제한 경우에만 포인트 회수 + 활동 카드 회수 (임시저장 제외)
     if (post.userId === user.id && !post.isDraft) {
       const { loss } = await removePoints(user.id, 'POST').catch(() => ({ loss: 0 }));
       if (loss > 0) {
@@ -4603,6 +4603,8 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
           message: `게시물 삭제로 -${loss}pt 차감`,
         }).catch(() => {});
       }
+      // 활동 카드 회수
+      revokeActivityCardBySource(user.id, user.email ?? undefined, postId).catch(() => {});
     }
 
     return c.json({ success: true });
@@ -5053,7 +5055,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId/comments/:commentId", 
     post.comments.splice(commentIdx, 1);
     await kv.set(`beta_post_${postId}`, post);
 
-    // 본인 댓글 삭제 시 포인트 회수
+    // 본인 댓글 삭제 시 포인트 회수 + 활동 카드 회수
     if (comment.userId === user.id) {
       const { loss } = await removePoints(user.id, 'COMMENT').catch(() => ({ loss: 0 }));
       if (loss > 0) {
@@ -5065,6 +5067,8 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId/comments/:commentId", 
           message: `댓글 삭제로 -${loss}pt 차감`,
         }).catch(() => {});
       }
+      // 활동 카드 회수
+      revokeActivityCardBySource(user.id, user.email ?? undefined, commentId).catch(() => {});
     }
 
     invalidateFeedCache().catch(() => {});
@@ -5745,6 +5749,33 @@ async function writeCardCount(userId: string, count: number): Promise<void> {
   await kv.set(`bonus_cards_${userId}`, { cards: safeCount, updatedAt: Date.now() });
 }
 
+// 활동 카드 회수 (글/댓글 삭제 시)
+async function revokeActivityCardBySource(authorUserId: string, authorEmail: string | undefined, sourceId: string): Promise<boolean> {
+  try {
+    const log: any[] = await kv.get('activity_card_grant_log') || [];
+    const idx = log.findIndex(
+      (e: any) => e.userId === authorUserId && e.sourceId === sourceId && !e.revoked
+    );
+    if (idx === -1) return false; // 이 글/댓글로 카드를 받은 기록 없음
+
+    // 카드 1장 회수
+    const email = authorEmail || log[idx].email;
+    if (email) {
+      const current = await readCardCountByEmail(email, authorUserId);
+      if (current > 0) await writeCardCountByEmail(email, current - 1);
+      console.log(`[활동카드회수] sourceId=${sourceId} email=${email} (${current}→${Math.max(0, current - 1)})`);
+    }
+
+    // 로그에 revoked 표시
+    log[idx] = { ...log[idx], revoked: true, revokedAt: Date.now() };
+    await kv.set('activity_card_grant_log', log);
+    return true;
+  } catch (e) {
+    console.error('[활동카드회수] 오류:', e);
+    return false;
+  }
+}
+
 // 추천인 카드 - 조건 충족 시 지급 처리
 async function checkAndGrantPendingReferral(userId: string): Promise<void> {
   try {
@@ -6008,6 +6039,7 @@ app.post("/make-server-0b7d3bae/bonus-cards/activity", async (c) => {
 
     const body = await c.req.json().catch(() => ({}));
     const type = body.type; // 'post' | 'comment'
+    const sourceId: string | undefined = body.sourceId; // postId 또는 commentId
     // ★ KV에서 관리자가 설정한 확률 읽기 (기본값: 글 5%, 댓글 1%)
     const probSettings: any = await kv.get('activity_card_prob_settings').catch(() => null);
     const postProb    = typeof probSettings?.post    === 'number' ? probSettings.post    : 0.05;
@@ -6060,9 +6092,11 @@ app.post("/make-server-0b7d3bae/bonus-cards/activity", async (c) => {
         email: user.email,
         userName,
         type,
+        sourceId: sourceId || null,
         cardsBefore: current,
         cardsAfter: newCount,
         grantedAt: Date.now(),
+        revoked: false,
       };
       const updatedLog = [newEntry, ...existingLog].slice(0, 500);
       await kv.set('activity_card_grant_log', updatedLog);
