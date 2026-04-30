@@ -1633,21 +1633,12 @@ app.post("/make-server-0b7d3bae/auth/signup", async (c) => {
             const referrerId = codeData.userId;
             const referrerEntry = await kv.get(`beta_user_${referrerId}`).catch(() => null);
             const referrerEmail = referrerEntry?.email;
-            const REFERRAL_BONUS = 3; // 추천인 보너스카드 장수
-            let referralCardsBefore = 0;
-            let referralCardsAfter = 0;
-            if (referrerEmail) {
-              const current = await readCardCountByEmail(referrerEmail, referrerId);
-              referralCardsBefore = current;
-              referralCardsAfter = current + REFERRAL_BONUS;
-              await writeCardCountByEmail(referrerEmail, referralCardsAfter);
-              console.log(`✅ 추천인 보너스카드 +${REFERRAL_BONUS}: email=${referrerEmail} (${current}→${referralCardsAfter})`);
-            } else {
-              const current = await readCardCount(referrerId);
-              referralCardsBefore = current;
-              referralCardsAfter = current + REFERRAL_BONUS;
-              await writeCardCount(referrerId, referralCardsAfter);
-            }
+            // 추천인 카드 설정 읽기
+            const referralSettings: any = await kv.get('referral_card_settings').catch(() => null);
+            const REFERRAL_BONUS = typeof referralSettings?.amount === 'number' && referralSettings.amount > 0 ? referralSettings.amount : 3;
+            const requireCollection = !!referralSettings?.requireCollection;
+            const requirePost = !!referralSettings?.requirePost;
+
             // 추천 로그 저장 (랭킹 이벤트용)
             try {
               const referralLogs: any[] = await kv.get('referral_log') || [];
@@ -1660,20 +1651,53 @@ app.post("/make-server-0b7d3bae/auth/signup", async (c) => {
               });
               await kv.set('referral_log', referralLogs);
             } catch {}
-            // ★ 추천인 카드 이력 로그 저장
-            try {
-              const referrerLog: any[] = await kv.get(`bonus_card_log_${referrerId}`) || [];
-              await kv.set(`bonus_card_log_${referrerId}`, [{
-                type: 'referral',
-                source: `추천인 초대 보상 (${name || userId} 가입)`,
-                amount: REFERRAL_BONUS,
-                cardsBefore: referralCardsBefore,
-                cardsAfter: referralCardsAfter,
-                grantedAt: Date.now(),
-                referreeId: userId,
+
+            if (!requireCollection && !requirePost) {
+              // 조건 없음 → 즉시 지급
+              let referralCardsBefore = 0;
+              let referralCardsAfter = 0;
+              if (referrerEmail) {
+                const current = await readCardCountByEmail(referrerEmail, referrerId);
+                referralCardsBefore = current;
+                referralCardsAfter = current + REFERRAL_BONUS;
+                await writeCardCountByEmail(referrerEmail, referralCardsAfter);
+                console.log(`✅ 추천인 보너스카드 +${REFERRAL_BONUS}: email=${referrerEmail} (${current}→${referralCardsAfter})`);
+              } else {
+                const current = await readCardCount(referrerId);
+                referralCardsBefore = current;
+                referralCardsAfter = current + REFERRAL_BONUS;
+                await writeCardCount(referrerId, referralCardsAfter);
+              }
+              try {
+                const referrerLog: any[] = await kv.get(`bonus_card_log_${referrerId}`) || [];
+                await kv.set(`bonus_card_log_${referrerId}`, [{
+                  type: 'referral',
+                  source: `추천인 초대 보상 (${name || userId} 가입)`,
+                  amount: REFERRAL_BONUS,
+                  cardsBefore: referralCardsBefore,
+                  cardsAfter: referralCardsAfter,
+                  grantedAt: Date.now(),
+                  referreeId: userId,
+                  refereeName: name || '',
+                }, ...referrerLog].slice(0, 200));
+              } catch {}
+            } else {
+              // 조건 있음 → pending 저장, 나중에 조건 충족 시 지급
+              await kv.set(`referral_pending_${userId}`, {
+                referrerId,
+                referrerEmail: referrerEmail || null,
+                referrerName: referrerEntry?.name || referrerEntry?.username || '',
+                refereeId: userId,
                 refereeName: name || '',
-              }, ...referrerLog].slice(0, 200));
-            } catch {}
+                cardAmount: REFERRAL_BONUS,
+                requireCollection,
+                requirePost,
+                collectionDone: false,
+                postDone: false,
+                joinedAt: new Date().toISOString(),
+              });
+              console.log(`⏳ 추천인 카드 대기: referrerId=${referrerId} refereeId=${userId} requireCollection=${requireCollection} requirePost=${requirePost}`);
+            }
           }
         } catch (e) {
           console.error('추천인 처리 오류 (non-critical):', e);
@@ -1846,8 +1870,17 @@ app.post("/make-server-0b7d3bae/data/save", async (c) => {
         sum + (game.playRecords?.length || 0), 0);
 
       
-      return c.json({ 
-        status: 'success', 
+      // 추천인 카드 - 보유 리스트 1개 이상 저장 조건 체크
+      if (finalOwnedGames?.length > 0) {
+        const pendingRef = await kv.get(`referral_pending_${user.id}`).catch(() => null);
+        if (pendingRef && pendingRef.requireCollection && !pendingRef.collectionDone) {
+          await kv.set(`referral_pending_${user.id}`, { ...pendingRef, collectionDone: true });
+          await checkAndGrantPendingReferral(user.id);
+        }
+      }
+
+      return c.json({
+        status: 'success',
         timestamp,
         message: 'Data saved successfully',
         merged: shouldMerge,
@@ -4315,6 +4348,15 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       console.log(`[이벤트] 카테고리 '${category || '자유'}' → 이벤트 참여 제외 (postId=${postId})`);
     }
 
+    // 추천인 카드 - 첫 게시글 조건 체크
+    if (!isDraft) {
+      const pendingRef = await kv.get(`referral_pending_${user.id}`).catch(() => null);
+      if (pendingRef && pendingRef.requirePost && !pendingRef.postDone) {
+        await kv.set(`referral_pending_${user.id}`, { ...pendingRef, postDone: true });
+        await checkAndGrantPendingReferral(user.id);
+      }
+    }
+
     invalidateFeedCache().catch(() => {});
     return c.json({ success: true, post, isFirstPost });
   } catch (error) {
@@ -5703,6 +5745,57 @@ async function writeCardCount(userId: string, count: number): Promise<void> {
   await kv.set(`bonus_cards_${userId}`, { cards: safeCount, updatedAt: Date.now() });
 }
 
+// 추천인 카드 - 조건 충족 시 지급 처리
+async function checkAndGrantPendingReferral(userId: string): Promise<void> {
+  try {
+    const pending = await kv.get(`referral_pending_${userId}`).catch(() => null);
+    if (!pending) return;
+
+    const { requireCollection, requirePost } = pending;
+    let { collectionDone, postDone } = pending;
+
+    const collectionOk = !requireCollection || collectionDone;
+    const postOk = !requirePost || postDone;
+    if (!collectionOk || !postOk) return; // 아직 조건 미충족
+
+    // 카드 지급
+    const { referrerId, referrerEmail, cardAmount, refereeName, refereeId } = pending;
+    const amount = typeof cardAmount === 'number' && cardAmount > 0 ? cardAmount : 3;
+    let cardsBefore = 0;
+    let cardsAfter = 0;
+    if (referrerEmail) {
+      const current = await readCardCountByEmail(referrerEmail, referrerId);
+      cardsBefore = current;
+      cardsAfter = current + amount;
+      await writeCardCountByEmail(referrerEmail, cardsAfter);
+      console.log(`✅ [추천인 조건완료] 카드 +${amount}: email=${referrerEmail} (${current}→${cardsAfter})`);
+    } else {
+      const current = await readCardCount(referrerId);
+      cardsBefore = current;
+      cardsAfter = current + amount;
+      await writeCardCount(referrerId, cardsAfter);
+    }
+    // 이력 로그
+    try {
+      const referrerLog: any[] = await kv.get(`bonus_card_log_${referrerId}`) || [];
+      await kv.set(`bonus_card_log_${referrerId}`, [{
+        type: 'referral',
+        source: `추천인 초대 보상 (${refereeName || refereeId} 조건 완료)`,
+        amount,
+        cardsBefore,
+        cardsAfter,
+        grantedAt: Date.now(),
+        referreeId: refereeId,
+        refereeName: refereeName || '',
+      }, ...referrerLog].slice(0, 200));
+    } catch {}
+    // pending 삭제
+    await kv.del(`referral_pending_${userId}`).catch(() => {});
+  } catch (e) {
+    console.error('[추천인 조건 체크] 오류:', e);
+  }
+}
+
 // 내 보너스카드 조회
 app.get("/make-server-0b7d3bae/bonus-cards/me", async (c) => {
   try {
@@ -6065,6 +6158,43 @@ app.post("/make-server-0b7d3bae/admin/activity-cards/settings", async (c) => {
     await kv.set('activity_cards_always_on', alwaysOn);
     console.log(`[활동카드] always_on=${alwaysOn} by=${user.email}`);
     return c.json({ success: true, alwaysOn });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// 관리자 - 추천인 카드 설정 조회
+app.get("/make-server-0b7d3bae/admin/referral-card/settings", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const settings: any = await kv.get('referral_card_settings').catch(() => null);
+    return c.json({
+      amount: typeof settings?.amount === 'number' ? settings.amount : 3,
+      requireCollection: !!settings?.requireCollection,
+      requirePost: !!settings?.requirePost,
+    });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// 관리자 - 추천인 카드 설정 변경
+app.post("/make-server-0b7d3bae/admin/referral-card/settings", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json();
+    const amount = typeof body.amount === 'number' && body.amount > 0 ? Math.floor(body.amount) : 3;
+    const requireCollection = !!body.requireCollection;
+    const requirePost = !!body.requirePost;
+    await kv.set('referral_card_settings', { amount, requireCollection, requirePost, updatedAt: Date.now(), updatedBy: user.email });
+    console.log(`[추천인카드] 설정 변경: amount=${amount} requireCollection=${requireCollection} requirePost=${requirePost} by=${user.email}`);
+    return c.json({ success: true, amount, requireCollection, requirePost });
   } catch (e) {
     return c.json({ error: String(e) }, 500);
   }

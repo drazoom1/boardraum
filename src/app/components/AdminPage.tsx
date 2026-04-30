@@ -5774,6 +5774,15 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
   const [alwaysOnLoading, setAlwaysOnLoading] = useState(false);
   const [alwaysOnSaving,  setAlwaysOnSaving]  = useState(false);
 
+  // ── 추천인 카드 설정 상태 ──
+  const [referralAmount,      setReferralAmount]      = useState<number>(3);
+  const [referralReqColl,     setReferralReqColl]     = useState<boolean>(false);
+  const [referralReqPost,     setReferralReqPost]     = useState<boolean>(false);
+  const [referralLoading,     setReferralLoading]     = useState(false);
+  const [referralSaving,      setReferralSaving]      = useState(false);
+  const [referralDirty,       setReferralDirty]       = useState(false);
+  const [savedReferralAmount, setSavedReferralAmount] = useState<number>(3);
+
   const loadProb = async () => {
     setProbLoading(true);
     try {
@@ -5829,6 +5838,47 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
     setAlwaysOnSaving(false);
   };
 
+  const loadReferralSettings = async () => {
+    setReferralLoading(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/referral-card/settings`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (res.ok) {
+        const d = await res.json();
+        const amt = typeof d.amount === 'number' ? d.amount : 3;
+        setReferralAmount(amt); setSavedReferralAmount(amt);
+        setReferralReqColl(!!d.requireCollection);
+        setReferralReqPost(!!d.requirePost);
+        setReferralDirty(false);
+      }
+    } catch { toast.error('추천인 설정 불러오기 실패'); }
+    setReferralLoading(false);
+  };
+
+  const saveReferralSettings = async () => {
+    setReferralSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/referral-card/settings`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ amount: referralAmount, requireCollection: referralReqColl, requirePost: referralReqPost }),
+        }
+      );
+      if (res.ok) {
+        setSavedReferralAmount(referralAmount);
+        setReferralDirty(false);
+        toast.success('추천인 카드 설정이 저장됐어요!');
+      } else {
+        toast.error('저장 실패');
+      }
+    } catch { toast.error('저장 중 오류 발생'); }
+    setReferralSaving(false);
+  };
+
   const saveProb = async () => {
     const postVal    = parseFloat(probPost.toString());
     const commentVal = parseFloat(probComment.toString());
@@ -5872,7 +5922,7 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
     setLoading(false);
   };
 
-  useEffect(() => { load(); loadProb(); loadAlwaysOn(); }, []);
+  useEffect(() => { load(); loadProb(); loadAlwaysOn(); loadReferralSettings(); }, []);
 
   const filtered = filter === 'all' ? log : log.filter(e => e.type === filter);
 
@@ -5894,7 +5944,7 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
           <p className="text-sm text-gray-400 mt-0.5">글·댓글 작성 시 랜덤 지급되는 보너스카드 내역 및 확률 설정</p>
         </div>
         <button
-          onClick={() => { load(); loadProb(); loadAlwaysOn(); }}
+          onClick={() => { load(); loadProb(); loadAlwaysOn(); loadReferralSettings(); }}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm"
         >
@@ -6058,6 +6108,116 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
           <p className="text-xs text-gray-400 mt-3">
             💡 이벤트 없을 때 카드를 지급하면 이벤트 참여 동기가 줄 수 있어요. 필요할 때만 켜주세요.
           </p>
+        </div>
+      </div>
+
+      {/* ── 추천인 카드 설정 ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-gray-700">🎁 추천인 카드 설정</h3>
+            <p className="text-xs text-gray-400 mt-0.5">추천인을 통해 가입한 회원의 카드 지급 수량 및 지급 조건</p>
+          </div>
+          {referralLoading && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
+        </div>
+        <div className="px-5 py-5 space-y-5">
+
+          {/* 지급 수량 */}
+          <div>
+            <p className="text-xs font-bold text-gray-600 mb-2">추천인에게 지급할 카드 수</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={referralAmount}
+                onChange={e => { setReferralAmount(parseInt(e.target.value) || 1); setReferralDirty(true); }}
+                className="w-24 px-3 py-2 text-sm font-bold text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-cyan-400 text-center"
+              />
+              <span className="text-sm text-gray-500">장</span>
+              <span className="text-xs text-gray-400">(현재 저장값: {savedReferralAmount}장)</span>
+            </div>
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {[1, 2, 3, 5, 10].map(v => (
+                <button
+                  key={v}
+                  onClick={() => { setReferralAmount(v); setReferralDirty(true); }}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+                    referralAmount === v ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {v}장
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 조건 설정 */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-gray-600">카드 지급 조건 <span className="font-normal text-gray-400">(조건 없으면 가입 즉시 지급)</span></p>
+
+            {/* 보유리스트 조건 */}
+            <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-colors ${referralReqColl ? 'border-cyan-200 bg-cyan-50' : 'border-gray-100 bg-gray-50'}`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${referralReqColl ? 'bg-cyan-100' : 'bg-gray-100'}`}>🎲</span>
+                <div>
+                  <p className={`text-xs font-bold ${referralReqColl ? 'text-cyan-700' : 'text-gray-600'}`}>보유 리스트에 게임 1개 이상 저장</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">가입자가 보드게임을 보유 리스트에 추가해야 지급</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setReferralReqColl(v => !v); setReferralDirty(true); }}
+                className={`relative w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none ${referralReqColl ? 'bg-cyan-400' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${referralReqColl ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {/* 게시글 작성 조건 */}
+            <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-colors ${referralReqPost ? 'border-purple-200 bg-purple-50' : 'border-gray-100 bg-gray-50'}`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${referralReqPost ? 'bg-purple-100' : 'bg-gray-100'}`}>✍️</span>
+                <div>
+                  <p className={`text-xs font-bold ${referralReqPost ? 'text-purple-700' : 'text-gray-600'}`}>홈피드에 게시글 1개 이상 작성</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">가입자가 커뮤니티에 글을 올려야 지급</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setReferralReqPost(v => !v); setReferralDirty(true); }}
+                className={`relative w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none ${referralReqPost ? 'bg-purple-400' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${referralReqPost ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {(referralReqColl && referralReqPost) && (
+              <p className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+                💡 두 조건 모두 선택 시 <strong>둘 다 충족해야</strong> 카드가 지급됩니다.
+              </p>
+            )}
+          </div>
+
+          {/* 저장 버튼 */}
+          <div className="flex justify-end gap-2">
+            {referralDirty && (
+              <button
+                onClick={() => { setReferralAmount(savedReferralAmount); setReferralReqColl(false); setReferralReqPost(false); setReferralDirty(false); }}
+                className="px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg"
+              >
+                되돌리기
+              </button>
+            )}
+            <button
+              onClick={saveReferralSettings}
+              disabled={referralSaving || !referralDirty}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-xl transition-all ${
+                referralDirty ? 'bg-cyan-500 text-white hover:bg-cyan-600 shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {referralSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {referralSaving ? '저장 중...' : '설정 저장'}
+            </button>
+          </div>
         </div>
       </div>
 
