@@ -4512,13 +4512,6 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           {cardProbHot && (
             <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-50 text-orange-500 border border-orange-200 select-none">
               🔥 카드 확률 업!
-              {activityCardProb && (
-                <span className="text-[10px] font-semibold text-orange-400">
-                  {activityCardProb.post > 20 && `글 ${activityCardProb.post % 1 === 0 ? activityCardProb.post : activityCardProb.post.toFixed(1)}%`}
-                  {activityCardProb.post > 20 && activityCardProb.comment > 20 && ' · '}
-                  {activityCardProb.comment > 20 && `댓글 ${activityCardProb.comment % 1 === 0 ? activityCardProb.comment : activityCardProb.comment.toFixed(1)}%`}
-                </span>
-              )}
             </span>
           )}
           {auctionBadge && (
