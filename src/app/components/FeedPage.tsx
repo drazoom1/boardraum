@@ -3873,6 +3873,27 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [composerCategory, setComposerCategory] = useState<string | undefined>(undefined);
   const [auctionBadge, setAuctionBadge] = useState<{ status: 'active' | 'scheduled'; countdown?: string } | null>(null);
   const auctionBadgeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activityCardProb, setActivityCardProb] = useState<{ post: number; comment: number } | null>(null);
+
+  useEffect(() => {
+    async function fetchCardProb() {
+      try {
+        const r = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/activity-prob`,
+          { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+        );
+        if (r.ok) {
+          const d = await r.json();
+          setActivityCardProb({ post: (d.post ?? 0.05) * 100, comment: (d.comment ?? 0.01) * 100 });
+        }
+      } catch {}
+    }
+    fetchCardProb();
+    const pollId = setInterval(fetchCardProb, 5 * 60 * 1000);
+    return () => clearInterval(pollId);
+  }, []);
+
+  const cardProbHot = activityCardProb !== null && (activityCardProb.post > 20 || activityCardProb.comment > 20);
 
   useEffect(() => {
     const API = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
@@ -4487,6 +4508,18 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               className="text-gray-400 hover:text-gray-600 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
+          )}
+          {cardProbHot && (
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-50 text-orange-500 border border-orange-200 select-none">
+              🔥 카드 확률 업!
+              {activityCardProb && (
+                <span className="text-[10px] font-semibold text-orange-400">
+                  {activityCardProb.post > 20 && `글 ${activityCardProb.post % 1 === 0 ? activityCardProb.post : activityCardProb.post.toFixed(1)}%`}
+                  {activityCardProb.post > 20 && activityCardProb.comment > 20 && ' · '}
+                  {activityCardProb.comment > 20 && `댓글 ${activityCardProb.comment % 1 === 0 ? activityCardProb.comment : activityCardProb.comment.toFixed(1)}%`}
+                </span>
+              )}
+            </span>
           )}
           {auctionBadge && (
             auctionBadge.status === 'active' ? (

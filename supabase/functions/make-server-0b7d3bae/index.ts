@@ -5890,6 +5890,21 @@ app.post("/make-server-0b7d3bae/bonus-cards/use", async (c) => {
   }
 });
 
+// 활동 카드 확률 공개 조회 (인증 불필요 - 피드 배지 표시용)
+app.get("/make-server-0b7d3bae/bonus-cards/activity-prob", async (c) => {
+  try {
+    const settings: any = await kv.get('activity_card_prob_settings').catch(() => null);
+    const alwaysOn: boolean = await kv.get('activity_cards_always_on').catch(() => false) || false;
+    return c.json({
+      post:    typeof settings?.post    === 'number' ? settings.post    : 0.05,
+      comment: typeof settings?.comment === 'number' ? settings.comment : 0.01,
+      alwaysOn,
+    });
+  } catch (e) {
+    return c.json({ post: 0.05, comment: 0.01, alwaysOn: false });
+  }
+});
+
 // 활동 보상 카드 (글 5%, 댓글 1%)
 app.post("/make-server-0b7d3bae/bonus-cards/activity", async (c) => {
   try {
