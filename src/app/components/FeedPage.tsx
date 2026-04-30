@@ -461,10 +461,11 @@ function CommentItem({ comment, depth, visibleComments, userId, postId, accessTo
 }
 
 // ─── 댓글 섹션 ───
-const CommentSection = memo(function CommentSection({ post, accessToken, userId, userName, avatarUrl, userRankPoints, onUpdate, inputRef, onViewProfile, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick, staffGradeMap = {} }: {
+const CommentSection = memo(function CommentSection({ post, accessToken, userId, userName, avatarUrl, userRankPoints, onUpdate, inputRef, onViewProfile, isAdmin, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, onGameClick, staffGradeMap = {}, onCardGranted }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   avatarUrl?: string; userRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
   onUpdate: () => void;
+  onCardGranted?: (newCount: number) => void;
   inputRef?: React.RefObject<HTMLInputElement>;
   onViewProfile?: (userId: string, isMe: boolean) => void;
   isAdmin?: boolean;
@@ -647,7 +648,10 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
           body: JSON.stringify({ type: 'comment', sourceId: realComment.id }),
         });
         const cardData = await cardRes.json().catch(() => ({}));
-        if (cardData.granted) setShowCommentCardWon(true);
+        if (cardData.granted) {
+          setShowCommentCardWon(true);
+          if (typeof cardData.cards === 'number') onCardGranted?.(cardData.cards);
+        }
       } catch { /* 카드 실패해도 무시 */ }
     } catch (e: any) {
       const is503 = e.message?.includes('503') || e.status === 503 || String(e).includes('503');
@@ -1031,7 +1035,7 @@ function AdminGameSearch({ accessToken, onSelect }: { accessToken: string; onSel
   );
 }
 
-const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, isStaff, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false, staffGradeMap = {} }: {
+const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, myAvatarUrl, myRankPoints, onUpdate, onFollowToggle, onDelete, onViewProfile, ownedGames, userEmail, userProfile, onOptimisticDelete, onOptimisticLike, onOptimisticComment, onOptimisticDeleteComment, isAdmin, isStaff, onCommentOpen, onCommentClose, onGameClick, wishlistGames = [], onAddToWishlist, onRemoveFromWishlist, bookmarkedPostIds, onBookmarkChange, onGuestAction, onCategoryClick, isWinner = false, isLeading = false, noticeInfo = null, onNoticeChange, isCelebrating = false, isOwnFirstPost = false, staffGradeMap = {}, onCardGranted }: {
   post: FeedPost; accessToken: string; userId: string; userName: string;
   myAvatarUrl?: string;
   myRankPoints?: { points: number; posts: number; comments: number; likesReceived: number };
@@ -1069,6 +1073,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   isCelebrating?: boolean;
   isOwnFirstPost?: boolean;
   staffGradeMap?: Record<string, number>;
+  onCardGranted?: (newCount: number) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -2251,6 +2256,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               onRemoveFromWishlist={onRemoveFromWishlist}
               onGameClick={onGameClick}
               staffGradeMap={staffGradeMap}
+              onCardGranted={onCardGranted}
             />
           </div>
         )}
@@ -5038,6 +5044,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
                 noticeInfo={noticeMap[post.id] ?? null}
                 onNoticeChange={loadNotices}
                 staffGradeMap={staffGradeMap}
+                onCardGranted={(newCount) => {
+                  setBonusCards(newCount);
+                  onCardCountChange?.(newCount);
+                }}
               />
             </div>
           ));})()}
