@@ -11621,6 +11621,58 @@ app.delete("/make-server-0b7d3bae/admin/spam-logs/:userId", async (c) => {
 });
 
 
+// ===== 단체 메일 - 수신거부 목록 조회 =====
+app.get("/make-server-0b7d3bae/admin/bulk-mail/unsubscribe", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const list: string[] = await kv.get('mail_unsubscribe_list') || [];
+    return c.json({ emails: list });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ===== 단체 메일 - 수신거부 추가 =====
+app.post("/make-server-0b7d3bae/admin/bulk-mail/unsubscribe", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const { email } = await c.req.json();
+    if (!email || !email.includes('@')) return c.json({ error: '유효한 이메일을 입력해주세요' }, 400);
+    const list: string[] = await kv.get('mail_unsubscribe_list') || [];
+    const normalized = email.trim().toLowerCase();
+    if (!list.includes(normalized)) {
+      list.push(normalized);
+      await kv.set('mail_unsubscribe_list', list);
+    }
+    return c.json({ success: true, emails: list });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ===== 단체 메일 - 수신거부 해제 =====
+app.delete("/make-server-0b7d3bae/admin/bulk-mail/unsubscribe", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id);
+    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const { email } = await c.req.json();
+    const list: string[] = await kv.get('mail_unsubscribe_list') || [];
+    const updated = list.filter((e: string) => e !== email.trim().toLowerCase());
+    await kv.set('mail_unsubscribe_list', updated);
+    return c.json({ success: true, emails: updated });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // ===== 단체 메일 - 회원 수 조회 =====
 app.get("/make-server-0b7d3bae/admin/bulk-mail/count", async (c) => {
   try {
@@ -11631,8 +11683,9 @@ app.get("/make-server-0b7d3bae/admin/bulk-mail/count", async (c) => {
     const role = await getUserRole(user.id);
     if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
     const allUsers = await getByPrefix('beta_user_');
-    const emails = allUsers.map((item: any) => item.value?.email).filter((e: string) => e && e.includes('@'));
-    return c.json({ count: emails.length });
+    const unsubList: string[] = await kv.get('mail_unsubscribe_list') || [];
+    const emails = allUsers.map((item: any) => item.value?.email).filter((e: string) => e && e.includes('@') && !unsubList.includes(e.toLowerCase()));
+    return c.json({ count: emails.length, unsubscribed: unsubList.length });
   } catch (e) {
     console.error('bulk-mail count error:', e);
     return c.json({ error: String(e) }, 500);
@@ -11666,11 +11719,12 @@ app.get("/make-server-0b7d3bae/admin/bulk-mail/recipients", async (c) => {
     const role = await getUserRole(user.id);
     if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
     const allUsers = await getByPrefix('beta_user_');
+    const unsubList: string[] = await kv.get('mail_unsubscribe_list') || [];
     const emails: string[] = allUsers
       .map((item: any) => ({ email: item.value?.email, name: item.value?.name || item.value?.username || '' }))
-      .filter((u: any) => u.email && u.email.includes('@'))
+      .filter((u: any) => u.email && u.email.includes('@') && !unsubList.includes(u.email.toLowerCase()))
       .map((u: any) => u.email);
-    return c.json({ emails, count: emails.length });
+    return c.json({ emails, count: emails.length, unsubscribed: unsubList.length });
   } catch (e) {
     return c.json({ error: String(e) }, 500);
   }
@@ -11693,9 +11747,10 @@ app.post("/make-server-0b7d3bae/admin/bulk-mail/stream", async (c) => {
     if (!resendKey) return c.json({ error: 'Resend API 키가 설정되지 않았어요' }, 500);
 
     const allUsers = await getByPrefix('beta_user_');
+    const unsubListStream: string[] = await kv.get('mail_unsubscribe_list') || [];
     const allEmails: string[] = allUsers
       .map((item: any) => item.value?.email)
-      .filter((e: string) => e && e.includes('@'));
+      .filter((e: string) => e && e.includes('@') && !unsubListStream.includes(e.toLowerCase()));
     const targetEmails = allEmails.slice(offset);
     const total = allEmails.length;
 
@@ -11813,11 +11868,12 @@ app.post("/make-server-0b7d3bae/admin/bulk-mail", async (c) => {
       return c.json({ success: validList.length, fail: 0, total: validList.length, sample: true, sentTo: validList });
     }
 
-    // 전체 가입 회원 이메일 수집
+    // 전체 가입 회원 이메일 수집 (수신거부 제외)
     const allUsers = await getByPrefix('beta_user_');
+    const unsubListBulk: string[] = await kv.get('mail_unsubscribe_list') || [];
     const allEmails: string[] = allUsers
       .map((item: any) => item.value?.email)
-      .filter((email: string) => email && email.includes('@'));
+      .filter((email: string) => email && email.includes('@') && !unsubListBulk.includes(email.toLowerCase()));
 
     const total = allEmails.length;
     // offset부터 limit개만 슬라이싱 (분할 발송 지원)

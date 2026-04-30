@@ -6092,9 +6092,51 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imgInputRef = useRef<HTMLInputElement>(null);
+  const [unsubList, setUnsubList] = useState<string[]>([]);
+  const [unsubInput, setUnsubInput] = useState('');
+  const [unsubLoading, setUnsubLoading] = useState(false);
 
-  // 회원 수 + 이번 달 발송량 조회
+  const loadUnsub = () => {
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/unsubscribe`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.json()).then(d => { if (d.emails) setUnsubList(d.emails); }).catch(() => {});
+  };
+
+  const addUnsub = async () => {
+    const email = unsubInput.trim().toLowerCase();
+    if (!email.includes('@')) { toast.error('유효한 이메일을 입력해주세요'); return; }
+    setUnsubLoading(true);
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/unsubscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ email }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setUnsubList(d.emails);
+      setUnsubInput('');
+      toast.success('수신거부 등록 완료');
+    } catch (e: any) { toast.error(e.message); } finally { setUnsubLoading(false); }
+  };
+
+  const removeUnsub = async (email: string) => {
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/unsubscribe`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ email }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setUnsubList(d.emails);
+      toast.success('수신거부 해제 완료');
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  // 회원 수 + 이번 달 발송량 + 수신거부 목록 조회
   useEffect(() => {
+    loadUnsub();
     fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/bulk-mail/count`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
@@ -6286,6 +6328,44 @@ function BulkMailSection({ accessToken }: { accessToken: string }) {
         {memberCount !== null && (
           <div className="text-right">
             <p className="text-sm font-bold text-gray-700">수신 대상: {memberCount}명</p>
+            {unsubList.length > 0 && <p className="text-xs text-red-400">{unsubList.length}명 수신거부 제외</p>}
+          </div>
+        )}
+      </div>
+
+      {/* 수신거부 관리 */}
+      <div className="bg-red-50 border border-red-100 rounded-xl p-4 space-y-3">
+        <p className="text-sm font-bold text-red-700">🚫 수신거부 관리</p>
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={unsubInput}
+            onChange={e => setUnsubInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addUnsub()}
+            placeholder="수신거부 이메일 입력"
+            className="flex-1 text-sm border border-red-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
+          />
+          <button
+            onClick={addUnsub}
+            disabled={unsubLoading}
+            className="px-3 py-2 text-sm font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            추가
+          </button>
+        </div>
+        {unsubList.length === 0 ? (
+          <p className="text-xs text-gray-400">수신거부 등록된 이메일이 없어요.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {unsubList.map(email => (
+              <div key={email} className="flex items-center justify-between bg-white border border-red-100 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-gray-700 font-mono truncate">{email}</span>
+                <button
+                  onClick={() => removeUnsub(email)}
+                  className="ml-2 text-xs text-gray-400 hover:text-red-500 flex-shrink-0"
+                >✕</button>
+              </div>
+            ))}
           </div>
         )}
       </div>
