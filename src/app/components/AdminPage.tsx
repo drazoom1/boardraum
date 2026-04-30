@@ -5769,6 +5769,11 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
   const [savedPost,    setSavedPost]    = useState<number>(5);
   const [savedComment, setSavedComment] = useState<number>(1);
 
+  // ── 항상 지급 설정 상태 ──
+  const [alwaysOn,        setAlwaysOn]        = useState<boolean>(false);
+  const [alwaysOnLoading, setAlwaysOnLoading] = useState(false);
+  const [alwaysOnSaving,  setAlwaysOnSaving]  = useState(false);
+
   const loadProb = async () => {
     setProbLoading(true);
     try {
@@ -5786,6 +5791,42 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
       }
     } catch { toast.error('확률 불러오기 실패'); }
     setProbLoading(false);
+  };
+
+  const loadAlwaysOn = async () => {
+    setAlwaysOnLoading(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/activity-cards/settings`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (res.ok) {
+        const d = await res.json();
+        setAlwaysOn(!!d.alwaysOn);
+      }
+    } catch { toast.error('설정 불러오기 실패'); }
+    setAlwaysOnLoading(false);
+  };
+
+  const saveAlwaysOn = async (value: boolean) => {
+    setAlwaysOnSaving(true);
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/activity-cards/settings`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ alwaysOn: value }),
+        }
+      );
+      if (res.ok) {
+        setAlwaysOn(value);
+        toast.success(value ? '이벤트 없을 때도 카드 지급 활성화' : '이벤트 진행 중에만 카드 지급');
+      } else {
+        toast.error('설정 저장 실패');
+      }
+    } catch { toast.error('저장 중 오류 발생'); }
+    setAlwaysOnSaving(false);
   };
 
   const saveProb = async () => {
@@ -5831,7 +5872,7 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
     setLoading(false);
   };
 
-  useEffect(() => { load(); loadProb(); }, []);
+  useEffect(() => { load(); loadProb(); loadAlwaysOn(); }, []);
 
   const filtered = filter === 'all' ? log : log.filter(e => e.type === filter);
 
@@ -5853,7 +5894,7 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
           <p className="text-sm text-gray-400 mt-0.5">글·댓글 작성 시 랜덤 지급되는 보너스카드 내역 및 확률 설정</p>
         </div>
         <button
-          onClick={() => { load(); loadProb(); }}
+          onClick={() => { load(); loadProb(); loadAlwaysOn(); }}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm"
         >
@@ -5867,7 +5908,7 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
         <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-gray-700">🎲 카드 지급 확률 설정</h3>
-            <p className="text-xs text-gray-400 mt-0.5">이벤트 진행 중 글·댓글 작성 시 카드가 지급될 확률 (0~100%)</p>
+            <p className="text-xs text-gray-400 mt-0.5">글·댓글 작성 시 카드가 지급될 확률 설정 (0~100%)</p>
           </div>
           {probLoading && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
         </div>
@@ -5977,6 +6018,46 @@ function ActivityCardLogSection({ accessToken }: { accessToken: string }) {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── 항상 지급 설정 카드 ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-gray-700">⚡ 카드 지급 조건 설정</h3>
+            <p className="text-xs text-gray-400 mt-0.5">이벤트 없을 때도 카드를 지급할지 선택할 수 있어요</p>
+          </div>
+          {alwaysOnLoading && <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />}
+        </div>
+        <div className="px-5 py-5">
+          <div className={`flex items-center justify-between p-4 rounded-xl border-2 transition-colors ${alwaysOn ? 'border-orange-200 bg-orange-50' : 'border-gray-100 bg-gray-50'}`}>
+            <div className="flex items-center gap-3">
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg ${alwaysOn ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                {alwaysOn ? '🔥' : '❄️'}
+              </span>
+              <div>
+                <p className={`text-sm font-bold ${alwaysOn ? 'text-orange-700' : 'text-gray-600'}`}>
+                  {alwaysOn ? '항상 지급 (이벤트 없어도 OK)' : '이벤트 진행 중에만 지급'}
+                </p>
+                <p className={`text-xs mt-0.5 ${alwaysOn ? 'text-orange-400' : 'text-gray-400'}`}>
+                  {alwaysOn
+                    ? '글·댓글 작성 시 이벤트 유무에 관계없이 설정된 확률로 카드 지급'
+                    : '현재는 이벤트가 진행 중일 때만 카드가 지급돼요'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => saveAlwaysOn(!alwaysOn)}
+              disabled={alwaysOnSaving || alwaysOnLoading}
+              className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${alwaysOn ? 'bg-orange-400' : 'bg-gray-300'} ${alwaysOnSaving ? 'opacity-60' : ''}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${alwaysOn ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            💡 이벤트 없을 때 카드를 지급하면 이벤트 참여 동기가 줄 수 있어요. 필요할 때만 켜주세요.
+          </p>
         </div>
       </div>
 

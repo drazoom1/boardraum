@@ -5907,26 +5907,29 @@ app.post("/make-server-0b7d3bae/bonus-cards/activity", async (c) => {
     const probability = type === 'post' ? postProb : type === 'comment' ? commentProb : 0;
     if (probability === 0) return c.json({ granted: false });
 
-    // ✅ 이벤트 진행 중 여부 확인 (이벤트 없으면 카드 지급 안 함)
+    // ✅ 이벤트 진행 중 여부 확인 (always_on이면 이벤트 없어도 지급)
+    const activityAlwaysOn: boolean = await kv.get('activity_cards_always_on').catch(() => false) || false;
     const activityEvents: any[] = await kv.get('last_post_events') || [];
     const activityActiveEvent = activityEvents.find((e: any) => e.active);
-    if (!activityActiveEvent) {
+    if (!activityAlwaysOn && !activityActiveEvent) {
       console.log(`[활동카드] 이벤트 없음 → 지급 안 함 (type=${type}, email=${user.email})`);
       return c.json({ granted: false, reason: 'no_event' });
     }
 
-    // ✅ 휴식 시간 여부 확인
+    // ✅ 휴식 시간 여부 확인 (이벤트 진행 중인 경우에만 적용)
     const activityKstHour = (new Date().getUTCHours() + 9) % 24;
-    const actSleepStart = activityActiveEvent.sleepStart ?? 0;
-    const actSleepEnd = activityActiveEvent.sleepEnd ?? 8;
-    const actIsSleep = actSleepStart !== actSleepEnd && (
-      actSleepStart < actSleepEnd
-        ? activityKstHour >= actSleepStart && activityKstHour < actSleepEnd
-        : activityKstHour >= actSleepStart || activityKstHour < actSleepEnd
-    );
-    if (actIsSleep) {
-      console.log(`[활동카드] 휴식 시간(KST ${activityKstHour}시) → 지급 안 함 (type=${type}, email=${user.email})`);
-      return c.json({ granted: false, reason: 'sleep' });
+    if (activityActiveEvent) {
+      const actSleepStart = activityActiveEvent.sleepStart ?? 0;
+      const actSleepEnd = activityActiveEvent.sleepEnd ?? 8;
+      const actIsSleep = actSleepStart !== actSleepEnd && (
+        actSleepStart < actSleepEnd
+          ? activityKstHour >= actSleepStart && activityKstHour < actSleepEnd
+          : activityKstHour >= actSleepStart || activityKstHour < actSleepEnd
+      );
+      if (actIsSleep) {
+        console.log(`[활동카드] 휴식 시간(KST ${activityKstHour}시) → 지급 안 함 (type=${type}, email=${user.email})`);
+        return c.json({ granted: false, reason: 'sleep' });
+      }
     }
 
     const roll = Math.random();
@@ -6017,6 +6020,37 @@ app.put("/make-server-0b7d3bae/admin/activity-card-prob", async (c) => {
     return c.json({ success: true, post, comment });
   } catch (e) {
     console.error('[활동카드확률] 수정 오류:', e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// 관리자 - 활동 카드 항상 지급 설정 조회
+app.get("/make-server-0b7d3bae/admin/activity-cards/settings", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const alwaysOn: boolean = await kv.get('activity_cards_always_on').catch(() => false) || false;
+    return c.json({ alwaysOn });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// 관리자 - 활동 카드 항상 지급 설정 변경
+app.post("/make-server-0b7d3bae/admin/activity-cards/settings", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id || user.email !== 'sityplanner2@naver.com') return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json();
+    const alwaysOn = !!body.alwaysOn;
+    await kv.set('activity_cards_always_on', alwaysOn);
+    console.log(`[활동카드] always_on=${alwaysOn} by=${user.email}`);
+    return c.json({ success: true, alwaysOn });
+  } catch (e) {
     return c.json({ error: String(e) }, 500);
   }
 });
