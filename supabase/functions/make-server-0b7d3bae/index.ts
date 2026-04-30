@@ -2538,32 +2538,34 @@ app.get("/make-server-0b7d3bae/customs/:gameId", async (c) => {
     }
     
     
+    // 카테고리 없는 전체 조회는 캐시 사용
+    const wikiCacheKey = `game_wiki_cache_${gameId}`;
+    if (!category) {
+      const wikiCached = await kv.get(wikiCacheKey);
+      if (wikiCached) return c.json({ posts: wikiCached });
+    }
+
     // Get all posts for this game
     const prefix = `game_custom_${gameId}_`;
     const allPostsData = await getByPrefix(prefix);
     const allPosts = allPostsData.map(d => d.value);
-    
-    
-    // getByPrefix already returns values (posts), not {key, value} pairs
+
     let posts = allPosts.filter(post => post && post.category);
-    
-    
+
     // Filter by category if specified
     if (category) {
       posts = posts.filter(p => p.category === category);
     }
-    
-    // 게임 커스텀 페이지에서는 ����자도 승인된 게시물만 표시
-    // (관리자 승인 페이지는 별도 엔드포인트 사용)
+
     posts = posts.filter(p => p.status === 'approved');
-    
-    // Log each post for debugging
-    posts.forEach(p => {
-    });
-    
+
     // Sort by created_at desc
     posts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    
+
+    if (!category) {
+      await kv.set(wikiCacheKey, posts, 180).catch(() => {});
+    }
+
     return c.json({ posts });
   } catch (error) {
     console.error('❌ [Get Customs] Error:', error);
@@ -2636,6 +2638,7 @@ app.post("/make-server-0b7d3bae/customs", async (c) => {
     
     
     await kv.set(kvKey, post);
+    kv.del(`game_wiki_cache_${gameId}`).catch(() => {});
 
     // 운영진/관리자 위키 등록 자동 적립 +10점
     let staffPointsAwarded = 0;
@@ -2736,8 +2739,8 @@ app.patch("/make-server-0b7d3bae/customs/:postId", async (c) => {
     
     
     await kv.set(postItem.key, updatedPost);
-    
-    
+    kv.del(`game_wiki_cache_${updatedPost.gameId}`).catch(() => {});
+
     return c.json({ success: true, post: updatedPost });
   } catch (error) {
     console.error('❌ [Update Post] Error:', error);
@@ -2856,8 +2859,9 @@ app.delete("/make-server-0b7d3bae/customs/:postId", async (c) => {
     
     // Delete the post from KV Store
     await kv.del(postItem.key);
-    
-    
+    const delGameId = postItem.value?.gameId;
+    if (delGameId) kv.del(`game_wiki_cache_${delGameId}`).catch(() => {});
+
     return c.json({ success: true, message: 'Post deleted successfully' });
   } catch (error) {
     console.error('❌ [Delete Post] Error:', error);
@@ -3872,6 +3876,12 @@ app.get("/make-server-0b7d3bae/community/drafts", async (c) => {
 app.get("/make-server-0b7d3bae/community/posts/by-game/:gameId", async (c) => {
   try {
     const gameId = c.req.param('gameId');
+    const normalizedId = gameId.replace(/^bgg_/, '');
+    const cacheKey = `game_feed_cache_${normalizedId}`;
+
+    const cached = await kv.get(cacheKey);
+    if (cached) return c.json({ posts: cached });
+
     const postsData = await getByPrefix('beta_post_');
     const posts = postsData
       .map((d: any) => d.value)
@@ -3889,6 +3899,8 @@ app.get("/make-server-0b7d3bae/community/posts/by-game/:gameId", async (c) => {
       })
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 50);
+
+    await kv.set(cacheKey, posts, 180).catch(() => {});
     return c.json({ posts });
   } catch (error) {
     return c.json({ posts: [], error: String(error) }, 500);
@@ -4159,12 +4171,16 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
     
     const kvKey = `beta_post_${postId}`;
     await kv.set(kvKey, post);
-    // 게임태그 있으면 트렌딩 캐시 무효화 + 게임피드 새 글 뱃지 갱신
+    // 게임태그 있으면 트렌딩 캐시 무효화 + 게임피드 새 글 뱃지 갱신 + 게임피드 캐시 무효화
     if (!isDraft && post.linkedGames?.length > 0) {
       await kv.del('trending_games_cache').catch(() => {});
       const feedLatestAt = new Date().toISOString();
       for (const g of post.linkedGames) {
-        if (g?.id) kv.set(`game_feed_latest_${g.id}`, { createdAt: feedLatestAt }).catch(() => {});
+        if (g?.id) {
+          const nid = g.id.replace(/^bgg_/, '');
+          kv.set(`game_feed_latest_${g.id}`, { createdAt: feedLatestAt }).catch(() => {});
+          kv.del(`game_feed_cache_${nid}`).catch(() => {});
+        }
       }
     }
     // 포인트 적립 + 알림 (임시저장 제외)
@@ -4527,6 +4543,11 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     
     await kv.del(`beta_post_${postId}`);
     invalidateFeedCache().catch(() => {});
+    // 게임 피드 캐시 무효화
+    const delLinkedGames = Array.isArray(post.linkedGames) ? post.linkedGames : (post.linkedGame ? [post.linkedGame] : []);
+    for (const g of delLinkedGames) {
+      if (g?.id) kv.del(`game_feed_cache_${g.id.replace(/^bgg_/, '')}`).catch(() => {});
+    }
 
     // 본인이 삭제한 경우에만 포인트 회수 (임시저장 제외)
     if (post.userId === user.id && !post.isDraft) {
@@ -4635,11 +4656,13 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     if (isPrivate !== undefined) updatedPost.isPrivate = isPrivate;
     
     await kv.set(`beta_post_${postId}`, updatedPost);
-    // 피드 캐시 무효화 (전체 + 해당 카테고리)
+    // 피드 캐시 무효화 (전체 + 해당 카테고리 + 게임 피드)
+    const editLinkedGames = Array.isArray(updatedPost.linkedGames) ? updatedPost.linkedGames : (updatedPost.linkedGame ? [updatedPost.linkedGame] : []);
     await Promise.all([
       kv.del('feed_cache_전체').catch(() => {}),
       kv.del(`feed_cache_${updatedPost.category}`).catch(() => {}),
       kv.del('trending_games_cache').catch(() => {}),
+      ...editLinkedGames.map((g: any) => g?.id ? kv.del(`game_feed_cache_${g.id.replace(/^bgg_/, '')}`).catch(() => {}) : Promise.resolve()),
     ]);
 
     // 운영진 태그 자동 적립: 운영진/관리자가 게임 태그 추가한 경우 +2점

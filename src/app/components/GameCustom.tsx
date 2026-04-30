@@ -529,6 +529,23 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       // deduplication으로 id가 바뀔 수 있으므로 여러 ID를 모두 시도
       const normalize = (id: string) => id.replace(/^bgg_/, '').trim();
 
+      // 클라이언트 캐시 확인 (3분)
+      const primaryId = normalize(selectedGame.bggId || selectedGame.id || '');
+      const feedCacheKey = primaryId ? `ss_game_feed_${primaryId}` : null;
+      if (feedCacheKey) {
+        try {
+          const cached = sessionStorage.getItem(feedCacheKey);
+          if (cached) {
+            const { ts, data } = JSON.parse(cached);
+            if (Date.now() - ts < 3 * 60 * 1000) {
+              setGameFeedPosts(data);
+              setGameFeedLoading(false);
+              return;
+            }
+          }
+        } catch {}
+      }
+
       // BGG ID 여부 판별: 숫자만으로 구성 & 10자리 미만
       // (custom_${Date.now()} 같은 13자리 타임스탬프 ID는 서버에 없으므로 제외)
       const isBggId = (id: string) => /^\d+$/.test(id) && id.length <= 9;
@@ -601,6 +618,9 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
       console.log(`[GameFeed] ${merged.length} posts found for "${selectedGame.koreanName || selectedGame.englishName}"`);
       setGameFeedPosts(merged);
+      if (feedCacheKey) {
+        try { sessionStorage.setItem(feedCacheKey, JSON.stringify({ ts: Date.now(), data: merged })); } catch {}
+      }
     } catch (e) {
       console.error('[GameFeed] loadGameFeedPosts error:', e);
     }
@@ -612,18 +632,30 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${getWikiGameId(selectedGame)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+      const wikiId = getWikiGameId(selectedGame);
+      const wikiCacheKey = `ss_game_wiki_${wikiId}`;
+      try {
+        const cached = sessionStorage.getItem(wikiCacheKey);
+        if (cached) {
+          const { ts, data } = JSON.parse(cached);
+          if (Date.now() - ts < 3 * 60 * 1000) {
+            setPosts(data);
+            setIsLoading(false);
+            return;
+          }
         }
+      } catch {}
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${wikiId}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
       if (response.ok) {
         const data = await response.json();
-        setPosts(data.posts || []);
+        const posts = data.posts || [];
+        setPosts(posts);
+        try { sessionStorage.setItem(wikiCacheKey, JSON.stringify({ ts: Date.now(), data: posts })); } catch {}
       }
     } catch (error) {
       console.error('Failed to load posts:', error);
