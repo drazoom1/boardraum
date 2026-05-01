@@ -19,7 +19,7 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
-          supabase functions deploy make-server-bb453c8e --project-ref wwpvntmueafieessgnbu
-          supabase functions deploy make-server-0b7d3bae --project-ref wwpvntmueafieessgnbu
+          supabase functions deploy make-server-bb453c8e --project-ref wwpvntmueafieessgnbu --no-verify-jwt
+          supabase functions deploy make-server-0b7d3bae --project-ref wwpvntmueafieessgnbu --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
