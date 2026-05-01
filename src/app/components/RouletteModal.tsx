@@ -15,27 +15,28 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
     const canvas = canvasRef.current;
     if (!canvas || participants.length === 0) return;
 
+    const TWO_PI = Math.PI * 2;
     const total = totalCards || participants.reduce((s: number, p: any) => s + p.cardCount, 0);
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
     const r  = cx - 8;
 
-    // winnerId 우선, 없으면 nickname으로 당첨자 탐색
+    // 화살표(포인터)는 휠 상단(북쪽, -π/2)에 고정
+    // winner 칸의 중간 각도를 -π/2에 맞추려면: finalRotation = -winnerMid - π/2 + extraSpins
     let accAngle = -Math.PI / 2;
     let winnerMid = accAngle;
-    let actualWinnerNickname = winnerNickname;
     for (const p of participants) {
-      const slice = (p.cardCount / total) * Math.PI * 2;
+      const slice = (p.cardCount / total) * TWO_PI;
       const isWinner = winnerId ? p.userId === winnerId : p.nickname === winnerNickname;
       if (isWinner) {
         winnerMid = accAngle + slice / 2;
-        actualWinnerNickname = p.nickname; // 휠이 실제로 멈추는 칸의 닉네임
         break;
       }
       accAngle += slice;
     }
-    const extraSpins    = Math.PI * 2 * 8;
-    const finalRotation = -winnerMid - (-Math.PI / 2) + extraSpins;
+    const extraSpins = TWO_PI * 8;
+    // 수정된 공식: winner 칸 중심이 포인터(북쪽 = -π/2)에 정확히 멈춤
+    const finalRotation = -winnerMid - Math.PI / 2 + extraSpins;
 
     const draw = (rot: number) => {
       const ctx = canvas.getContext('2d')!;
@@ -45,14 +46,14 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
       ctx.shadowColor = 'rgba(0,0,0,0.15)';
       ctx.shadowBlur  = 12;
       ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, TWO_PI);
       ctx.fillStyle = '#fff';
       ctx.fill();
       ctx.restore();
 
       let angle = rot - Math.PI / 2;
       participants.forEach((p, i) => {
-        const slice = (p.cardCount / total) * Math.PI * 2;
+        const slice = (p.cardCount / total) * TWO_PI;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, r, angle, angle + slice);
@@ -61,12 +62,12 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
         ctx.strokeStyle = '#fff';
         ctx.lineWidth   = 2;
         ctx.stroke();
-
         angle += slice;
       });
 
+      // 중앙 원
       ctx.beginPath();
-      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 18, 0, TWO_PI);
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.1)';
       ctx.shadowBlur = 4;
@@ -75,6 +76,7 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
       ctx.lineWidth = 2;
       ctx.stroke();
 
+      // 포인터 삼각형 — 상단, 꼭지점이 아래(휠 안쪽)를 향함
       ctx.beginPath();
       ctx.moveTo(cx - 10, cy - r - 2);
       ctx.lineTo(cx + 10, cy - r - 2);
@@ -97,8 +99,18 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
         animRef.current = requestAnimationFrame(animate);
       } else {
         draw(finalRotation);
-        // 휠이 멈춘 칸의 실제 닉네임을 전달
-        setTimeout(() => onDone?.(actualWinnerNickname), 600);
+
+        // 화살표(북쪽 = -π/2)가 실제로 가리키는 칸을 기하학적으로 계산
+        // 포인터의 첫 번째 칸 시작점으로부터의 상대 각도
+        const pointerPos = ((-finalRotation) % TWO_PI + TWO_PI) % TWO_PI;
+        let cum = 0;
+        let pointed = participants[0];
+        for (const p of participants) {
+          cum += (p.cardCount / total) * TWO_PI;
+          if (pointerPos < cum) { pointed = p; break; }
+        }
+
+        setTimeout(() => onDone?.(pointed.nickname), 600);
       }
     };
 
@@ -109,7 +121,7 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
   return (
     <div className="flex flex-col items-center gap-3">
       <canvas ref={canvasRef} width={280} height={280} style={{ borderRadius: '50%' }} />
-      {/* 색상 범례 — 닉네임 전체 표시 */}
+      {/* 색상 범례 */}
       <div className="w-full grid grid-cols-2 gap-x-3 gap-y-1 px-1">
         {participants.map((p, i) => (
           <div key={p.userId || i} className="flex items-center gap-1.5 min-w-0">
@@ -122,7 +134,6 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
   );
 }
 
-// 유저용 전체 화면 모달 — 룰렛 재생 + 당첨자 표시
 export function RouletteModal({ participants, totalCards, winnerNickname, winnerId, prizeName, onClose }: {
   participants: any[];
   totalCards: number;
@@ -132,7 +143,6 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
   onClose: () => void;
 }) {
   const [done, setDone] = useState(false);
-  // 휠이 실제로 멈춘 칸의 닉네임 — 이것만 표시 (winnerNickname KV값 무시)
   const [actualWinner, setActualWinner] = useState('');
 
   return (
@@ -145,7 +155,6 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
         className="bg-white rounded-3xl w-full max-w-sm mx-4 overflow-hidden shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
-        {/* 헤더 */}
         <div className="px-5 pt-5 pb-3 text-center" style={{ background: 'linear-gradient(135deg,#bfdbfe,#dbeafe)' }}>
           <div className="text-2xl mb-1">🎲</div>
           <p className="font-black text-blue-900 text-base">얼음깨기 추첨</p>
@@ -153,7 +162,6 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
         </div>
 
         <div className="px-5 py-5 space-y-4">
-          {/* 룰렛 휠 */}
           <RouletteWheel
             participants={participants}
             totalCards={totalCards}
@@ -162,7 +170,6 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
             onDone={(name) => { setActualWinner(name); setDone(true); }}
           />
 
-          {/* 당첨자 — 휠이 멈춘 칸 그대로 */}
           {done ? (
             <div className="text-center py-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200">
               <div className="text-3xl mb-1">🏆</div>
