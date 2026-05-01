@@ -350,9 +350,10 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
     const participants = rawParticipants.map((p, i) => {
       const [profile, beta] = nicknameEntries[i];
       const nickname =
-        profile?.username?.trim() ||
-        beta?.username?.trim() ||
-        beta?.name?.trim() ||
+        (profile as any)?.username?.trim() ||
+        (profile as any)?.name?.trim() ||
+        (beta as any)?.username?.trim() ||
+        (beta as any)?.name?.trim() ||
         p.nickname ||
         p.userId;
       return { ...p, nickname };
@@ -506,6 +507,38 @@ app.delete(`${PREFIX}/ice/admin/reset-usage`, async (c) => {
     return c.json({ success: true, deleted: rows.length });
   } catch (e) {
     console.error("[ice/admin/reset-usage]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] POST /ice/admin/fix-winner-nickname — 당첨자 닉네임 재조회
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/ice/admin/fix-winner-nickname`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+    const event = await kv.get("ice_event_current");
+    if (!event || event.status !== "drawn") return c.json({ error: "추첨 완료된 이벤트가 없습니다" }, 400);
+    if (!event.winnerId) return c.json({ error: "winnerId가 없습니다" }, 400);
+
+    const [profile, beta] = await Promise.all([
+      kv.get(`user_profile_${event.winnerId}`).catch(() => null),
+      kv.get(`beta_user_${event.winnerId}`).catch(() => null),
+    ]);
+    const nickname =
+      (profile as any)?.username?.trim() ||
+      (profile as any)?.name?.trim() ||
+      (beta as any)?.username?.trim() ||
+      (beta as any)?.name?.trim() ||
+      event.winnerNickname;
+
+    await kv.set("ice_event_current", { ...event, winnerNickname: nickname });
+    console.log(`[얼음깨기] 당첨자 닉네임 수정: ${event.winnerNickname} → ${nickname} by ${user.email}`);
+    return c.json({ success: true, winnerNickname: nickname });
+  } catch (e) {
+    console.error("[ice/admin/fix-winner-nickname]", e);
     return c.json({ error: String(e) }, 500);
   }
 });

@@ -545,6 +545,7 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
   const [confirm, setConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [fixingNickname, setFixingNickname] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
 
   const handleClear = async () => {
@@ -560,6 +561,20 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
     } catch { toast.error('네트워크 오류'); }
     setClearing(false);
     setConfirm(false);
+  };
+
+  const handleFixNickname = async () => {
+    setFixingNickname(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/fix-winner-nickname`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '재조회 실패'); return; }
+      toast.success(`당첨자 닉네임이 "${d.winnerNickname}"으로 업데이트됐습니다`);
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setFixingNickname(false);
   };
 
   const handlePublish = async () => {
@@ -620,6 +635,10 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
               <div className="text-4xl">🎉</div>
               <p className="text-xs text-gray-400">당첨자</p>
               <p className="text-3xl font-black text-gray-900">{event.winnerNickname}</p>
+              <button onClick={handleFixNickname} disabled={fixingNickname}
+                className="text-xs text-gray-400 underline hover:text-blue-500 disabled:opacity-50">
+                {fixingNickname ? '재조회 중...' : '닉네임 잘못됐나요? 재조회'}
+              </button>
               {event.prizeGameName && (
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full">
                   <span className="text-sm font-bold text-orange-700">🎁 {event.prizeGameName}</span>
