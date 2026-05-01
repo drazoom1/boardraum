@@ -6,7 +6,7 @@ const WHEEL_COLORS = [
 ];
 
 export function RouletteWheel({ participants, totalCards, winnerNickname, winnerId, onDone }: {
-  participants: any[]; totalCards: number; winnerNickname: string; winnerId?: string; onDone?: () => void;
+  participants: any[]; totalCards: number; winnerNickname: string; winnerId?: string; onDone?: (actualWinner: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef   = useRef<number>(0);
@@ -20,14 +20,16 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
     const cy = canvas.height / 2;
     const r  = cx - 8;
 
+    // winnerId 우선, 없으면 nickname으로 당첨자 탐색
     let accAngle = -Math.PI / 2;
     let winnerMid = accAngle;
+    let actualWinnerNickname = winnerNickname;
     for (const p of participants) {
       const slice = (p.cardCount / total) * Math.PI * 2;
-      // userId로 먼저 매칭, 없으면 nickname으로 fallback
       const isWinner = winnerId ? p.userId === winnerId : p.nickname === winnerNickname;
       if (isWinner) {
         winnerMid = accAngle + slice / 2;
+        actualWinnerNickname = p.nickname; // 휠이 실제로 멈추는 칸의 닉네임
         break;
       }
       accAngle += slice;
@@ -60,19 +62,6 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
         ctx.lineWidth   = 2;
         ctx.stroke();
 
-        if (slice > 0.15) {
-          const mid = angle + slice / 2;
-          ctx.save();
-          ctx.translate(cx + Math.cos(mid) * r * 0.65, cy + Math.sin(mid) * r * 0.65);
-          ctx.rotate(mid + Math.PI / 2);
-          ctx.fillStyle = '#fff';
-          ctx.font       = `bold ${Math.min(12, Math.max(8, Math.round(slice * 14)))}px sans-serif`;
-          ctx.textAlign  = 'center';
-          ctx.textBaseline = 'middle';
-          const label = p.nickname.length > 5 ? p.nickname.slice(0, 5) + '…' : p.nickname;
-          ctx.fillText(label, 0, 0);
-          ctx.restore();
-        }
         angle += slice;
       });
 
@@ -108,17 +97,27 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, winner
         animRef.current = requestAnimationFrame(animate);
       } else {
         draw(finalRotation);
-        setTimeout(() => onDone?.(), 600);
+        // 휠이 멈춘 칸의 실제 닉네임을 전달
+        setTimeout(() => onDone?.(actualWinnerNickname), 600);
       }
     };
 
     animRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animRef.current);
-  }, [winnerNickname]);
+  }, [winnerNickname, winnerId]);
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center gap-3">
       <canvas ref={canvasRef} width={280} height={280} style={{ borderRadius: '50%' }} />
+      {/* 색상 범례 — 닉네임 전체 표시 */}
+      <div className="w-full grid grid-cols-2 gap-x-3 gap-y-1 px-1">
+        {participants.map((p, i) => (
+          <div key={p.userId || i} className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: WHEEL_COLORS[i % WHEEL_COLORS.length] }} />
+            <span className="text-xs text-gray-700 truncate">{p.nickname}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -133,11 +132,8 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
   onClose: () => void;
 }) {
   const [done, setDone] = useState(false);
-
-  // 당첨자 표시 닉네임: winnerId로 participants에서 찾아서 표시 (불일치 방지)
-  const displayNickname = winnerId
-    ? (participants.find(p => p.userId === winnerId)?.nickname || winnerNickname)
-    : winnerNickname;
+  // 휠이 실제로 멈춘 칸의 닉네임 — 이것만 표시 (winnerNickname KV값 무시)
+  const [actualWinner, setActualWinner] = useState('');
 
   return (
     <div
@@ -163,15 +159,15 @@ export function RouletteModal({ participants, totalCards, winnerNickname, winner
             totalCards={totalCards}
             winnerNickname={winnerNickname}
             winnerId={winnerId}
-            onDone={() => setDone(true)}
+            onDone={(name) => { setActualWinner(name); setDone(true); }}
           />
 
-          {/* 당첨자 */}
+          {/* 당첨자 — 휠이 멈춘 칸 그대로 */}
           {done ? (
             <div className="text-center py-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200">
               <div className="text-3xl mb-1">🏆</div>
               <p className="text-xs text-gray-400 mb-1">당첨자</p>
-              <p className="text-2xl font-black text-gray-900">{displayNickname}</p>
+              <p className="text-2xl font-black text-gray-900">{actualWinner}</p>
               <p className="text-xs text-gray-400 mt-2">화면을 탭하면 닫힙니다</p>
             </div>
           ) : (

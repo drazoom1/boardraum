@@ -484,7 +484,7 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
               totalCards={totalCards}
               winnerNickname={winner.nickname}
               winnerId={winner.id}
-              onDone={() => { setPhase('done'); onRefresh(); }}
+              onDone={(actualName) => { setWinner(w => w ? { ...w, nickname: actualName } : w); setPhase('done'); onRefresh(); }}
             />
           )}
 
