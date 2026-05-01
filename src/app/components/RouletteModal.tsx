@@ -5,8 +5,8 @@ const WHEEL_COLORS = [
   '#ec4899','#06b6d4','#84cc16','#f97316','#6366f1',
 ];
 
-export function RouletteWheel({ participants, totalCards, winnerNickname, onDone }: {
-  participants: any[]; totalCards: number; winnerNickname: string; onDone?: () => void;
+export function RouletteWheel({ participants, totalCards, winnerNickname, winnerId, onDone }: {
+  participants: any[]; totalCards: number; winnerNickname: string; winnerId?: string; onDone?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef   = useRef<number>(0);
@@ -24,7 +24,9 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, onDone
     let winnerMid = accAngle;
     for (const p of participants) {
       const slice = (p.cardCount / total) * Math.PI * 2;
-      if (p.nickname === winnerNickname) {
+      // userId로 먼저 매칭, 없으면 nickname으로 fallback
+      const isWinner = winnerId ? p.userId === winnerId : p.nickname === winnerNickname;
+      if (isWinner) {
         winnerMid = accAngle + slice / 2;
         break;
       }
@@ -122,14 +124,20 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, onDone
 }
 
 // 유저용 전체 화면 모달 — 룰렛 재생 + 당첨자 표시
-export function RouletteModal({ participants, totalCards, winnerNickname, prizeName, onClose }: {
+export function RouletteModal({ participants, totalCards, winnerNickname, winnerId, prizeName, onClose }: {
   participants: any[];
   totalCards: number;
   winnerNickname: string;
+  winnerId?: string;
   prizeName?: string;
   onClose: () => void;
 }) {
   const [done, setDone] = useState(false);
+
+  // 당첨자 표시 닉네임: winnerId로 participants에서 찾아서 표시 (불일치 방지)
+  const displayNickname = winnerId
+    ? (participants.find(p => p.userId === winnerId)?.nickname || winnerNickname)
+    : winnerNickname;
 
   return (
     <div
@@ -154,6 +162,7 @@ export function RouletteModal({ participants, totalCards, winnerNickname, prizeN
             participants={participants}
             totalCards={totalCards}
             winnerNickname={winnerNickname}
+            winnerId={winnerId}
             onDone={() => setDone(true)}
           />
 
@@ -162,7 +171,7 @@ export function RouletteModal({ participants, totalCards, winnerNickname, prizeN
             <div className="text-center py-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200">
               <div className="text-3xl mb-1">🏆</div>
               <p className="text-xs text-gray-400 mb-1">당첨자</p>
-              <p className="text-2xl font-black text-gray-900">{winnerNickname}</p>
+              <p className="text-2xl font-black text-gray-900">{displayNickname}</p>
               <p className="text-xs text-gray-400 mt-2">화면을 탭하면 닫힙니다</p>
             </div>
           ) : (

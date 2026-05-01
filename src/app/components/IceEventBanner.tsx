@@ -338,6 +338,7 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
           participants={(event as any).rouletteParticipants ?? []}
           totalCards={(event as any).rouletteTotalCards ?? 0}
           winnerNickname={event.winnerNickname ?? ''}
+          winnerId={(event as any).winnerId}
           prizeName={event.prizeName}
           onClose={() => setShowRoulette(false)}
         />

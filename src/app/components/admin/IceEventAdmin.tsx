@@ -483,6 +483,7 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
               participants={participants}
               totalCards={totalCards}
               winnerNickname={winner.nickname}
+              winnerId={winner.id}
               onDone={() => { setPhase('done'); onRefresh(); }}
             />
           )}
@@ -631,6 +632,7 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
                 participants={rouletteParticipants}
                 totalCards={rouletteTotalCards}
                 winnerNickname={event.winnerNickname}
+                winnerId={event.winnerId}
               />
               <button onClick={() => setShowRoulette(false)} className="w-full py-2 text-sm text-gray-400 border border-gray-200 rounded-xl hover:bg-gray-50">
                 닫기
