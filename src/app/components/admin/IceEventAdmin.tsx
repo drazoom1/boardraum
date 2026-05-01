@@ -52,17 +52,18 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${ICE_API}/ice/admin/overview`, { headers: authH });
+      const res = await fetch(`${ICE_API}/ice/admin/overview`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      let d: any = {};
+      try { d = await res.json(); } catch {}
       if (res.ok) {
-        const d = await res.json();
         setEvent(d.event ?? null);
         setParticipants(d.participants ?? []);
         setTotalCards(d.totalCards ?? 0);
         setHistory(d.history ?? []);
       } else {
-        toast.error('데이터 불러오기 실패');
+        toast.error(d?.error || `데이터 불러오기 실패 (HTTP ${res.status})`, { duration: 8000 });
       }
-    } catch { toast.error('데이터 불러오기 실패'); }
+    } catch (e: any) { toast.error(`네트워크 오류: ${e?.message ?? e}`); }
     setLoading(false);
   }, [accessToken]);
 

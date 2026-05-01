@@ -12,6 +12,7 @@ import { BonusCardWinOverlay } from './BonusCardWinOverlay';
 import { SpamWarningModal } from './SpamWarningModal';
 import { ReferralLinkModal } from './ReferralLinkModal';
 import { updatePostSEO } from '../utils/seo';
+import { IceEventBanner } from './IceEventBanner';
 
 const supabase = getSupabaseClient();
 
@@ -3880,6 +3881,31 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [auctionBadge, setAuctionBadge] = useState<{ status: 'active' | 'scheduled'; countdown?: string } | null>(null);
   const auctionBadgeRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activityCardProb, setActivityCardProb] = useState<{ post: number; comment: number } | null>(null);
+  const [iceEvent, setIceEvent] = useState<any>(null);
+  const refreshIceEventRef = useRef<(() => void) | null>(null);
+  const iceSeqRef = useRef(0); // 구버전 응답이 최신을 덮어쓰지 못하게
+
+  useEffect(() => {
+    const fetchIceEvent = async () => {
+      const seq = ++iceSeqRef.current;
+      try {
+        const headers: Record<string, string> = {};
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/current`,
+          { headers }
+        );
+        if (res.ok && seq === iceSeqRef.current) {
+          const data = await res.json();
+          setIceEvent(data.event ?? null);
+        }
+      } catch {}
+    };
+    refreshIceEventRef.current = fetchIceEvent;
+    fetchIceEvent();
+    const iv = setInterval(fetchIceEvent, 5000);
+    return () => clearInterval(iv);
+  }, [accessToken]);
 
   useEffect(() => {
     async function fetchCardProb() {
@@ -4483,14 +4509,31 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {scheduledEvents.map(evt => (
         <ScheduledEventBanner key={evt.id} event={evt} userId={userId} accessToken={accessToken} />
       ))}
-      {postsEverLoaded && lastPostEvents.length > 0 && (
-        <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
-          {lastPostEvents
-            .filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id))
-            .map((evt: any) => (
-            <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} onLowTimer={() => setEventFastPoll(true)} isAdmin={isAdmin} />
-          ))}
-        </div>
+      {/* 얼음깨기 이벤트 배너 — active/ended일 때 마지막글 이벤트보다 우선 표시 */}
+      {(iceEvent?.status === 'active' || iceEvent?.status === 'ended' || iceEvent?.status === 'drawn') ? (
+        <IceEventBanner
+          event={iceEvent}
+          accessToken={accessToken}
+          userId={userId}
+          bonusCards={bonusCards}
+          onCardUsed={(remaining) => {
+            setBonusCards(remaining);
+            onCardCountChange?.(remaining);
+          }}
+          onEventUpdate={(ev) => setIceEvent(ev)}
+          onRefreshNeeded={() => refreshIceEventRef.current?.()}
+          onResyncCards={() => loadBonusCards()}
+        />
+      ) : (
+        postsEverLoaded && lastPostEvents.length > 0 && (
+          <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
+            {lastPostEvents
+              .filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id))
+              .map((evt: any) => (
+              <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} onLowTimer={() => setEventFastPoll(true)} isAdmin={isAdmin} />
+            ))}
+          </div>
+        )
       )}
       {/* 추천인 랭킹 이벤트 배너 */}
       {referralRankEvent && (
