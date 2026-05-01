@@ -136,7 +136,14 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
         onRefreshNeeded?.();
         onResyncCards?.();
       } else {
-        toast.success(`얼음에 타격이 ${data.damage ?? totalDamage} 가해졌습니다! 🧊`);
+        if (data.cappedByIce) {
+          toast.success(`얼음에 타격이 ${data.damage} 가해졌습니다! 🧊`, {
+            description: `${data.requestedCount}장 중 ${data.useCount}장만 사용됐어요. 나머지 ${data.requestedCount - data.useCount}장은 보관됩니다.`,
+            duration: 5000,
+          });
+        } else {
+          toast.success(`얼음에 타격이 ${data.damage ?? totalDamage} 가해졌습니다! 🧊`);
+        }
         // 서버 응답의 updatedEvent로 직접 갱신 — poll 왕복 없이 즉시 확정
         if (data.updatedEvent) {
           targetIceRef.current = null;
