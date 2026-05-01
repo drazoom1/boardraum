@@ -219,18 +219,19 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
 
           {/* 정보 영역 */}
           <div className="flex-1 min-w-0 px-4 py-4 flex flex-col justify-center">
-            {isDrawn && event.winnerNickname ? (
-              <div className="space-y-2">
-                <div className="text-xs text-gray-400">당첨자</div>
-                <div className="font-bold text-blue-700 text-base leading-tight">{event.winnerNickname}</div>
-                <div className="text-xs text-gray-400">축하합니다! 🎉</div>
-                {(event as any).roulettePublished && (event as any).rouletteParticipants?.length > 0 && (
+            {isDrawn ? (
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-amber-700">추첨이 완료됐어요! 🎉</div>
+                {(event as any).roulettePublished && (event as any).rouletteParticipants?.length > 0 ? (
                   <button
                     onClick={() => setShowRoulette(true)}
-                    className="w-full py-2 rounded-xl text-xs font-bold text-blue-600 border border-blue-200 hover:bg-blue-50"
+                    className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
+                    style={{ background: '#3b82f6' }}
                   >
-                    🎲 추첨 장면 보기
+                    🎲 당첨자 보기
                   </button>
+                ) : (
+                  <div className="text-xs text-gray-400">관리자가 곧 공개합니다</div>
                 )}
               </div>
             ) : isEnded ? (

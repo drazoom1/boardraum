@@ -85,9 +85,9 @@ export function RouletteWheel({ participants, totalCards, winnerNickname, onDone
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.moveTo(cx, cy - r - 2);
-      ctx.lineTo(cx - 10, cy - r + 20);
-      ctx.lineTo(cx + 10, cy - r + 20);
+      ctx.moveTo(cx - 10, cy - r - 2);
+      ctx.lineTo(cx + 10, cy - r - 2);
+      ctx.lineTo(cx, cy - r + 20);
       ctx.closePath();
       ctx.fillStyle = '#1e293b';
       ctx.shadowColor = 'rgba(0,0,0,0.3)';

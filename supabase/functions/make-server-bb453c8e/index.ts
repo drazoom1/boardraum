@@ -523,16 +523,22 @@ app.post(`${PREFIX}/ice/admin/fix-winner-nickname`, async (c) => {
     if (!event || event.status !== "drawn") return c.json({ error: "추첨 완료된 이벤트가 없습니다" }, 400);
     if (!event.winnerId) return c.json({ error: "winnerId가 없습니다" }, 400);
 
-    const [profile, beta] = await Promise.all([
-      kv.get(`user_profile_${event.winnerId}`).catch(() => null),
-      kv.get(`beta_user_${event.winnerId}`).catch(() => null),
-    ]);
-    const nickname =
-      (profile as any)?.username?.trim() ||
-      (profile as any)?.name?.trim() ||
-      (beta as any)?.username?.trim() ||
-      (beta as any)?.name?.trim() ||
-      event.winnerNickname;
+    const body = await c.req.json().catch(() => ({}));
+
+    // 직접 입력한 닉네임 우선, 없으면 KV에서 재조회
+    let nickname = (body.nickname as string)?.trim() || '';
+    if (!nickname) {
+      const [profile, beta] = await Promise.all([
+        kv.get(`user_profile_${event.winnerId}`).catch(() => null),
+        kv.get(`beta_user_${event.winnerId}`).catch(() => null),
+      ]);
+      nickname =
+        (profile as any)?.username?.trim() ||
+        (profile as any)?.name?.trim() ||
+        (beta as any)?.username?.trim() ||
+        (beta as any)?.name?.trim() ||
+        event.winnerNickname;
+    }
 
     await kv.set("ice_event_current", { ...event, winnerNickname: nickname });
     console.log(`[얼음깨기] 당첨자 닉네임 수정: ${event.winnerNickname} → ${nickname} by ${user.email}`);

@@ -546,6 +546,8 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
   const [clearing, setClearing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [fixingNickname, setFixingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
+  const [showNicknameEdit, setShowNicknameEdit] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
 
   const handleClear = async () => {
@@ -563,15 +565,19 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
     setConfirm(false);
   };
 
-  const handleFixNickname = async () => {
+  const handleFixNickname = async (manualNickname?: string) => {
     setFixingNickname(true);
     try {
       const res = await fetch(`${ICE_API}/ice/admin/fix-winner-nickname`, {
-        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(manualNickname ? { nickname: manualNickname } : {}),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || '재조회 실패'); return; }
       toast.success(`당첨자 닉네임이 "${d.winnerNickname}"으로 업데이트됐습니다`);
+      setShowNicknameEdit(false);
+      setNicknameInput('');
       onRefresh();
     } catch { toast.error('네트워크 오류'); }
     setFixingNickname(false);
@@ -635,10 +641,27 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
               <div className="text-4xl">🎉</div>
               <p className="text-xs text-gray-400">당첨자</p>
               <p className="text-3xl font-black text-gray-900">{event.winnerNickname}</p>
-              <button onClick={handleFixNickname} disabled={fixingNickname}
-                className="text-xs text-gray-400 underline hover:text-blue-500 disabled:opacity-50">
-                {fixingNickname ? '재조회 중...' : '닉네임 잘못됐나요? 재조회'}
-              </button>
+              {!showNicknameEdit ? (
+                <button onClick={() => { setShowNicknameEdit(true); setNicknameInput(event.winnerNickname || ''); }}
+                  className="text-xs text-gray-400 underline hover:text-blue-500">
+                  닉네임 수정
+                </button>
+              ) : (
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    value={nicknameInput}
+                    onChange={e => setNicknameInput(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-2 py-1 text-sm flex-1 min-w-0"
+                    placeholder="닉네임 입력"
+                  />
+                  <button onClick={() => nicknameInput.trim() && handleFixNickname(nicknameInput.trim())}
+                    disabled={fixingNickname || !nicknameInput.trim()}
+                    className="px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-lg disabled:opacity-50">
+                    저장
+                  </button>
+                  <button onClick={() => setShowNicknameEdit(false)} className="text-xs text-gray-400">취소</button>
+                </div>
+              )}
               {event.prizeGameName && (
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full">
                   <span className="text-sm font-bold text-orange-700">🎁 {event.prizeGameName}</span>
