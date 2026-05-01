@@ -3886,7 +3886,11 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const iceSeqRef = useRef(0); // 구버전 응답이 최신을 덮어쓰지 못하게
 
   useEffect(() => {
+    let ivRef: ReturnType<typeof setInterval> | null = null;
+    let authFailed = false;
+
     const fetchIceEvent = async () => {
+      if (authFailed) return;
       const seq = ++iceSeqRef.current;
       try {
         const headers: Record<string, string> = {};
@@ -3895,16 +3899,23 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/current`,
           { headers }
         );
+        if (res.status === 401) {
+          // 토큰 만료 — 폴링 중단 (accessToken 갱신 시 effect 재실행으로 재개)
+          authFailed = true;
+          if (ivRef) clearInterval(ivRef);
+          return;
+        }
         if (res.ok && seq === iceSeqRef.current) {
           const data = await res.json();
           setIceEvent(data.event ?? null);
         }
       } catch {}
     };
+
     refreshIceEventRef.current = fetchIceEvent;
     fetchIceEvent();
-    const iv = setInterval(fetchIceEvent, 5000);
-    return () => clearInterval(iv);
+    ivRef = setInterval(fetchIceEvent, 5000);
+    return () => { if (ivRef) clearInterval(ivRef); };
   }, [accessToken]);
 
   useEffect(() => {
