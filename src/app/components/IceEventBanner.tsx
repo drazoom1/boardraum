@@ -199,11 +199,11 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
           )}
         </div>
 
-        <div className="px-4 py-3 flex gap-4 items-center">
-          {/* 얼음 이미지 */}
+        <div className="flex" style={{ minHeight: 140 }}>
+          {/* 얼음 이미지 — 절반 차지 */}
           <div
-            className={`flex-shrink-0 rounded-2xl overflow-hidden border-2 border-blue-200 ${shaking ? 'animate-shake' : ''}`}
-            style={{ width: 110, height: 110 }}
+            className={`flex-shrink-0 overflow-hidden ${shaking ? 'animate-shake' : ''}`}
+            style={{ width: '50%' }}
           >
             {event.currentStageImage ? (
               <img
@@ -212,50 +212,38 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <div className="w-full h-full bg-blue-100 flex items-center justify-center" style={{ fontSize: 48 }}>🧊</div>
+              <div className="w-full h-full bg-blue-100 flex items-center justify-center" style={{ fontSize: 64 }}>🧊</div>
             )}
           </div>
 
           {/* 정보 영역 */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 px-4 py-4 flex flex-col justify-center">
             {isDrawn && event.winnerNickname ? (
-              <div className="py-1 space-y-2">
-                <div className="text-sm text-gray-500">당첨자</div>
-                <div className="font-bold text-blue-700 text-base">{event.winnerNickname}</div>
+              <div className="space-y-2">
+                <div className="text-xs text-gray-400">당첨자</div>
+                <div className="font-bold text-blue-700 text-base leading-tight">{event.winnerNickname}</div>
                 <div className="text-xs text-gray-400">축하합니다! 🎉</div>
                 {(event as any).roulettePublished && (event as any).rouletteParticipants?.length > 0 && (
                   <button
                     onClick={() => setShowRoulette(true)}
-                    className="mt-1 w-full py-2 rounded-xl text-xs font-bold text-blue-600 border border-blue-200 hover:bg-blue-50"
+                    className="w-full py-2 rounded-xl text-xs font-bold text-blue-600 border border-blue-200 hover:bg-blue-50"
                   >
                     🎲 추첨 장면 보기
                   </button>
                 )}
               </div>
             ) : isEnded ? (
-              <div className="py-2">
+              <div>
                 <div className="text-sm font-semibold text-amber-700">얼음이 다 깨졌어요!</div>
-                <div className="text-xs text-gray-500 mt-0.5">관리자가 곧 추첨을 진행합니다</div>
+                <div className="text-xs text-gray-500 mt-1">관리자가 곧 추첨을 진행합니다</div>
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span>남은 얼음</span>
-                  <span className="font-semibold text-blue-700">{pct}%</span>
+                <div className="text-xs text-gray-500 mb-1">
+                  카드 사용 <span className="font-semibold text-blue-600">{event.myCardCount ?? 0}회</span>
                 </div>
-                <div className="h-2.5 rounded-full bg-blue-100 overflow-hidden mb-2">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${pct}%`,
-                      background: pct > 50 ? '#60a5fa' : pct > 20 ? '#fbbf24' : '#ef4444',
-                    }}
-                  />
-                </div>
-                <div className="text-xs text-gray-400 mb-3">
-                  내 카드 사용: <span className="font-semibold text-blue-600">{event.myCardCount ?? 0}회</span>
-                  <span className="mx-1.5 text-gray-300">|</span>
-                  보유 카드: <span className="font-semibold text-blue-600">{bonusCards}장</span>
+                <div className="text-xs text-gray-500 mb-4">
+                  보유 카드 <span className="font-semibold text-blue-600">{bonusCards}장</span>
                 </div>
                 <button
                   onClick={() => {
