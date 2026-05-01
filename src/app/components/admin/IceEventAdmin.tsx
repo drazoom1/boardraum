@@ -46,13 +46,21 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openHistory, setOpenHistory] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  const authH = { Authorization: `Bearer ${accessToken}` };
+  const authHeader = () => ({ Authorization: `Bearer ${accessToken}` });
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const cleanupImages = async () => {
     try {
-      const res = await fetch(`${ICE_API}/ice/admin/overview`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      await fetch(`${ICE_API}/ice/admin/cleanup-images`, { method: 'POST', headers: authHeader() });
+    } catch {}
+  };
+
+  const load = useCallback(async (isRetry = false) => {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/overview`, { headers: authHeader() });
       let d: any = {};
       try { d = await res.json(); } catch {}
       if (res.ok) {
@@ -60,10 +68,21 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
         setParticipants(d.participants ?? []);
         setTotalCards(d.totalCards ?? 0);
         setHistory(d.history ?? []);
+      } else if (res.status === 546 && !isRetry) {
+        // KV 이미지 용량 초과 → 자동 정리 후 재시도
+        toast.loading('데이터 정리 중...', { id: 'cleanup' });
+        await cleanupImages();
+        toast.dismiss('cleanup');
+        setLoading(false);
+        return load(true);
       } else {
+        setLoadFailed(true);
         toast.error(d?.error || `데이터 불러오기 실패 (HTTP ${res.status})`, { duration: 8000 });
       }
-    } catch (e: any) { toast.error(`네트워크 오류: ${e?.message ?? e}`); }
+    } catch (e: any) {
+      setLoadFailed(true);
+      toast.error(`네트워크 오류: ${e?.message ?? e}`);
+    }
     setLoading(false);
   }, [accessToken]);
 
@@ -93,8 +112,14 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
         </div>
       ) : (
         <>
-          {/* [1] 이벤트 없을 때 — 개최 폼 */}
-          {!event && <CreateForm accessToken={accessToken} onCreated={load} />}
+          {/* [1] 이벤트 없을 때 — 개최 폼 (로드 실패 시는 에러 표시) */}
+          {!event && !loadFailed && <CreateForm accessToken={accessToken} onCreated={load} />}
+          {!event && loadFailed && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+              <p className="text-red-600 font-semibold mb-3">데이터를 불러오지 못했습니다</p>
+              <button onClick={() => load()} className="px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold">다시 시도</button>
+            </div>
+          )}
 
           {/* [2] 진행 중 */}
           {event?.status === 'active' && (
