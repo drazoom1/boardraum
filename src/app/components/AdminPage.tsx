@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { IceEventAdmin } from './admin/IceEventAdmin';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
 import { getSupabaseClient } from '../lib/supabase';
@@ -2073,7 +2074,7 @@ function WikiMigrationSection({ accessToken }: { accessToken: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games' | 'operator' | 'auction-results';
+type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games' | 'operator' | 'auction-results' | 'ice-event';
 
 
 // ── 이미지 검수 섹션 ──
@@ -4473,6 +4474,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'site-games', label: '게임 DB 관리', icon: <span className="text-base leading-none">🎲</span>, desc: '등록 게임 수정·삭제·통합' },
     { id: 'operator', label: '운영자 페이지', icon: <span className="text-base leading-none">🛠</span>, desc: '운영진 관리 및 수익 정산' },
     { id: 'auction-results', label: '경매 관리', icon: <span className="text-base leading-none">🔨</span>, desc: '경매 요청 검토 및 낙찰 결과' },
+    { id: 'ice-event', label: '얼음깨기 이벤트', icon: <span className="text-base leading-none">🧊</span>, desc: '얼음깨기 이벤트 관리' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -4482,6 +4484,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { label: '게임 · DB',   ids: ['site-games', 'migration', 'player-migration'] },
     { label: '통계 · 데이터', ids: ['analytics', 'backup', 'activity-cards'] },
     { label: '운영',         ids: ['operator', 'auction-results'] },
+    { label: '이벤트',       ids: ['ice-event'] },
   ];
 
   return (
@@ -4559,6 +4562,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'site-games' && <SiteGamesSection accessToken={accessToken} />}
           {activeTab === 'operator' && <OperatorSection accessToken={accessToken} />}
           {activeTab === 'auction-results' && <AuctionResultsSection accessToken={accessToken} />}
+          {activeTab === 'ice-event' && <IceEventAdmin accessToken={accessToken} />}
         </div>
       </div>
     </div>
