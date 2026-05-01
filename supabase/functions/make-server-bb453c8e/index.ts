@@ -329,14 +329,34 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
 
     // 참여자 전원 조회
     const rows = await kv.getByPrefixWithKeys("ice_card_usage_");
-    const participants: any[] = rows
+    const rawParticipants: any[] = rows
       .map((r) => r.value)
       .filter((v) => v && v.cardCount > 0)
       .sort((a, b) => b.cardCount - a.cardCount);
 
-    if (participants.length === 0) {
+    if (rawParticipants.length === 0) {
       return c.json({ error: "참여자가 없습니다" }, 400);
     }
+
+    // 닉네임을 user_profile_에서 최신으로 재조회 (카드 사용 당시 저장된 닉네임이 오래됐을 수 있음)
+    const nicknameEntries = await Promise.all(
+      rawParticipants.map((p) =>
+        Promise.all([
+          kv.get(`user_profile_${p.userId}`).catch(() => null),
+          kv.get(`beta_user_${p.userId}`).catch(() => null),
+        ])
+      )
+    );
+    const participants = rawParticipants.map((p, i) => {
+      const [profile, beta] = nicknameEntries[i];
+      const nickname =
+        profile?.username?.trim() ||
+        beta?.username?.trim() ||
+        beta?.name?.trim() ||
+        p.nickname ||
+        p.userId;
+      return { ...p, nickname };
+    });
 
     const totalCards = participants.reduce((s, p) => s + p.cardCount, 0);
 
