@@ -600,6 +600,10 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
 
   const rouletteParticipants = event.rouletteParticipants ?? participants;
   const rouletteTotalCards = event.rouletteTotalCards ?? totalCards;
+  // winnerId로 참여자 배열에서 실제 닉네임 찾기 (winnerNickname KV값과 불일치 방지)
+  const winnerDisplayName = event.winnerId && rouletteParticipants.length > 0
+    ? (rouletteParticipants.find((p: any) => p.userId === event.winnerId)?.nickname || event.winnerNickname)
+    : event.winnerNickname;
 
   return (
     <div className="space-y-4">
@@ -642,9 +646,9 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
             <div className="text-center space-y-3">
               <div className="text-4xl">🎉</div>
               <p className="text-xs text-gray-400">당첨자</p>
-              <p className="text-3xl font-black text-gray-900">{event.winnerNickname}</p>
+              <p className="text-3xl font-black text-gray-900">{winnerDisplayName}</p>
               {!showNicknameEdit ? (
-                <button onClick={() => { setShowNicknameEdit(true); setNicknameInput(event.winnerNickname || ''); }}
+                <button onClick={() => { setShowNicknameEdit(true); setNicknameInput(winnerDisplayName || ''); }}
                   className="text-xs text-gray-400 underline hover:text-blue-500">
                   닉네임 수정
                 </button>

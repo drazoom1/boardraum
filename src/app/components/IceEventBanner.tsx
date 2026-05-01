@@ -182,6 +182,11 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
   const isActive = event.status === 'active';
   const isEnded = event.status === 'ended';
   const isDrawn = event.status === 'drawn';
+  // winnerId로 참여자 배열에서 실제 닉네임 찾기 (winnerNickname KV값과 불일치 방지)
+  const rouletteParticipants = (event as any).rouletteParticipants ?? [];
+  const winnerDisplayName = (event as any).winnerId && rouletteParticipants.length > 0
+    ? (rouletteParticipants.find((p: any) => p.userId === (event as any).winnerId)?.nickname || event.winnerNickname)
+    : event.winnerNickname;
 
   return (
     <>
