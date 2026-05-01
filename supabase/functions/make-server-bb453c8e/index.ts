@@ -106,12 +106,19 @@ app.get(`${PREFIX}/ice/current`, async (c) => {
       myCardCount = usage?.cardCount ?? 0;
     }
 
+    const { iceImages, prizeGameImage, ...eventData } = event;
     return c.json({
       event: {
-        ...event,
+        ...eventData,
         iceCurrentPercentage: pct,
         currentStageImage,
         myCardCount,
+        // 룰렛 공개된 경우에만 참여자 데이터 포함
+        ...(event.roulettePublished ? {
+          roulettePublished: true,
+          rouletteParticipants: event.rouletteParticipants ?? [],
+          rouletteTotalCards: event.rouletteTotalCards ?? 0,
+        } : {}),
       },
     });
   } catch (e) {
@@ -130,30 +137,38 @@ app.post(`${PREFIX}/ice/use-card`, async (c) => {
     if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
     if (!user.email) return c.json({ error: "이메일 정보가 없습니다" }, 400);
 
-    const event = await kv.get("ice_event_current");
+    const body = await c.req.json().catch(() => ({}));
+    const requestedCount = Math.max(1, Math.floor(Number(body.count) || 1));
+
+    // Phase 1: 필요한 데이터 전부 병렬 조회
+    const [event, currentCards, profileEntry, betaEntry, prevUsage] = await Promise.all([
+      kv.get("ice_event_current"),
+      readBonusCards(user.email, user.id),
+      kv.get(`user_profile_${user.id}`).catch(() => null),
+      kv.get(`beta_user_${user.id}`).catch(() => null),
+      kv.get(`ice_card_usage_${user.id}`).catch(() => null),
+    ]);
+
     if (!event)                     return c.json({ error: "진행 중인 이벤트가 없습니다" }, 400);
     if (event.status !== "active")  return c.json({ error: "이벤트가 종료됐습니다" }, 400);
     if (event.iceCurrent <= 0)      return c.json({ error: "이미 얼음이 다 깨졌습니다" }, 400);
+    if (currentCards <= 0)          return c.json({ error: "보너스카드가 없습니다" }, 400);
 
-    // 보너스카드 확인
-    const currentCards = await readBonusCards(user.email, user.id);
-    if (currentCards <= 0) return c.json({ error: "보너스카드가 없습니다" }, 400);
-
-    // 카드 1장 차감
-    await writeBonusCards(user.email, currentCards - 1);
-
-    // 닉네임 조회
-    const betaEntry = await kv.get(`beta_user_${user.id}`).catch(() => null);
-    const nickname =
-      betaEntry?.name ||
-      betaEntry?.username ||
-      betaEntry?.nickname ||
-      user.email.split("@")[0];
-
-    // 얼음 체력 감소
-    const damage = Number(event.iceDamagePerCard) || 3;
+    const damagePerCard = Number(event.iceDamagePerCard) || 3;
+    // 얼음을 다 깨는 데 필요한 최소 카드 수 — 초과분은 차감하지 않음
+    const cardsNeededToBreak = Math.ceil(event.iceCurrent / damagePerCard);
+    const useCount = Math.min(requestedCount, currentCards, cardsNeededToBreak);
+    const damage = damagePerCard * useCount;
     const newIce = Math.max(0, event.iceCurrent - damage);
     const isEnded = newIce <= 0;
+
+    const nickname =
+      profileEntry?.username?.trim() ||
+      betaEntry?.username?.trim() ||
+      betaEntry?.name?.trim() ||
+      user.email.split("@")[0];
+
+    const newCardCount = (prevUsage?.cardCount ?? 0) + useCount;
 
     const updatedEvent = {
       ...event,
@@ -161,34 +176,47 @@ app.post(`${PREFIX}/ice/use-card`, async (c) => {
       status: isEnded ? "ended" : "active",
       ...(isEnded ? { endedAt: Date.now() } : {}),
     };
+
+    // Phase 2: 이벤트 저장 (정합성 보장 — 실패 시 카드 차감 안 됨)
     await kv.set("ice_event_current", updatedEvent);
 
-    // 사용 횟수 기록 (ice_card_usage_{userId})
-    const prevUsage = await kv.get(`ice_card_usage_${user.id}`).catch(() => null);
-    const newCardCount = (prevUsage?.cardCount ?? 0) + 1;
-    await kv.set(`ice_card_usage_${user.id}`, {
-      userId: user.id,
-      nickname,
-      cardCount: newCardCount,
-      lastUsedAt: Date.now(),
-    });
+    // Phase 3: 나머지 쓰기 병렬 처리
+    await Promise.all([
+      writeBonusCards(user.email, currentCards - useCount),
+      kv.set(`ice_card_usage_${user.id}`, {
+        userId: user.id,
+        nickname,
+        cardCount: newCardCount,
+        lastUsedAt: Date.now(),
+      }),
+    ]);
 
     const pct = calcPct(updatedEvent);
     const stage = getIceStage(pct);
     const currentStageImage = updatedEvent.iceImages?.[stage] ?? null;
 
     console.log(
-      `[얼음깨기] 카드 사용: userId=${user.id} nickname=${nickname} ice=${event.iceCurrent}→${newIce} cards=${currentCards}→${currentCards - 1}`,
+      `[얼음깨기] 카드 사용: ${nickname} count=${useCount} ice=${event.iceCurrent}→${newIce} cards=${currentCards}→${currentCards - useCount}`,
     );
 
     return c.json({
       success: true,
+      damage,
+      useCount,
+      requestedCount,
+      cappedByIce: useCount < requestedCount && useCount === cardsNeededToBreak,
       iceCurrent: newIce,
       iceCurrentPercentage: pct,
       currentStageImage,
       myCardCount: newCardCount,
-      remainingBonusCards: currentCards - 1,
+      remainingBonusCards: currentCards - useCount,
       iceBreak: isEnded,
+      updatedEvent: {
+        ...updatedEvent,
+        iceCurrentPercentage: pct,
+        currentStageImage,
+        myCardCount: newCardCount,
+      },
     });
   } catch (e) {
     console.error("[ice/use-card]", e);
@@ -336,12 +364,20 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
       winnerNickname: winner.nickname,
       drawnAt: Date.now(),
     };
-    await kv.set("ice_event_current", updatedEvent);
+    // 현재 이벤트에 룰렛 데이터 저장 (공개 재생용)
+    const updatedEventWithRoulette = {
+      ...updatedEvent,
+      rouletteParticipants: participantsWithPct,
+      rouletteTotalCards: totalCards,
+      roulettePublished: false,
+    };
+    await kv.set("ice_event_current", updatedEventWithRoulette);
 
-    // 히스토리 영구 보관
+    // 히스토리 영구 보관 — 이미지 제외 (KV 용량 절약)
+    const { iceImages: _i1, prizeGameImage: _i2, currentStageImage: _i3, ...eventNoImages } = updatedEventWithRoulette;
     await kv
       .set(`ice_event_history_${event.eventId}`, {
-        ...updatedEvent,
+        ...eventNoImages,
         participants: participantsWithPct,
         totalCards,
         drawnBy: user.email,
@@ -450,6 +486,182 @@ app.delete(`${PREFIX}/ice/admin/reset-usage`, async (c) => {
     return c.json({ success: true, deleted: rows.length });
   } catch (e) {
     console.error("[ice/admin/reset-usage]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] POST /ice/admin/publish-roulette — 추첨 결과 공개
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/ice/admin/publish-roulette`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+    const event = await kv.get("ice_event_current");
+    if (!event || event.status !== "drawn") return c.json({ error: "추첨 완료된 이벤트가 없습니다" }, 400);
+    await kv.set("ice_event_current", { ...event, roulettePublished: true });
+    console.log(`[얼음깨기] 룰렛 공개: ${event.eventId} winner=${event.winnerNickname} by ${user.email}`);
+    return c.json({ success: true });
+  } catch (e) {
+    console.error("[ice/admin/publish-roulette]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] GET /ice/admin/overview — 한 번에 전체 데이터 (빠른 로딩)
+// ══════════════════════════════════════════════════════════════════
+
+app.get(`${PREFIX}/ice/admin/overview`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const [event, usageRows] = await Promise.all([
+      kv.get("ice_event_current"),
+      kv.getByPrefixWithKeys("ice_card_usage_"),
+    ]);
+    // 히스토리는 별도 try-catch — 실패해도 나머지 데이터는 정상 반환
+    let historyRows: { key: string; value: any }[] = [];
+    try {
+      historyRows = await kv.getByPrefixWithKeys("ice_event_history_");
+    } catch (e) {
+      console.error("[overview] 히스토리 조회 실패 (무시):", e);
+    }
+
+    // 참여자
+    const participants = usageRows
+      .map((r) => r.value)
+      .filter((v) => v && v.cardCount > 0)
+      .sort((a, b) => b.cardCount - a.cardCount);
+    const totalCards = participants.reduce((s, p) => s + p.cardCount, 0);
+    const participantsWithPct = participants.map((p) => ({
+      ...p,
+      percentage: totalCards > 0 ? Math.round((p.cardCount / totalCards) * 1000) / 10 : 0,
+    }));
+
+    // 히스토리 — base64 이미지 제외 + 기존 KV에 이미지 있으면 자동 정리
+    const stripImages = (obj: any) => {
+      if (!obj) return obj;
+      const { iceImages, prizeGameImage, currentStageImage, ...rest } = obj;
+      return rest;
+    };
+    const history: any[] = [];
+    for (const row of historyRows) {
+      const val = row.value;
+      if (!val) continue;
+      const hasImages = val.iceImages || val.prizeGameImage || val.currentStageImage;
+      if (hasImages) {
+        // 기존 KV 레코드에 이미지 있으면 이미지 제거 후 덮어쓰기 (백그라운드)
+        const cleaned = stripImages(val);
+        kv.set(row.key, cleaned).catch(() => {});
+        history.push(cleaned);
+      } else {
+        history.push(val);
+      }
+    }
+    history.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+    // 현재 이벤트 — 이미지 전부 제외 (관리자 페이지는 이미지 불필요)
+    // KV에 이미지가 아직 남아있으면 ice/current 응답은 그대로 두고 overview만 제외
+    const eventLight = event ? (() => {
+      const { iceImages, prizeGameImage, currentStageImage, ...rest } = event;
+      const pct = calcPct(rest);
+      return { ...rest, iceCurrentPercentage: pct };
+    })() : null;
+
+    return c.json({ event: eventLight, participants: participantsWithPct, totalCards, history });
+  } catch (e) {
+    console.error("[ice/admin/overview]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] DELETE /ice/admin/clear-current
+// 추첨 완료된 이벤트를 히스토리로 보내고 현재 슬롯을 비움 (새 이벤트 준비)
+// ══════════════════════════════════════════════════════════════════
+
+app.delete(`${PREFIX}/ice/admin/clear-current`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const event = await kv.get("ice_event_current");
+    if (!event) return c.json({ error: "현재 이벤트가 없습니다" }, 400);
+    if (event.status === "active") {
+      return c.json({ error: "진행 중인 이벤트는 종료할 수 없습니다. 먼저 강제 종료해주세요." }, 400);
+    }
+
+    // 히스토리에 없다면 보관 — 이미지 제외 (KV 용량 절약)
+    if (event.eventId) {
+      const existing = await kv.get(`ice_event_history_${event.eventId}`).catch(() => null);
+      if (!existing) {
+        const { iceImages: _i1, prizeGameImage: _i2, currentStageImage: _i3, ...eventNoImages } = event;
+        await kv.set(`ice_event_history_${event.eventId}`, {
+          ...eventNoImages,
+          archivedAt: Date.now(),
+          archivedBy: user.email,
+        }).catch(() => {});
+      }
+    }
+
+    // 현재 이벤트 슬롯 비우기
+    await kv.del("ice_event_current");
+
+    // 카드 사용 기록도 초기화
+    const rows = await kv.getByPrefixWithKeys("ice_card_usage_");
+    for (const r of rows) {
+      await kv.del(r.key).catch(() => {});
+    }
+
+    console.log(`[얼음깨기] 이벤트 종료 및 초기화: ${event.eventId} by ${user.email}`);
+    return c.json({ success: true });
+  } catch (e) {
+    console.error("[ice/admin/clear-current]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] POST /ice/admin/cleanup-images
+// 기존 히스토리/현재 이벤트 KV에서 base64 이미지 정리 (1회성 마이그레이션)
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/ice/admin/cleanup-images`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    let cleaned = 0;
+
+    // 현재 이벤트 이미지 정리
+    const current = await kv.get("ice_event_current").catch(() => null);
+    if (current && (current.iceImages || current.prizeGameImage)) {
+      const { iceImages, prizeGameImage, ...rest } = current;
+      const pct = calcPct(rest);
+      const stage = getIceStage(pct);
+      const currentStageImage = (iceImages ?? {})[stage] ?? null;
+      await kv.set("ice_event_current", { ...rest, currentStageImage });
+      cleaned++;
+    }
+
+    // 히스토리 이미지 정리
+    const historyRows = await kv.getByPrefixWithKeys("ice_event_history_");
+    for (const row of historyRows) {
+      const val = row.value;
+      if (val && (val.iceImages || val.prizeGameImage || val.currentStageImage)) {
+        const { iceImages, prizeGameImage, currentStageImage, ...rest } = val;
+        await kv.set(row.key, rest).catch(() => {});
+        cleaned++;
+      }
+    }
+
+    console.log(`[얼음깨기] 이미지 정리 완료: ${cleaned}건 by ${user.email}`);
+    return c.json({ success: true, cleaned });
+  } catch (e) {
+    console.error("[ice/admin/cleanup-images]", e);
     return c.json({ error: String(e) }, 500);
   }
 });

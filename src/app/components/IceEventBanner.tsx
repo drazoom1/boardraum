@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
+import { RouletteModal } from './RouletteModal';
 
 const ICE_API = (path: string) =>
   `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e${path}`;
@@ -47,6 +48,7 @@ function getStageKey(pct: number): string {
 
 export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusCards = 0, onCardUsed, onEventUpdate, onRefreshNeeded, onResyncCards }: IceEventBannerProps) {
   const [localEvent, setLocalEvent] = useState<IceEvent | null>(null);
+  const [showRoulette, setShowRoulette] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [useCount, setUseCount] = useState(1);
   const [using, setUsing] = useState(false);
@@ -217,10 +219,18 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
           {/* 정보 영역 */}
           <div className="flex-1 min-w-0">
             {isDrawn && event.winnerNickname ? (
-              <div className="py-1">
+              <div className="py-1 space-y-2">
                 <div className="text-sm text-gray-500">당첨자</div>
                 <div className="font-bold text-blue-700 text-base">{event.winnerNickname}</div>
-                <div className="text-xs text-gray-400 mt-0.5">축하합니다! 🎉</div>
+                <div className="text-xs text-gray-400">축하합니다! 🎉</div>
+                {(event as any).roulettePublished && (event as any).rouletteParticipants?.length > 0 && (
+                  <button
+                    onClick={() => setShowRoulette(true)}
+                    className="mt-1 w-full py-2 rounded-xl text-xs font-bold text-blue-600 border border-blue-200 hover:bg-blue-50"
+                  >
+                    🎲 추첨 장면 보기
+                  </button>
+                )}
               </div>
             ) : isEnded ? (
               <div className="py-2">
@@ -331,6 +341,16 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
             </div>
           </div>
         </div>
+      )}
+
+      {showRoulette && (event as any).roulettePublished && (
+        <RouletteModal
+          participants={(event as any).rouletteParticipants ?? []}
+          totalCards={(event as any).rouletteTotalCards ?? 0}
+          winnerNickname={event.winnerNickname ?? ''}
+          prizeName={event.prizeName}
+          onClose={() => setShowRoulette(false)}
+        />
       )}
 
       <style>{`

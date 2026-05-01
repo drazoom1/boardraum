@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { projectId } from '/utils/supabase/info';
-import { RefreshCw, Loader2, ChevronDown, ChevronUp, Trash2, Trophy, Users, Zap } from 'lucide-react';
+import { RefreshCw, Loader2, ChevronDown, ChevronUp, Trash2, Trophy, Users, Zap, Eye } from 'lucide-react';
+import { RouletteWheel } from '../RouletteModal';
 
 const ICE_API = `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e`;
 
@@ -423,139 +424,7 @@ function MonitorSection({ event, participants, totalCards, accessToken, onRefres
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// 룰렛 휠 컴포넌트 (Canvas)
-// ══════════════════════════════════════════════════════════════════
-const WHEEL_COLORS = [
-  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
-  '#ec4899','#06b6d4','#84cc16','#f97316','#6366f1',
-];
-
-function RouletteWheel({ participants, totalCards, winnerNickname, onDone }: {
-  participants: any[]; totalCards: number; winnerNickname: string; onDone: () => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef   = useRef<number>(0);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || participants.length === 0) return;
-
-    const total = totalCards || participants.reduce((s, p) => s + p.cardCount, 0);
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const r  = cx - 8;
-
-    // 당첨자 섹터 중심각 계산 (시작 기준: -PI/2 = 12시 방향)
-    let accAngle = -Math.PI / 2;
-    let winnerMid = accAngle;
-    for (const p of participants) {
-      const slice = (p.cardCount / total) * Math.PI * 2;
-      if (p.nickname === winnerNickname) {
-        winnerMid = accAngle + slice / 2;
-        break;
-      }
-      accAngle += slice;
-    }
-    // 포인터는 -PI/2(12시)에 고정 → 당첨자 중심이 거기 와야 함
-    // finalRotation만큼 전체를 반시계 돌리면 당첨자 중심이 12시로 옴
-    const extraSpins    = Math.PI * 2 * 8; // 4바퀴
-    const finalRotation = -winnerMid - (-Math.PI / 2) + extraSpins;
-
-    const draw = (rot: number) => {
-      const ctx = canvas.getContext('2d')!;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // 그림자
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.15)';
-      ctx.shadowBlur  = 12;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.restore();
-
-      // 섹터 그리기
-      let angle = rot - Math.PI / 2;
-      participants.forEach((p, i) => {
-        const slice = (p.cardCount / total) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, r, angle, angle + slice);
-        ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth   = 2;
-        ctx.stroke();
-
-        // 닉네임 라벨 (섹터 충분히 클 때만)
-        if (slice > 0.15) {
-          const mid = angle + slice / 2;
-          ctx.save();
-          ctx.translate(cx + Math.cos(mid) * r * 0.65, cy + Math.sin(mid) * r * 0.65);
-          ctx.rotate(mid + Math.PI / 2);
-          ctx.fillStyle = '#fff';
-          ctx.font       = `bold ${Math.min(12, Math.max(8, Math.round(slice * 14)))}px sans-serif`;
-          ctx.textAlign  = 'center';
-          ctx.textBaseline = 'middle';
-          // 긴 닉네임 자르기
-          const label = p.nickname.length > 5 ? p.nickname.slice(0, 5) + '…' : p.nickname;
-          ctx.fillText(label, 0, 0);
-          ctx.restore();
-        }
-
-        angle += slice;
-      });
-
-      // 중앙 원
-      ctx.beginPath();
-      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.shadowColor = 'rgba(0,0,0,0.1)';
-      ctx.shadowBlur = 4;
-      ctx.fill();
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // 포인터 (12시 방향 삼각형)
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r - 2);
-      ctx.lineTo(cx - 10, cy - r + 20);
-      ctx.lineTo(cx + 10, cy - r + 20);
-      ctx.closePath();
-      ctx.fillStyle = '#1e293b';
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = 4;
-      ctx.fill();
-    };
-
-    const duration  = 5000;
-    const startTime = performance.now();
-
-    const animate = (now: number) => {
-      const t      = Math.min((now - startTime) / duration, 1);
-      const eased  = 1 - Math.pow(1 - t, 4); // ease-out quart
-      draw(finalRotation * eased);
-      if (t < 1) {
-        animRef.current = requestAnimationFrame(animate);
-      } else {
-        draw(finalRotation);
-        setTimeout(onDone, 600);
-      }
-    };
-
-    animRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [winnerNickname]);
-
-  return (
-    <div className="flex flex-col items-center">
-      <canvas ref={canvasRef} width={280} height={280} style={{ borderRadius: '50%' }} />
-    </div>
-  );
-}
+// RouletteWheel은 RouletteModal.tsx에서 import
 
 // ══════════════════════════════════════════════════════════════════
 // [3] 종료 후 추첨 대기
@@ -565,20 +434,36 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
 }) {
   const [phase, setPhase] = useState<'idle' | 'spinning' | 'done'>('idle');
   const [winner, setWinner] = useState<any>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
 
   const handleDraw = async () => {
     if (participants.length === 0) return;
     setPhase('spinning');
     setWinner(null);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/admin/draw`, {
+      const res = await fetch(`${ICE_API}/ice/admin/draw`, {
         method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || '추첨 실패'); setPhase('idle'); return; }
       setWinner({ nickname: d.winnerNickname, id: d.winnerId });
-      // 룰렛 자체는 RouletteWheel onDone에서 'done'으로
     } catch { toast.error('네트워크 오류'); setPhase('idle'); }
+  };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/publish-roulette`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '공개 실패'); return; }
+      toast.success('추첨 결과가 공개됐습니다! 모든 유저가 룰렛을 볼 수 있어요 🎉');
+      setPublished(true);
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setPublishing(false);
   };
 
   return (
@@ -593,7 +478,6 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
         </div>
         <div className="px-5 py-5 space-y-5">
 
-          {/* 룰렛 휠 (서버 응답 후 winner가 세팅되면 스핀) */}
           {phase !== 'idle' && winner && (
             <RouletteWheel
               participants={participants}
@@ -603,7 +487,6 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
             />
           )}
 
-          {/* 서버 응답 대기 중 (winner 아직 없음) */}
           {phase === 'spinning' && !winner && (
             <div className="flex flex-col items-center py-10 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
@@ -611,19 +494,31 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
             </div>
           )}
 
-          {/* 당첨자 발표 */}
           {phase === 'done' && winner && (
-            <div className="text-center py-6 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
-              <div className="text-4xl mb-2">🏆</div>
-              <p className="text-xs text-gray-500 mb-1">당첨자</p>
-              <p className="text-2xl font-black text-gray-900">{winner.nickname}</p>
-              {event.prizeGameName && (
-                <p className="text-sm text-orange-600 font-semibold mt-1">상품: {event.prizeGameName}</p>
+            <div className="space-y-3">
+              <div className="text-center py-6 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+                <div className="text-4xl mb-2">🏆</div>
+                <p className="text-xs text-gray-500 mb-1">당첨자</p>
+                <p className="text-2xl font-black text-gray-900">{winner.nickname}</p>
+                {event.prizeGameName && (
+                  <p className="text-sm text-orange-600 font-semibold mt-1">상품: {event.prizeGameName}</p>
+                )}
+              </div>
+              {published ? (
+                <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-xl border border-green-200">
+                  <Eye className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-bold text-green-700">모든 유저에게 공개됨</span>
+                </div>
+              ) : (
+                <button onClick={handlePublish} disabled={publishing}
+                  className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-black rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2">
+                  {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                  추첨 결과 공개하기
+                </button>
               )}
             </div>
           )}
 
-          {/* 추첨 버튼 */}
           {phase === 'idle' && (
             <>
               <button onClick={handleDraw} disabled={participants.length === 0}
@@ -649,11 +544,13 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
 }) {
   const [confirm, setConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [showRoulette, setShowRoulette] = useState(false);
 
   const handleClear = async () => {
     setClearing(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/admin/clear-current`, {
+      const res = await fetch(`${ICE_API}/ice/admin/clear-current`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
       });
       const d = await res.json();
@@ -664,6 +561,23 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
     setClearing(false);
     setConfirm(false);
   };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/publish-roulette`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '공개 실패'); return; }
+      toast.success('추첨 결과가 공개됐습니다! 모든 유저가 룰렛을 볼 수 있어요 🎉');
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setPublishing(false);
+  };
+
+  const rouletteParticipants = event.rouletteParticipants ?? participants;
+  const rouletteTotalCards = event.rouletteTotalCards ?? totalCards;
 
   return (
     <div className="space-y-4">
@@ -688,17 +602,49 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
             </div>
           )}
         </div>
-        <div className="px-5 py-6 text-center space-y-3">
-          <div className="text-4xl">🎉</div>
-          <p className="text-xs text-gray-400">당첨자</p>
-          <p className="text-3xl font-black text-gray-900">{event.winnerNickname}</p>
-          {event.prizeGameName && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full">
-              <span className="text-sm font-bold text-orange-700">🎁 {event.prizeGameName}</span>
+        <div className="px-5 py-5 space-y-4">
+          {/* 룰렛 재생 */}
+          {showRoulette && rouletteParticipants.length > 0 ? (
+            <div className="space-y-3">
+              <RouletteWheel
+                participants={rouletteParticipants}
+                totalCards={rouletteTotalCards}
+                winnerNickname={event.winnerNickname}
+              />
+              <button onClick={() => setShowRoulette(false)} className="w-full py-2 text-sm text-gray-400 border border-gray-200 rounded-xl hover:bg-gray-50">
+                닫기
+              </button>
+            </div>
+          ) : (
+            <div className="text-center space-y-3">
+              <div className="text-4xl">🎉</div>
+              <p className="text-xs text-gray-400">당첨자</p>
+              <p className="text-3xl font-black text-gray-900">{event.winnerNickname}</p>
+              {event.prizeGameName && (
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full">
+                  <span className="text-sm font-bold text-orange-700">🎁 {event.prizeGameName}</span>
+                </div>
+              )}
+              {rouletteParticipants.length > 0 && (
+                <button onClick={() => setShowRoulette(true)} className="w-full py-2.5 border border-cyan-200 text-cyan-600 rounded-xl text-sm font-bold hover:bg-cyan-50 flex items-center justify-center gap-2">
+                  🎲 룰렛 장면 다시 보기
+                </button>
+              )}
             </div>
           )}
-          {event.prizeGameImage && (
-            <img src={event.prizeGameImage} alt="상품" className="w-28 h-28 object-cover rounded-2xl border border-gray-200 shadow-sm mx-auto" />
+
+          {/* 공개 상태 */}
+          {event.roulettePublished ? (
+            <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-xl border border-green-200">
+              <Eye className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-bold text-green-700">모든 유저에게 공개됨</span>
+            </div>
+          ) : (
+            <button onClick={handlePublish} disabled={publishing}
+              className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-black rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2">
+              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+              추첨 결과 공개하기
+            </button>
           )}
         </div>
       </div>
