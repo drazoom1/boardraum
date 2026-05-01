@@ -3881,9 +3881,17 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const [auctionBadge, setAuctionBadge] = useState<{ status: 'active' | 'scheduled'; countdown?: string } | null>(null);
   const auctionBadgeRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activityCardProb, setActivityCardProb] = useState<{ post: number; comment: number } | null>(null);
-  const [iceEvent, setIceEvent] = useState<any>(null);
+  const [iceEvent, setIceEvent] = useState<any>(() => {
+    // localStorage 캐시로 즉시 표시 — 첫 fetch 전에 배너가 바로 보이도록
+    try { return JSON.parse(localStorage.getItem('ice_event_cache') || 'null'); } catch { return null; }
+  });
   const refreshIceEventRef = useRef<(() => void) | null>(null);
   const iceSeqRef = useRef(0); // 구버전 응답이 최신을 덮어쓰지 못하게
+
+  const setIceEventAndCache = (ev: any) => {
+    setIceEvent(ev);
+    try { localStorage.setItem('ice_event_cache', JSON.stringify(ev)); } catch {}
+  };
 
   useEffect(() => {
     let ivRef: ReturnType<typeof setInterval> | null = null;
@@ -3899,7 +3907,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/current`,
           { headers }
         );
-        if (res.status === 401) {
+        if (res.status === 401 && accessToken) {
           // 토큰 만료 — 폴링 중단 (accessToken 갱신 시 effect 재실행으로 재개)
           authFailed = true;
           if (ivRef) clearInterval(ivRef);
@@ -3907,7 +3915,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         }
         if (res.ok && seq === iceSeqRef.current) {
           const data = await res.json();
-          setIceEvent(data.event ?? null);
+          setIceEventAndCache(data.event ?? null);
         }
       } catch {}
     };
@@ -4531,9 +4539,10 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             setBonusCards(remaining);
             onCardCountChange?.(remaining);
           }}
-          onEventUpdate={(ev) => setIceEvent(ev)}
+          onEventUpdate={(ev) => setIceEventAndCache(ev)}
           onRefreshNeeded={() => refreshIceEventRef.current?.()}
           onResyncCards={() => loadBonusCards()}
+          onGuestAction={onGuestAction}
         />
       ) : (
         postsEverLoaded && lastPostEvents.length > 0 && (

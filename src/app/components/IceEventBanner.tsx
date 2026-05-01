@@ -26,9 +26,10 @@ interface IceEventBannerProps {
   userId?: string | null;
   bonusCards?: number;
   onCardUsed?: (remainingCards: number) => void;
-  onEventUpdate?: (event: IceEvent) => void; // 서버 응답으로 이벤트 직접 갱신
+  onEventUpdate?: (event: IceEvent) => void;
   onRefreshNeeded?: () => void;
-  onResyncCards?: () => void; // 실패 시 카드 수 서버 재동기화
+  onResyncCards?: () => void;
+  onGuestAction?: () => void; // 비로그인 사용자가 버튼 누를 때
 }
 
 function calcPct(iceTotal: number, iceCurrent: number) {
@@ -46,7 +47,7 @@ function getStageKey(pct: number): string {
   return '0';
 }
 
-export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusCards = 0, onCardUsed, onEventUpdate, onRefreshNeeded, onResyncCards }: IceEventBannerProps) {
+export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusCards = 0, onCardUsed, onEventUpdate, onRefreshNeeded, onResyncCards, onGuestAction }: IceEventBannerProps) {
   const [localEvent, setLocalEvent] = useState<IceEvent | null>(null);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -247,7 +248,7 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
                 </div>
                 <button
                   onClick={() => {
-                    if (!userId) { toast.error('로그인이 필요합니다'); return; }
+                    if (!userId) { onGuestAction?.(); return; }
                     if (bonusCards < 1) { toast.error('보너스 카드가 없습니다'); return; }
                     setUseCount(1);
                     setShowConfirm(true);
