@@ -1532,7 +1532,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-x-hidden">
-      <Toaster position="top-center" richColors />
+      <Toaster position="top-center" richColors duration={3500} closeButton visibleToasts={3} />
       {/* 비밀번호 재설정 모달 */}
       {showPasswordReset && <PasswordResetModal expired={showPasswordReset === 'expired'} onClose={() => { setShowPasswordReset(false); window.history.replaceState({}, '', '/'); }} />}
 
