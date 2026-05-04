@@ -374,10 +374,10 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
             </div>
             <div className="px-5 py-5 space-y-3">
               {[
-                { icon: '✍️', title: '게시물 작성', desc: '홈피드에 게시물을 작성하면 카드를 받아요.' },
-                { icon: '💬', title: '댓글 작성', desc: '다른 사람의 게시물에 댓글을 달면 카드를 받아요.' },
-                { icon: '👥', title: '추천인 초대', desc: '친구를 추천인 코드로 초대하면 카드를 받아요.' },
-                { icon: '🎁', title: '이벤트 참여', desc: '각종 이벤트 참여 시 보너스 카드를 드려요.' },
+                { icon: '✍️', title: '게시물 작성', desc: '홈피드에 게시물을 작성하면 일정 확률로 카드를 받아요.' },
+                { icon: '💬', title: '댓글 작성', desc: '다른 사람의 게시물에 댓글을 달면 일정 확률로 카드를 받아요.' },
+                { icon: '👥', title: '추천인 초대', desc: '친구를 추천인 코드로 초대하면 일정 확률로 카드를 받아요.' },
+                { icon: '🎁', title: '이벤트 참여', desc: '각종 이벤트 참여 시 일정 확률로 보너스 카드를 드려요.' },
               ].map(item => (
                 <div key={item.title} className="flex items-start gap-3 p-3 rounded-2xl" style={{ background: '#f8faff', border: '1px solid #e0eaff' }}>
                   <span className="text-xl flex-shrink-0 mt-0.5">{item.icon}</span>
