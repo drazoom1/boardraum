@@ -51,6 +51,7 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
   const [localEvent, setLocalEvent] = useState<IceEvent | null>(null);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showHowToGet, setShowHowToGet] = useState(false);
   const [useCount, setUseCount] = useState(1);
   const [using, setUsing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -273,6 +274,13 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
                     </>
                   ) : '얼음깨기'}
                 </button>
+                <button
+                  onClick={() => setShowHowToGet(true)}
+                  className="w-full rounded-xl text-blue-500 text-xs font-medium mt-2"
+                  style={{ height: 28, background: '#eff6ff', border: '1px solid #bfdbfe' }}
+                >
+                  카드 얻기 🃏
+                </button>
               </>
             )}
           </div>
@@ -347,6 +355,47 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
           prizeName={event.prizeName}
           onClose={() => setShowRoulette(false)}
         />
+      )}
+
+      {showHowToGet && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowHowToGet(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-sm mx-4 overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 text-center" style={{ background: 'linear-gradient(135deg,#bfdbfe,#dbeafe)' }}>
+              <div className="text-2xl mb-1">🃏</div>
+              <p className="font-black text-blue-900 text-base">카드 얻는 방법</p>
+              <p className="text-xs text-blue-600 mt-0.5">카드를 사용할수록 당첨 확률이 올라가요!</p>
+            </div>
+            <div className="px-5 py-5 space-y-3">
+              {[
+                { icon: '✍️', title: '게시물 작성', desc: '홈피드에 게시물을 작성하면 카드를 받아요.' },
+                { icon: '💬', title: '댓글 작성', desc: '다른 사람의 게시물에 댓글을 달면 카드를 받아요.' },
+                { icon: '👥', title: '추천인 초대', desc: '친구를 추천인 코드로 초대하면 카드를 받아요.' },
+                { icon: '🎁', title: '이벤트 참여', desc: '각종 이벤트 참여 시 보너스 카드를 드려요.' },
+              ].map(item => (
+                <div key={item.title} className="flex items-start gap-3 p-3 rounded-2xl" style={{ background: '#f8faff', border: '1px solid #e0eaff' }}>
+                  <span className="text-xl flex-shrink-0 mt-0.5">{item.icon}</span>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">{item.title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={() => setShowHowToGet(false)}
+                className="w-full py-2.5 mt-1 rounded-2xl bg-blue-500 text-white font-bold text-sm"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`
