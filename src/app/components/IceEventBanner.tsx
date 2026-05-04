@@ -18,6 +18,7 @@ interface IceEvent {
   myCardCount: number;
   prizeName?: string;
   winnerNickname?: string;
+  description?: string;
 }
 
 interface IceEventBannerProps {
@@ -52,6 +53,7 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
   const [showRoulette, setShowRoulette] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showHowToGet, setShowHowToGet] = useState(false);
+  const [showEventDesc, setShowEventDesc] = useState(false);
   const [useCount, setUseCount] = useState(1);
   const [using, setUsing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -198,6 +200,9 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
             <span className="text-lg">🧊</span>
             <span className="font-bold text-blue-800 text-sm">얼음깨기 이벤트</span>
             {isActive && <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">진행중</span>}
+            {isActive && event.description && (
+              <button onClick={() => setShowEventDesc(true)} className="text-blue-500 text-base leading-none">ℹ️</button>
+            )}
             {isEnded && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded-full">추첨 대기 중</span>}
             {isDrawn && <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">추첨 완료</span>}
           </div>
@@ -355,6 +360,33 @@ export function IceEventBanner({ event: serverEvent, accessToken, userId, bonusC
           prizeName={event.prizeName}
           onClose={() => setShowRoulette(false)}
         />
+      )}
+
+      {showEventDesc && event.description && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowEventDesc(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-sm mx-4 overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 text-center" style={{ background: 'linear-gradient(135deg,#bfdbfe,#dbeafe)' }}>
+              <div className="text-2xl mb-1">🧊</div>
+              <p className="font-black text-blue-900 text-base">이벤트 안내</p>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-sm text-gray-700 leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{event.description}</p>
+              <button
+                onClick={() => setShowEventDesc(false)}
+                className="w-full py-2.5 mt-5 rounded-2xl bg-blue-500 text-white font-bold text-sm"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showHowToGet && (
