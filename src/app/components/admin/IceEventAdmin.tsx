@@ -4,7 +4,7 @@ import { projectId } from '/utils/supabase/info';
 import { RefreshCw, Loader2, ChevronDown, ChevronUp, Trash2, Trophy, Users, Zap, Eye } from 'lucide-react';
 import { RouletteWheel } from '../RouletteModal';
 
-const ICE_API = `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e`;
+const ICE_API = `https://${projectId}.supabase.co/functions/v1/make-server-ice`;
 
 // ── 단계 레이블 ──
 const STAGE_LABELS: Record<string, string> = {
@@ -177,7 +177,7 @@ function CreateForm({ accessToken, onCreated }: { accessToken: string; onCreated
     setSaving(true);
     try {
       const payload = JSON.stringify({ title, description: desc, prizeGameName: prize, prizeGameImage: prizeImg, iceTotal, iceDamagePerCard: damage, iceImages });
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/admin/create`, {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-ice/ice/admin/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: payload,
@@ -327,7 +327,7 @@ function MonitorSection({ event, participants, totalCards, accessToken, onRefres
   const handleEnd = async () => {
     setEnding(true);
     try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/admin/end`, {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-ice/ice/admin/end`, {
         method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
       });
       const d = await res.json();

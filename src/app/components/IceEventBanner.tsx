@@ -4,7 +4,7 @@ import { projectId } from '/utils/supabase/info';
 import { RouletteModal } from './RouletteModal';
 
 const ICE_API = (path: string) =>
-  `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e${path}`;
+  `https://${projectId}.supabase.co/functions/v1/make-server-ice${path}`;
 
 interface IceEvent {
   eventId: string;

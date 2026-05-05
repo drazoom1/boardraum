@@ -3904,7 +3904,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         const headers: Record<string, string> = {};
         if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
         const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-bb453c8e/ice/current`,
+          `https://${projectId}.supabase.co/functions/v1/make-server-ice/ice/current`,
           { headers }
         );
         if (res.status === 401 && accessToken) {

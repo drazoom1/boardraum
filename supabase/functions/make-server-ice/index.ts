@@ -1,5 +1,5 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 얼음깨기 이벤트 서버  —  make-server-bb453c8e
+// 얼음깨기 이벤트 서버  —  make-server-ice
 // 기존 코드 무관하게 완전 독립 동작. KV prefix: ice_
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -9,7 +9,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 
 const ADMIN_EMAIL = "sityplanner2@naver.com";
-const PREFIX = "/make-server-bb453c8e";
+const PREFIX = "/make-server-ice";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
