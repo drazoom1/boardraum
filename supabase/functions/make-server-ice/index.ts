@@ -327,11 +327,15 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
     if (event.status === "drawn")  return c.json({ error: "이미 추첨이 완료됐습니다" }, 400);
     if (event.status === "active") return c.json({ error: "이벤트를 먼저 종료해주세요 (/ice/admin/end)" }, 400);
 
+    // 제외할 userId 목록 (프론트엔드에서 전달)
+    const body = await c.req.json().catch(() => ({}));
+    const excludedUserIds: string[] = Array.isArray(body.excludedUserIds) ? body.excludedUserIds : [];
+
     // 참여자 전원 조회
     const rows = await kv.getByPrefixWithKeys("ice_card_usage_");
     const rawParticipants: any[] = rows
       .map((r) => r.value)
-      .filter((v) => v && v.cardCount > 0)
+      .filter((v) => v && v.cardCount > 0 && !excludedUserIds.includes(v.userId))
       .sort((a, b) => b.cardCount - a.cardCount);
 
     if (rawParticipants.length === 0) {
@@ -402,6 +406,7 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
         participants: participantsWithPct,
         totalCards,
         drawnBy: user.email,
+        ...(excludedUserIds.length > 0 ? { excludedUserIds } : {}),
       })
       .catch(() => {});
 

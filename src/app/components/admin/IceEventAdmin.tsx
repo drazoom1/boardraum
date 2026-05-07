@@ -436,14 +436,29 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
   const [winner, setWinner] = useState<any>(null);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+
+  const toggleExclude = (userId: string) => {
+    setExcludedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const effectiveParticipants = participants.filter(p => !excludedIds.has(p.userId));
+  const effectiveTotalCards = effectiveParticipants.reduce((s, p) => s + p.cardCount, 0);
 
   const handleDraw = async () => {
-    if (participants.length === 0) return;
+    if (effectiveParticipants.length === 0) return;
     setPhase('spinning');
     setWinner(null);
     try {
       const res = await fetch(`${ICE_API}/ice/admin/draw`, {
-        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ excludedUserIds: Array.from(excludedIds) }),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || '추첨 실패'); setPhase('idle'); return; }
@@ -480,8 +495,8 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
 
           {phase !== 'idle' && winner && (
             <RouletteWheel
-              participants={participants}
-              totalCards={totalCards}
+              participants={effectiveParticipants}
+              totalCards={effectiveTotalCards}
               winnerNickname={winner.nickname}
               winnerId={winner.id}
               onDone={(actualName) => { setWinner(w => w ? { ...w, nickname: actualName } : w); setPhase('done'); onRefresh(); }}
@@ -522,12 +537,52 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
 
           {phase === 'idle' && (
             <>
-              <button onClick={handleDraw} disabled={participants.length === 0}
+              {participants.length > 0 && (
+                <div className="rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-600">추첨 제외 설정</span>
+                    <span className="text-xs text-gray-400">
+                      {excludedIds.size > 0
+                        ? `${participants.length - excludedIds.size}명 / ${effectiveTotalCards.toLocaleString()}회 참여`
+                        : `전체 ${participants.length}명`}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {participants.map((p) => {
+                      const excluded = excludedIds.has(p.userId);
+                      return (
+                        <div key={p.userId}
+                          className={`flex items-center justify-between px-4 py-2.5 transition-colors ${excluded ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`font-medium text-sm truncate ${excluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                              {p.nickname}
+                            </span>
+                            <span className="text-xs text-gray-400 shrink-0">{p.cardCount}회 · {(p.percentage ?? 0).toFixed(1)}%</span>
+                          </div>
+                          <button onClick={() => toggleExclude(p.userId)}
+                            className={`ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                              excluded
+                                ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}>
+                            {excluded ? '복원' : '제외'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <button onClick={handleDraw} disabled={effectiveParticipants.length === 0}
                 className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-base font-black rounded-2xl hover:from-cyan-600 hover:to-blue-600 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2">
                 <Trophy className="w-5 h-5" />
-                🎲 룰렛 추첨 실행
+                🎲 룰렛 추첨 실행 {excludedIds.size > 0 && `(${effectiveParticipants.length}명)`}
               </button>
-              {participants.length === 0 && <p className="text-center text-xs text-gray-400">참여자가 없습니다</p>}
+              {effectiveParticipants.length === 0 && (
+                <p className="text-center text-xs text-gray-400">
+                  {participants.length === 0 ? '참여자가 없습니다' : '모든 참여자가 제외됐습니다'}
+                </p>
+              )}
             </>
           )}
         </div>
