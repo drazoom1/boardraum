@@ -693,23 +693,39 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
       <div className="bg-white rounded-2xl border border-yellow-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-yellow-100 bg-gradient-to-r from-yellow-50 to-orange-50 flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-800">🏆 추첨 완료 — {event.title}</h3>
-          {!confirm ? (
-            <button
-              onClick={() => setConfirm(true)}
-              className="px-3 py-1.5 text-xs font-bold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              이벤트 종료
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-red-500 font-medium">기록 보관 후 초기화할까요?</span>
-              <button onClick={handleClear} disabled={clearing}
-                className="px-3 py-1.5 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
-                {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
-              </button>
-              <button onClick={() => setConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {confirmRedraw ? (
+              <>
+                <span className="text-xs text-orange-600 font-medium">당첨자가 바뀝니다. 재추첨할까요?</span>
+                <button onClick={handleRedraw} disabled={redrawing}
+                  className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1">
+                  {redrawing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
+                </button>
+                <button onClick={() => setConfirmRedraw(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+              </>
+            ) : confirm ? (
+              <>
+                <span className="text-xs text-red-500 font-medium">기록 보관 후 초기화할까요?</span>
+                <button onClick={handleClear} disabled={clearing}
+                  className="px-3 py-1.5 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
+                  {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
+                </button>
+                <button onClick={() => setConfirm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setConfirmRedraw(true)}
+                  className="px-3 py-1.5 text-xs font-bold text-orange-500 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3" />
+                  다시 추첨
+                </button>
+                <button onClick={() => setConfirm(true)}
+                  className="px-3 py-1.5 text-xs font-bold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  이벤트 종료
+                </button>
+              </>
+            )}
+          </div>
         </div>
         <div className="px-5 py-5 space-y-4">
           {/* 룰렛 재생 */}
@@ -760,22 +776,6 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
                 <button onClick={() => setShowRoulette(true)} className="w-full py-2.5 border border-cyan-200 text-cyan-600 rounded-xl text-sm font-bold hover:bg-cyan-50 flex items-center justify-center gap-2">
                   🎲 룰렛 장면 다시 보기
                 </button>
-              )}
-              {!confirmRedraw ? (
-                <button onClick={() => setConfirmRedraw(true)}
-                  className="w-full py-2.5 border border-gray-200 text-gray-400 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  다시 추첨하기
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
-                  <span className="text-xs text-orange-600 font-medium flex-1">기존 당첨자가 바뀝니다. 다시 추첨할까요?</span>
-                  <button onClick={handleRedraw} disabled={redrawing}
-                    className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1">
-                    {redrawing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
-                  </button>
-                  <button onClick={() => setConfirmRedraw(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-                </div>
               )}
             </div>
           )}
