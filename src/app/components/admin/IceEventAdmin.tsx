@@ -615,20 +615,31 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
   const [showNicknameEdit, setShowNicknameEdit] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
-  const [confirmRedraw, setConfirmRedraw] = useState(false);
+  const [showRedrawPanel, setShowRedrawPanel] = useState(false);
+  const [redrawExcludedIds, setRedrawExcludedIds] = useState<Set<string>>(new Set());
+
+  const toggleRedrawExclude = (userId: string) => {
+    setRedrawExcludedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
 
   const handleRedraw = async () => {
     setRedrawing(true);
-    setConfirmRedraw(false);
     try {
       const res = await fetch(`${ICE_API}/ice/admin/draw`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: true }),
+        body: JSON.stringify({ force: true, excludedUserIds: Array.from(redrawExcludedIds) }),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || '추첨 실패'); return; }
       toast.success(`다시 추첨됐습니다! 당첨자: ${d.winnerNickname}`);
+      setShowRedrawPanel(false);
+      setRedrawExcludedIds(new Set());
       onRefresh();
     } catch { toast.error('네트워크 오류'); }
     setRedrawing(false);
@@ -694,16 +705,7 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
         <div className="px-5 py-4 border-b border-yellow-100 bg-gradient-to-r from-yellow-50 to-orange-50 flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-800">🏆 추첨 완료 — {event.title}</h3>
           <div className="flex items-center gap-2">
-            {confirmRedraw ? (
-              <>
-                <span className="text-xs text-orange-600 font-medium">당첨자가 바뀝니다. 재추첨할까요?</span>
-                <button onClick={handleRedraw} disabled={redrawing}
-                  className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1">
-                  {redrawing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
-                </button>
-                <button onClick={() => setConfirmRedraw(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-              </>
-            ) : confirm ? (
+            {confirm ? (
               <>
                 <span className="text-xs text-red-500 font-medium">기록 보관 후 초기화할까요?</span>
                 <button onClick={handleClear} disabled={clearing}
@@ -714,8 +716,8 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
               </>
             ) : (
               <>
-                <button onClick={() => setConfirmRedraw(true)}
-                  className="px-3 py-1.5 text-xs font-bold text-orange-500 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors flex items-center gap-1">
+                <button onClick={() => { setShowRedrawPanel(v => !v); setRedrawExcludedIds(new Set()); }}
+                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1 ${showRedrawPanel ? 'bg-orange-50 text-orange-600 border-orange-300' : 'text-orange-500 border-orange-200 hover:bg-orange-50'}`}>
                   <RefreshCw className="w-3 h-3" />
                   다시 추첨
                 </button>
@@ -728,6 +730,61 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
           </div>
         </div>
         <div className="px-5 py-5 space-y-4">
+          {/* 다시 추첨 패널 */}
+          {showRedrawPanel && (
+            <div className="rounded-xl border border-orange-200 overflow-hidden">
+              <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-100 flex items-center justify-between">
+                <span className="text-xs font-bold text-orange-700">다시 추첨할 참여자 설정</span>
+                <span className="text-xs text-orange-500">
+                  {participants.length - redrawExcludedIds.size}명 참여
+                </span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {participants.filter(p => !redrawExcludedIds.has(p.userId)).map((p) => (
+                  <div key={p.userId} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-sm text-gray-800 truncate">{p.nickname}</span>
+                      <span className="text-xs text-gray-400 shrink-0">{p.cardCount}회 · {(p.percentage ?? 0).toFixed(1)}%</span>
+                    </div>
+                    <button onClick={() => toggleRedrawExclude(p.userId)}
+                      className="ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
+                      제외
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {redrawExcludedIds.size > 0 && (
+                <div className="border-t border-dashed border-orange-100">
+                  <div className="px-4 py-2 bg-orange-50 flex items-center justify-between">
+                    <span className="text-xs text-orange-400">제외됨 {redrawExcludedIds.size}명</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {participants.filter(p => redrawExcludedIds.has(p.userId)).map((p) => (
+                      <div key={p.userId} className="flex items-center justify-between px-4 py-2 bg-red-50">
+                        <span className="text-xs text-gray-400 truncate">{p.nickname}</span>
+                        <button onClick={() => toggleRedrawExclude(p.userId)}
+                          className="ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-gray-100 hover:text-gray-500 transition-colors">
+                          복원
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex gap-2">
+                <button onClick={handleRedraw}
+                  disabled={redrawing || participants.length - redrawExcludedIds.size === 0}
+                  className="flex-1 py-2 bg-orange-500 text-white text-sm font-black rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                  {redrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trophy className="w-4 h-4" />}
+                  추첨 실행 {redrawExcludedIds.size > 0 && `(${participants.length - redrawExcludedIds.size}명)`}
+                </button>
+                <button onClick={() => { setShowRedrawPanel(false); setRedrawExcludedIds(new Set()); }}
+                  className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
           {/* 룰렛 재생 */}
           {showRoulette && rouletteParticipants.length > 0 ? (
             <div className="space-y-3">
