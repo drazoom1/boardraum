@@ -324,10 +324,9 @@ app.post(`${PREFIX}/ice/admin/draw`, async (c) => {
 
     const event = await kv.get("ice_event_current");
     if (!event) return c.json({ error: "이벤트가 없습니다" }, 400);
-    if (event.status === "drawn")  return c.json({ error: "이미 추첨이 완료됐습니다" }, 400);
     if (event.status === "active") return c.json({ error: "이벤트를 먼저 종료해주세요 (/ice/admin/end)" }, 400);
 
-    // 제외할 userId 목록 (프론트엔드에서 전달)
+    // 제외할 userId 목록 (프론트엔드에서 전달, 재추첨 시 force: true)
     const body = await c.req.json().catch(() => ({}));
     const excludedUserIds: string[] = Array.isArray(body.excludedUserIds) ? body.excludedUserIds : [];
 

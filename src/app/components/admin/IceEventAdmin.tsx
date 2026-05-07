@@ -520,6 +520,11 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
                   <p className="text-sm text-orange-600 font-semibold mt-1">상품: {event.prizeGameName}</p>
                 )}
               </div>
+              <button onClick={() => { setPhase('idle'); setWinner(null); setPublished(false); }}
+                className="w-full py-2.5 border border-gray-200 text-gray-500 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                다시 추첨하기
+              </button>
               {published ? (
                 <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-xl border border-green-200">
                   <Eye className="w-4 h-4 text-green-600" />
@@ -540,37 +545,41 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
               {participants.length > 0 && (
                 <div className="rounded-xl border border-gray-100 overflow-hidden">
                   <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-600">추첨 제외 설정</span>
-                    <span className="text-xs text-gray-400">
-                      {excludedIds.size > 0
-                        ? `${participants.length - excludedIds.size}명 / ${effectiveTotalCards.toLocaleString()}회 참여`
-                        : `전체 ${participants.length}명`}
-                    </span>
+                    <span className="text-xs font-bold text-gray-600">참여자</span>
+                    <span className="text-xs text-gray-400">{effectiveParticipants.length}명 · {effectiveTotalCards.toLocaleString()}회</span>
                   </div>
                   <div className="divide-y divide-gray-50">
-                    {participants.map((p) => {
-                      const excluded = excludedIds.has(p.userId);
-                      return (
-                        <div key={p.userId}
-                          className={`flex items-center justify-between px-4 py-2.5 transition-colors ${excluded ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`font-medium text-sm truncate ${excluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                              {p.nickname}
-                            </span>
-                            <span className="text-xs text-gray-400 shrink-0">{p.cardCount}회 · {(p.percentage ?? 0).toFixed(1)}%</span>
-                          </div>
-                          <button onClick={() => toggleExclude(p.userId)}
-                            className={`ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors ${
-                              excluded
-                                ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}>
-                            {excluded ? '복원' : '제외'}
-                          </button>
+                    {effectiveParticipants.map((p) => (
+                      <div key={p.userId} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium text-sm text-gray-800 truncate">{p.nickname}</span>
+                          <span className="text-xs text-gray-400 shrink-0">{p.cardCount}회 · {(p.percentage ?? 0).toFixed(1)}%</span>
                         </div>
-                      );
-                    })}
+                        <button onClick={() => toggleExclude(p.userId)}
+                          className="ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
+                          제외
+                        </button>
+                      </div>
+                    ))}
                   </div>
+                  {excludedIds.size > 0 && (
+                    <div className="border-t border-dashed border-gray-200">
+                      <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                        <span className="text-xs text-gray-400">제외됨 {excludedIds.size}명</span>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {participants.filter(p => excludedIds.has(p.userId)).map((p) => (
+                          <div key={p.userId} className="flex items-center justify-between px-4 py-2 bg-red-50">
+                            <span className="text-xs text-gray-400 truncate">{p.nickname}</span>
+                            <button onClick={() => toggleExclude(p.userId)}
+                              className="ml-3 shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-gray-100 hover:text-gray-500 transition-colors">
+                              복원
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <button onClick={handleDraw} disabled={effectiveParticipants.length === 0}
@@ -605,6 +614,25 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
   const [nicknameInput, setNicknameInput] = useState('');
   const [showNicknameEdit, setShowNicknameEdit] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
+  const [redrawing, setRedrawing] = useState(false);
+  const [confirmRedraw, setConfirmRedraw] = useState(false);
+
+  const handleRedraw = async () => {
+    setRedrawing(true);
+    setConfirmRedraw(false);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/draw`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '추첨 실패'); return; }
+      toast.success(`다시 추첨됐습니다! 당첨자: ${d.winnerNickname}`);
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setRedrawing(false);
+  };
 
   const handleClear = async () => {
     setClearing(true);
@@ -732,6 +760,22 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
                 <button onClick={() => setShowRoulette(true)} className="w-full py-2.5 border border-cyan-200 text-cyan-600 rounded-xl text-sm font-bold hover:bg-cyan-50 flex items-center justify-center gap-2">
                   🎲 룰렛 장면 다시 보기
                 </button>
+              )}
+              {!confirmRedraw ? (
+                <button onClick={() => setConfirmRedraw(true)}
+                  className="w-full py-2.5 border border-gray-200 text-gray-400 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  다시 추첨하기
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
+                  <span className="text-xs text-orange-600 font-medium flex-1">기존 당첨자가 바뀝니다. 다시 추첨할까요?</span>
+                  <button onClick={handleRedraw} disabled={redrawing}
+                    className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1">
+                    {redrawing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '확인'}
+                  </button>
+                  <button onClick={() => setConfirmRedraw(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                </div>
               )}
             </div>
           )}
