@@ -80,40 +80,14 @@ export function InfluencerAdmin({ accessToken }: { accessToken: string }) {
 
   const authHeader = () => ({ Authorization: `Bearer ${accessToken}` });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [formRes, appRes] = await Promise.all([
-        fetch(`${API}/influencer/form`, { headers: authHeader() }),
-        fetch(`${API}/influencer/admin/applications`, { headers: authHeader() }),
-      ]);
-      const formData = await formRes.json().catch(() => ({}));
-      const appData = await appRes.json().catch(() => ({}));
-
-      // admin은 draft도 볼 수 있어야 하므로 직접 fetch
-      if (formData.form) setActiveForm(formData.form);
-      else {
-        // draft 상태면 /influencer/form이 null 반환 — admin/save로 체크
-        setActiveForm(null);
-      }
-      setApplications(appData.applications ?? []);
-    } catch (e: any) {
-      toast.error(`불러오기 실패: ${e?.message ?? e}`);
-    }
-    setLoading(false);
-  }, [accessToken]);
-
   // admin용 전체 로드 (draft 포함)
   const loadAdmin = useCallback(async () => {
     setLoading(true);
     try {
-      const [appRes] = await Promise.all([
+      const [formRes, appRes] = await Promise.all([
+        fetch(`${API}/influencer/admin/form`, { headers: authHeader() }),
         fetch(`${API}/influencer/admin/applications`, { headers: authHeader() }),
       ]);
-
-      // draft까지 포함한 form은 별도 admin endpoint 없이 save 후 돌아오는 값으로 관리
-      // open/closed form은 /influencer/form에서 옴
-      const formRes = await fetch(`${API}/influencer/form`, { headers: authHeader() });
       const formData = await formRes.json().catch(() => ({}));
       const appData = await appRes.json().catch(() => ({}));
 

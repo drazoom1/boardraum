@@ -102,6 +102,21 @@ app.get(`${PREFIX}/influencer/me`, async (c) => {
 });
 
 // ══════════════════════════════════════════════════════════════════
+// [관리자] GET /influencer/admin/form — draft 포함 신청서 조회
+// ══════════════════════════════════════════════════════════════════
+
+app.get(`${PREFIX}/influencer/admin/form`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+    const form = await kv.get("influencer_form_active");
+    return c.json({ form: form ?? null });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
 // [관리자] POST /influencer/admin/save — 신청서 저장 (draft)
 // ══════════════════════════════════════════════════════════════════
 
