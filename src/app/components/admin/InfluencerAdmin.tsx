@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, X, GripVertical } from 'lucide-react';
+import { ALL_RANKS } from '../chessRank';
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ interface ApplicationForm {
   id: string;
   title: string;
   description: string;
+  minRankIndex: number; // ALL_RANKS 배열 인덱스
   periodStart: string;
   periodEnd: string;
   questions: Question[];
@@ -147,6 +149,9 @@ function FormCard({ form, onDelete }: { form: ApplicationForm; onDelete: (id: st
       {open && (
         <div className="mt-3 space-y-3 pl-1">
           <div className="text-xs text-gray-500">
+            신청 자격: <span className="font-bold text-yellow-600">{ALL_RANKS[form.minRankIndex]?.label ?? '-'} 이상</span>
+          </div>
+          <div className="text-xs text-gray-500">
             활동 기간: {form.periodStart || '-'} ~ {form.periodEnd || '-'}
           </div>
           {form.questions.length > 0 && (
@@ -192,6 +197,7 @@ function CreateFormView({ onSave, onCancel }: {
 }) {
   const [title, setTitle]             = useState('');
   const [description, setDescription] = useState('');
+  const [minRankIndex, setMinRankIndex] = useState(12); // 기본값: 보린이 1 (index 12)
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd]     = useState('');
   const [questions, setQuestions]     = useState<Question[]>([emptyQuestion()]);
@@ -255,6 +261,7 @@ function CreateFormView({ onSave, onCancel }: {
       id: uid(),
       title,
       description,
+      minRankIndex,
       periodStart,
       periodEnd,
       questions,
@@ -300,8 +307,25 @@ function CreateFormView({ onSave, onCancel }: {
                 className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-yellow-400 resize-none"
               />
             </label>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-xs text-yellow-700">
-              신청 자격: <span className="font-bold">보린이 등급 이상</span> (자동 적용)
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-gray-600">신청 가능 최소 등급</span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={minRankIndex}
+                  onChange={e => setMinRankIndex(Number(e.target.value))}
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-yellow-400 bg-white"
+                >
+                  {ALL_RANKS.map((rank, idx) => (
+                    <option key={idx} value={idx}>
+                      {rank.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-gray-400 shrink-0">이상</span>
+              </div>
+              <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                선택된 등급: <span className="font-bold">{ALL_RANKS[minRankIndex]?.label}</span> 이상부터 신청 가능
+              </p>
             </div>
           </Section>
 
