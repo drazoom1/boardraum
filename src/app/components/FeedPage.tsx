@@ -4543,7 +4543,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         <ScheduledEventBanner key={evt.id} event={evt} userId={userId} accessToken={accessToken} />
       ))}
       {/* 인플루언서 신청 배너 */}
-      {influencerForm && (influencerForm.status === 'open' || myInfluencerApp) && (
+      {influencerForm && influencerForm.status === 'open' && (
         <InfluencerBanner
           form={influencerForm}
           myApplication={myInfluencerApp}
