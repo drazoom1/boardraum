@@ -617,6 +617,24 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
   const [redrawing, setRedrawing] = useState(false);
   const [showRedrawPanel, setShowRedrawPanel] = useState(false);
   const [redrawExcludedIds, setRedrawExcludedIds] = useState<Set<string>>(new Set());
+  const [hidingBanner, setHidingBanner] = useState(false);
+
+  const handleToggleBanner = async () => {
+    setHidingBanner(true);
+    const hide = !event.bannerHidden;
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/hide-banner`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hide }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '처리 실패'); return; }
+      toast.success(hide ? '배너가 내려졌습니다' : '배너가 다시 표시됩니다');
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setHidingBanner(false);
+  };
 
   const toggleRedrawExclude = (userId: string) => {
     setRedrawExcludedIds(prev => {
@@ -716,6 +734,10 @@ function DrawnSection({ event, participants, totalCards, accessToken, onRefresh 
               </>
             ) : (
               <>
+                <button onClick={handleToggleBanner} disabled={hidingBanner}
+                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50 ${event.bannerHidden ? 'text-blue-600 border-blue-300 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                  {hidingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : (event.bannerHidden ? '📢 배너 다시 올리기' : '📴 배너 내리기')}
+                </button>
                 <button onClick={() => { setShowRedrawPanel(v => !v); setRedrawExcludedIds(new Set()); }}
                   className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1 ${showRedrawPanel ? 'bg-orange-50 text-orange-600 border-orange-300' : 'text-orange-500 border-orange-200 hover:bg-orange-50'}`}>
                   <RefreshCw className="w-3 h-3" />

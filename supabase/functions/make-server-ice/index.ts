@@ -94,6 +94,7 @@ app.get(`${PREFIX}/ice/current`, async (c) => {
   try {
     const event = await kv.get("ice_event_current");
     if (!event) return c.json({ event: null });
+    if (event.bannerHidden) return c.json({ event: null });
 
     const pct = calcPct(event);
     const stage = getIceStage(pct);
@@ -637,6 +638,30 @@ app.get(`${PREFIX}/ice/admin/overview`, async (c) => {
     return c.json({ event: eventLight, participants: participantsWithPct, totalCards, history });
   } catch (e) {
     console.error("[ice/admin/overview]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] POST /ice/admin/hide-banner — 배너 숨기기/다시 보이기
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/ice/admin/hide-banner`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const event = await kv.get("ice_event_current");
+    if (!event) return c.json({ error: "현재 이벤트가 없습니다" }, 400);
+
+    const body = await c.req.json().catch(() => ({}));
+    const hide = body.hide !== false; // 기본값 true (숨기기)
+
+    await kv.set("ice_event_current", { ...event, bannerHidden: hide });
+    console.log(`[얼음깨기] 배너 ${hide ? "숨김" : "표시"}: ${event.eventId} by ${user.email}`);
+    return c.json({ success: true, bannerHidden: hide });
+  } catch (e) {
+    console.error("[ice/admin/hide-banner]", e);
     return c.json({ error: String(e) }, 500);
   }
 });
