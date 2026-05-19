@@ -164,7 +164,10 @@ export function RankInfoModal({ onClose, userPoints, userPosts, userComments, us
                 const ranks = ALL_RANKS.filter(r => r.tier === tier);
                 return (
                   <div key={tier} className="mb-5">
-                    <p className="text-sm font-bold text-gray-700 mb-2 px-1">{tier}단계 ({ranks[0].tierKo})</p>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <p className="text-sm font-bold text-gray-700">{tier}단계 ({ranks[0].tierKo})</p>
+                      {tier >= 3 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">⭐ 인플루언서 가능등급</span>}
+                    </div>
                     <div className="rounded-xl overflow-hidden border border-gray-100">
                       <div className="grid grid-cols-5 bg-gray-50 px-3 py-2 text-xs text-gray-400 font-medium">
                         <span>등급</span>
