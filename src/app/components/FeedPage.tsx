@@ -13,6 +13,7 @@ import { SpamWarningModal } from './SpamWarningModal';
 import { ReferralLinkModal } from './ReferralLinkModal';
 import { updatePostSEO } from '../utils/seo';
 import { IceEventBanner } from './IceEventBanner';
+import { InfluencerBanner } from './InfluencerBanner';
 
 const supabase = getSupabaseClient();
 
@@ -3887,6 +3888,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   });
   const refreshIceEventRef = useRef<(() => void) | null>(null);
   const iceSeqRef = useRef(0); // 구버전 응답이 최신을 덮어쓰지 못하게
+  const [influencerForm, setInfluencerForm] = useState<any>(null);
+  const [myInfluencerApp, setMyInfluencerApp] = useState<any>(null);
 
   const setIceEventAndCache = (ev: any) => {
     setIceEvent(ev);
@@ -3924,6 +3927,17 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
     fetchIceEvent();
     ivRef = setInterval(fetchIceEvent, 5000);
     return () => { if (ivRef) clearInterval(ivRef); };
+  }, [accessToken]);
+
+  useEffect(() => {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-influencer/influencer/form`, { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) { setInfluencerForm(d.form ?? null); setMyInfluencerApp(d.myApplication ?? null); }
+      })
+      .catch(() => {});
   }, [accessToken]);
 
   useEffect(() => {
@@ -4528,6 +4542,18 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {scheduledEvents.map(evt => (
         <ScheduledEventBanner key={evt.id} event={evt} userId={userId} accessToken={accessToken} />
       ))}
+      {/* 인플루언서 신청 배너 */}
+      {influencerForm && (influencerForm.status === 'open' || myInfluencerApp) && (
+        <InfluencerBanner
+          form={influencerForm}
+          myApplication={myInfluencerApp}
+          accessToken={accessToken}
+          onApplied={() => {
+            setMyInfluencerApp({ status: 'pending' });
+          }}
+          onGuestAction={onGuestAction}
+        />
+      )}
       {/* 얼음깨기 이벤트 배너 — active/ended일 때 마지막글 이벤트보다 우선 표시 */}
       {(iceEvent?.status === 'active' || iceEvent?.status === 'ended' || iceEvent?.status === 'drawn') ? (
         <IceEventBanner

@@ -34,16 +34,22 @@ export function ChessRankIcon({ rank, size = 'sm' }: { rank: ChessRank; size?: '
 }
 
 // 배지 (피드: 아이콘만 / 마이페이지: 아이콘+텍스트)
-export function ChessRankBadge({ rank, showLabel = false }: { rank: ChessRank; showLabel?: boolean }) {
+export function ChessRankBadge({ rank, showLabel = false, isInfluencer = false }: { rank: ChessRank; showLabel?: boolean; isInfluencer?: boolean }) {
   if (showLabel) {
     return (
       <span className="inline-flex items-center gap-1 flex-shrink-0">
         <img src={getImg(rank)} className="w-5 h-5 object-contain" />
         <span className="text-xs font-semibold text-gray-600">{rank.label}</span>
+        {isInfluencer && <span className="text-yellow-400 text-sm leading-none" title="인플루언서">⭐</span>}
       </span>
     );
   }
-  return <img src={getImg(rank)} className="w-5 h-5 object-contain flex-shrink-0" title={rank.label} />;
+  return (
+    <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+      <img src={getImg(rank)} className="w-5 h-5 object-contain" title={rank.label} />
+      {isInfluencer && <span className="text-yellow-400 text-sm leading-none" title="인플루언서">⭐</span>}
+    </span>
+  );
 }
 
 // 등급 설명 모달

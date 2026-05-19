@@ -125,6 +125,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showRankModal, setShowRankModal] = useState(false);
   const [staffLevel, setStaffLevel] = useState<number | null>(null);
+  const [isInfluencer, setIsInfluencer] = useState(false);
   const [showPwSection, setShowPwSection] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
@@ -245,6 +246,15 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
       { headers: { Authorization: `Bearer ${accessToken}` } }
     ).then(r => r.ok ? r.json() : null).then(d => {
       if (d) setUserPoints(d);
+    }).catch(() => {});
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-influencer/influencer/me`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) setIsInfluencer(d.isInfluencer ?? false);
     }).catch(() => {});
   }, [accessToken]);
 
@@ -435,7 +445,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
                   <div className="flex items-center gap-1 flex-wrap">
                     {/* 체스 등급 아이콘 + 당근 아이콘 + 등급명 묶음 */}
                     <span className="inline-flex items-end" style={{ gap: '0px' }}>
-                      <ChessRankBadge rank={rank} showLabel={false} />
+                      <ChessRankBadge rank={rank} showLabel={false} isInfluencer={isInfluencer} />
                       {staffLevel && (
                         <img
                           src={`/staff-grade-${staffLevel}.webp`}
