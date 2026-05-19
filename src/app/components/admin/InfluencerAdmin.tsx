@@ -296,6 +296,7 @@ export function InfluencerAdmin({ accessToken }: { accessToken: string }) {
                   key={app.userId}
                   application={app}
                   form={activeForm}
+                  accessToken={accessToken}
                   onApprove={() => handleApprove(app.userId, app.nickname)}
                   onRevoke={() => handleRevoke(app.userId, app.nickname)}
                 />
@@ -310,13 +311,68 @@ export function InfluencerAdmin({ accessToken }: { accessToken: string }) {
 
 // ── 신청자 행 ──────────────────────────────────────────────────────
 
-function ApplicationRow({ application: app, form, onApprove, onRevoke }: {
-  application: any; form: InfluencerForm;
+function ApplicationRow({ application: app, form, accessToken, onApprove, onRevoke }: {
+  application: any; form: InfluencerForm; accessToken: string;
   onApprove: () => void; onRevoke: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<'answers' | 'missions'>('answers');
   const [actionLoading, setActionLoading] = useState(false);
+  const [missionLogs, setMissionLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
+  const [addingLog, setAddingLog] = useState<string | null>(null);
   const statusInfo = APP_STATUS_LABEL[app.status] ?? APP_STATUS_LABEL.pending;
+  const authHdr = () => ({ Authorization: `Bearer ${accessToken}` });
+
+  const loadLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`${API}/influencer/admin/mission-logs?userId=${app.userId}`, { headers: authHdr() });
+      const d = await res.json();
+      setMissionLogs(d.logs ?? []);
+    } catch { /* silent */ }
+    setLogsLoading(false);
+  };
+
+  const handleTabChange = (t: 'answers' | 'missions') => {
+    setTab(t);
+    if (t === 'missions' && missionLogs.length === 0 && !logsLoading) loadLogs();
+  };
+
+  const handleToggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && tab === 'missions') loadLogs();
+  };
+
+  const handleAddLog = async (mission: Mission) => {
+    setAddingLog(mission.id);
+    try {
+      const res = await fetch(`${API}/influencer/admin/mission-log`, {
+        method: 'POST',
+        headers: { ...authHdr(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: app.userId, missionId: mission.id, missionTitle: mission.title, note: noteInputs[mission.id] ?? '' }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '기록 실패'); return; }
+      setMissionLogs(prev => [...prev, d.log]);
+      setNoteInputs(prev => ({ ...prev, [mission.id]: '' }));
+    } catch { toast.error('네트워크 오류'); }
+    setAddingLog(null);
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    try {
+      const res = await fetch(`${API}/influencer/admin/mission-log`, {
+        method: 'DELETE',
+        headers: { ...authHdr(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: app.userId, logId }),
+      });
+      if (!res.ok) { toast.error('삭제 실패'); return; }
+      setMissionLogs(prev => prev.filter(l => l.id !== logId));
+    } catch { toast.error('네트워크 오류'); }
+  };
 
   const runApprove = async () => { setActionLoading(true); await onApprove(); setActionLoading(false); };
   const runRevoke  = async () => { setActionLoading(true); await onRevoke();  setActionLoading(false); };
@@ -324,7 +380,7 @@ function ApplicationRow({ application: app, form, onApprove, onRevoke }: {
   return (
     <div className="px-5 py-3">
       <div className="flex items-center justify-between gap-3">
-        <button onClick={() => setOpen(v => !v)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+        <button onClick={handleToggleOpen} className="flex items-center gap-2 min-w-0 flex-1 text-left">
           {app.isInfluencer && <span className="text-yellow-400 text-sm shrink-0">⭐</span>}
           <span className="text-sm font-semibold text-gray-800 truncate">{app.nickname}</span>
           <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusInfo.color}`}>
@@ -349,17 +405,98 @@ function ApplicationRow({ application: app, form, onApprove, onRevoke }: {
         </div>
       </div>
 
-      {/* 답변 펼치기 */}
-      {open && app.answers?.length > 0 && (
-        <div className="mt-3 space-y-2 pl-2 border-l-2 border-yellow-200">
-          {app.answers.map((a: any, i: number) => (
-            <div key={i}>
-              <p className="text-xs font-bold text-gray-500">{a.question}</p>
-              <p className="text-sm text-gray-700 mt-0.5">
-                {Array.isArray(a.answer) ? a.answer.join(', ') || '-' : a.answer || '-'}
-              </p>
+      {open && (
+        <div className="mt-3">
+          {/* 탭 */}
+          <div className="flex border-b border-gray-100 mb-3">
+            {(['answers', 'missions'] as const).map(t => (
+              <button key={t} onClick={() => handleTabChange(t)}
+                className={`px-3 py-1.5 text-xs font-bold relative ${tab === t ? 'text-gray-900' : 'text-gray-400'}`}>
+                {t === 'answers' ? `📋 답변 (${app.answers?.length ?? 0})` : `🎯 미션 현황 (${form.missions?.length ?? 0})`}
+                {tab === t && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-yellow-400 rounded-full" />}
+              </button>
+            ))}
+          </div>
+
+          {/* 답변 탭 */}
+          {tab === 'answers' && (
+            <div className="space-y-2 pl-2 border-l-2 border-yellow-200">
+              {(app.answers?.length ?? 0) === 0
+                ? <p className="text-xs text-gray-400">답변 없음</p>
+                : app.answers.map((a: any, i: number) => (
+                  <div key={i}>
+                    <p className="text-xs font-bold text-gray-500">{a.question}</p>
+                    <p className="text-sm text-gray-700 mt-0.5">
+                      {Array.isArray(a.answer) ? a.answer.join(', ') || '-' : a.answer || '-'}
+                    </p>
+                  </div>
+                ))
+              }
             </div>
-          ))}
+          )}
+
+          {/* 미션 현황 탭 */}
+          {tab === 'missions' && (
+            <div className="space-y-3">
+              {logsLoading && <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></div>}
+              {!logsLoading && (form.missions?.length ?? 0) === 0 && (
+                <p className="text-xs text-gray-400 text-center py-3">등록된 미션이 없습니다</p>
+              )}
+              {!logsLoading && form.missions?.map((mission: Mission) => {
+                const logs = missionLogs.filter(l => l.missionId === mission.id);
+                return (
+                  <div key={mission.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="px-3 py-2.5 bg-gray-50 flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-gray-700">{mission.title}</p>
+                        {mission.description && <p className="text-[11px] text-gray-400 mt-0.5">{mission.description}</p>}
+                        {mission.deadline && <p className="text-[11px] text-gray-400">기한: {mission.deadline}</p>}
+                      </div>
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${logs.length > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {logs.length > 0 ? `✅ ${logs.length}회` : '미완료'}
+                      </span>
+                    </div>
+
+                    {/* 완료 로그 목록 */}
+                    {logs.length > 0 && (
+                      <div className="divide-y divide-gray-50">
+                        {logs.map((log: any) => (
+                          <div key={log.id} className="px-3 py-2 flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-[11px] text-gray-500">
+                                {new Date(log.loggedAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              {log.note && <p className="text-xs text-gray-600 mt-0.5">{log.note}</p>}
+                            </div>
+                            <button onClick={() => handleDeleteLog(log.id)} className="text-gray-300 hover:text-red-400 transition-colors shrink-0">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 완료 기록 추가 */}
+                    <div className="px-3 py-2 bg-white border-t border-gray-50 flex gap-2">
+                      <input
+                        value={noteInputs[mission.id] ?? ''}
+                        onChange={e => setNoteInputs(prev => ({ ...prev, [mission.id]: e.target.value }))}
+                        placeholder="메모 (선택)"
+                        className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-400"
+                      />
+                      <button
+                        onClick={() => handleAddLog(mission)}
+                        disabled={addingLog === mission.id}
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {addingLog === mission.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle className="w-3 h-3" /> 완료</>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

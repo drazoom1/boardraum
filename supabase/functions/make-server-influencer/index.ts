@@ -328,6 +328,69 @@ app.post(`${PREFIX}/influencer/admin/revoke`, async (c) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// [관리자] GET /influencer/admin/mission-logs?userId=xxx
+// ══════════════════════════════════════════════════════════════════
+
+app.get(`${PREFIX}/influencer/admin/mission-logs`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const userId = c.req.query("userId");
+    if (!userId) return c.json({ error: "userId 필요" }, 400);
+
+    const logs = await kv.get(`influencer_mission_log_${userId}`).catch(() => null) ?? [];
+    return c.json({ logs });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] POST /influencer/admin/mission-log — 미션 완료 기록 추가
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/influencer/admin/mission-log`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const { userId, missionId, missionTitle, note } = await c.req.json().catch(() => ({}));
+    if (!userId || !missionId) return c.json({ error: "userId, missionId 필요" }, 400);
+
+    const logs: any[] = await kv.get(`influencer_mission_log_${userId}`).catch(() => null) ?? [];
+    const newLog = { id: `log_${Date.now()}`, missionId, missionTitle, note: note ?? "", loggedAt: Date.now() };
+    await kv.set(`influencer_mission_log_${userId}`, [...logs, newLog]);
+
+    console.log(`[인플루언서] 미션 완료 기록: ${userId} mission=${missionId} by ${user.email}`);
+    return c.json({ success: true, log: newLog });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] DELETE /influencer/admin/mission-log — 미션 완료 기록 삭제
+// ══════════════════════════════════════════════════════════════════
+
+app.delete(`${PREFIX}/influencer/admin/mission-log`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const { userId, logId } = await c.req.json().catch(() => ({}));
+    if (!userId || !logId) return c.json({ error: "userId, logId 필요" }, 400);
+
+    const logs: any[] = await kv.get(`influencer_mission_log_${userId}`).catch(() => null) ?? [];
+    await kv.set(`influencer_mission_log_${userId}`, logs.filter((l: any) => l.id !== logId));
+
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
 
 Deno.serve(async (req) => app.fetch(req));
