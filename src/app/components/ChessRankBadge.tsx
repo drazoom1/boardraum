@@ -60,7 +60,7 @@ export function RankInfoModal({ onClose, userPoints, userPosts, userComments, us
     <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white w-full sm:w-[min(100vw-2rem,480px)] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-base font-bold text-gray-900">♟️ 체스 등급 시스템</h2>
+          <h2 className="text-base font-bold text-gray-900">등급 시스템</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex border-b border-gray-100 flex-shrink-0">
