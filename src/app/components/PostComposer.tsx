@@ -1219,14 +1219,6 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                   : userName[0]?.toUpperCase()
                 }
               </div>
-              {userProfile?.staffLevel && (
-                <img
-                  src={`/staff-grade-${userProfile.staffLevel}.webp`}
-                  className="absolute -bottom-1 -right-1 object-contain"
-                  style={{ width: '12px', height: '12px' }}
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-gray-900 text-sm mb-2">{userName}</p>
