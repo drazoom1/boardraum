@@ -4476,6 +4476,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'auction-results', label: '경매 관리', icon: <span className="text-base leading-none">🔨</span>, desc: '경매 요청 검토 및 낙찰 결과' },
     { id: 'ice-event', label: '얼음깨기 이벤트', icon: <span className="text-base leading-none">🧊</span>, desc: '얼음깨기 이벤트 관리' },
     { id: 'deploy-info', label: '배포 정보', icon: <span className="text-base leading-none">🚀</span>, desc: '배포 날짜 및 시간' },
+    { id: 'influencer', label: '인플루언서', icon: <span className="text-base leading-none">⭐</span>, desc: '인플루언서 신청 및 관리' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -4486,6 +4487,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { label: '통계 · 데이터', ids: ['analytics', 'backup', 'activity-cards'] },
     { label: '운영',         ids: ['operator', 'auction-results'] },
     { label: '이벤트',       ids: ['ice-event'] },
+    { label: '인플루언서',   ids: ['influencer'] },
     { label: '시스템',       ids: ['deploy-info'] },
   ];
 
@@ -4565,6 +4567,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'operator' && <OperatorSection accessToken={accessToken} />}
           {activeTab === 'auction-results' && <AuctionResultsSection accessToken={accessToken} />}
           {activeTab === 'ice-event' && <IceEventAdmin accessToken={accessToken} />}
+          {activeTab === 'influencer' && <InfluencerAdminSection />}
           {activeTab === 'deploy-info' && <DeployInfoSection />}
         </div>
       </div>
@@ -8619,6 +8622,25 @@ function DeployInfoSection() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── 인플루언서 관리 섹션 (기획 중) ─────────────────────────────────────────
+
+function InfluencerAdminSection() {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-50 bg-gradient-to-r from-yellow-50 to-orange-50">
+        <h2 className="text-sm font-bold text-gray-800">⭐ 인플루언서 관리</h2>
+        <p className="text-xs text-gray-400 mt-0.5">인플루언서 신청·심사·미션 관리</p>
+      </div>
+      <div className="px-5 py-16 flex flex-col items-center gap-3 text-center">
+        <span className="text-4xl">🚧</span>
+        <p className="text-sm font-bold text-gray-500">기획 중입니다</p>
+        <p className="text-xs text-gray-400">곧 이 자리에 인플루언서 관리 기능이 채워질 예정이에요</p>
       </div>
     </div>
   );
