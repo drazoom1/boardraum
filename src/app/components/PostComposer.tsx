@@ -696,15 +696,19 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   return (
     <>
     <div
-      className="fixed inset-0 bg-black/60 z-[9990] flex flex-col items-center justify-end sm:justify-center p-2 sm:p-4"
+      className="fixed inset-0 z-[9990] flex flex-col sm:items-center sm:justify-center sm:bg-black/60 sm:p-4"
       style={{
         paddingBottom: keyboardHeight > 0 ? keyboardHeight : undefined,
         transition: 'padding-bottom 0.25s ease',
       }}
     >
       <div
-        className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col sm:max-h-[95vh] min-h-[60vh] sm:min-h-0"
-        style={{ maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined, transition: 'max-height 0.25s ease' }}
+        className="bg-white flex-1 flex flex-col sm:flex-none sm:w-full sm:max-w-lg sm:rounded-3xl sm:shadow-2xl sm:max-h-[95vh]"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined,
+          transition: 'max-height 0.25s ease',
+        }}
       >
         {/* 헤더 */}
         <div className="flex items-center justify-between px-4 sm:px-5 pt-3 sm:pt-5 pb-2.5 sm:pb-4 border-b border-gray-100 flex-shrink-0">
@@ -1499,7 +1503,8 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
         </div>
 
         {/* 하단 툴바 */}
-        <div className="px-4 sm:px-5 py-2.5 sm:py-4 border-t border-gray-100 flex-shrink-0 bg-white">
+        <div className="px-4 sm:px-5 pt-2.5 sm:pt-4 border-t border-gray-100 flex-shrink-0 bg-white"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-0.5 sm:gap-1">
               {/* 이미지 - 살래말래에서 비활성화 */}
