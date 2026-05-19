@@ -26,6 +26,7 @@ interface ApplicationForm {
   title: string;
   description: string;
   minRankIndex: number; // ALL_RANKS 배열 인덱스
+  applyDeadline: string; // 신청 기한
   periodStart: string;
   periodEnd: string;
   questions: Question[];
@@ -152,6 +153,9 @@ function FormCard({ form, onDelete }: { form: ApplicationForm; onDelete: (id: st
             신청 자격: <span className="font-bold text-yellow-600">{ALL_RANKS[form.minRankIndex]?.label ?? '-'} 이상</span>
           </div>
           <div className="text-xs text-gray-500">
+            신청 기한: <span className="font-medium">{form.applyDeadline || '-'}</span>
+          </div>
+          <div className="text-xs text-gray-500">
             활동 기간: {form.periodStart || '-'} ~ {form.periodEnd || '-'}
           </div>
           {form.questions.length > 0 && (
@@ -198,6 +202,7 @@ function CreateFormView({ onSave, onCancel }: {
   const [title, setTitle]             = useState('');
   const [description, setDescription] = useState('');
   const [minRankIndex, setMinRankIndex] = useState(12); // 기본값: 보린이 1 (index 12)
+  const [applyDeadline, setApplyDeadline] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd]     = useState('');
   const [questions, setQuestions]     = useState<Question[]>([emptyQuestion()]);
@@ -262,6 +267,7 @@ function CreateFormView({ onSave, onCancel }: {
       title,
       description,
       minRankIndex,
+      applyDeadline,
       periodStart,
       periodEnd,
       questions,
@@ -329,7 +335,20 @@ function CreateFormView({ onSave, onCancel }: {
             </div>
           </Section>
 
-          {/* ② 활동 기간 */}
+          {/* ② 신청 기한 */}
+          <Section title="신청 기한">
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">신청 마감일</span>
+              <input
+                type="date"
+                value={applyDeadline}
+                onChange={e => setApplyDeadline(e.target.value)}
+                className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-yellow-400"
+              />
+            </label>
+          </Section>
+
+          {/* ③ 활동 기간 */}
           <Section title="활동 기간">
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
@@ -353,7 +372,7 @@ function CreateFormView({ onSave, onCancel }: {
             </div>
           </Section>
 
-          {/* ③ 설문 질문 */}
+          {/* ④ 설문 질문 */}
           <Section title="설문 질문">
             <div className="space-y-3">
               {questions.map((q, idx) => (
@@ -380,7 +399,7 @@ function CreateFormView({ onSave, onCancel }: {
             </button>
           </Section>
 
-          {/* ④ 미션 */}
+          {/* ⑤ 미션 */}
           <Section title="미션">
             <div className="space-y-3">
               {missions.map((m, idx) => (
