@@ -6,3 +6,15 @@ port = 54321
 
 [functions.server]
 verify_jwt = false
+
+[functions.make-server-influencer]
+verify_jwt = false
+
+[functions.make-server-ice]
+verify_jwt = false
+
+[functions.make-server-0b7d3bae]
+verify_jwt = false
+
+[functions.bgg-proxy]
+verify_jwt = false

@@ -4568,7 +4568,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'operator' && <OperatorSection accessToken={accessToken} />}
           {activeTab === 'auction-results' && <AuctionResultsSection accessToken={accessToken} />}
           {activeTab === 'ice-event' && <IceEventAdmin accessToken={accessToken} />}
-          {activeTab === 'influencer' && <InfluencerAdmin />}
+          {activeTab === 'influencer' && <InfluencerAdmin accessToken={accessToken} />}
           {activeTab === 'deploy-info' && <DeployInfoSection />}
         </div>
       </div>
