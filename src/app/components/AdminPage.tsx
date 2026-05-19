@@ -4475,6 +4475,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'operator', label: '운영자 페이지', icon: <span className="text-base leading-none">🛠</span>, desc: '운영진 관리 및 수익 정산' },
     { id: 'auction-results', label: '경매 관리', icon: <span className="text-base leading-none">🔨</span>, desc: '경매 요청 검토 및 낙찰 결과' },
     { id: 'ice-event', label: '얼음깨기 이벤트', icon: <span className="text-base leading-none">🧊</span>, desc: '얼음깨기 이벤트 관리' },
+    { id: 'deploy-info', label: '배포 정보', icon: <span className="text-base leading-none">🚀</span>, desc: '배포 날짜 및 시간' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -4485,6 +4486,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { label: '통계 · 데이터', ids: ['analytics', 'backup', 'activity-cards'] },
     { label: '운영',         ids: ['operator', 'auction-results'] },
     { label: '이벤트',       ids: ['ice-event'] },
+    { label: '시스템',       ids: ['deploy-info'] },
   ];
 
   return (
@@ -4563,6 +4565,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'operator' && <OperatorSection accessToken={accessToken} />}
           {activeTab === 'auction-results' && <AuctionResultsSection accessToken={accessToken} />}
           {activeTab === 'ice-event' && <IceEventAdmin accessToken={accessToken} />}
+          {activeTab === 'deploy-info' && <DeployInfoSection />}
         </div>
       </div>
     </div>
@@ -8561,6 +8564,62 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── 배포 정보 섹션 ──────────────────────────────────────────────────────────
+
+declare const __BUILD_TIME__: string;
+
+function DeployInfoSection() {
+  const buildTime = new Date(__BUILD_TIME__);
+  const koTime = buildTime.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const diffMs = Date.now() - buildTime.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+  const ago =
+    diffDay > 0 ? `${diffDay}일 전` :
+    diffHour > 0 ? `${diffHour}시간 전` :
+    diffMin > 0 ? `${diffMin}분 전` : '방금 전';
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-50 bg-gradient-to-r from-slate-50 to-gray-50">
+          <h2 className="text-sm font-bold text-gray-800">🚀 배포 정보</h2>
+          <p className="text-xs text-gray-400 mt-0.5">빌드 시 자동으로 기록된 배포 시각입니다</p>
+        </div>
+        <div className="px-5 py-6 space-y-4">
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-lg shrink-0">🕐</div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">배포 일시 (KST)</p>
+              <p className="text-lg font-black text-gray-900 tabular-nums">{koTime}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-lg shrink-0">⏱</div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">배포 경과</p>
+              <p className="text-lg font-black text-gray-900">{ago}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-lg shrink-0">🌐</div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">UTC 기준</p>
+              <p className="text-sm font-mono text-gray-600">{__BUILD_TIME__}</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
