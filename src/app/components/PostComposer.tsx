@@ -267,6 +267,14 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   // 카테고리 바뀌면 가이드 다시 표시
   useEffect(() => { setGuideVisible(true); }, [category]);
 
+  // textarea 자동 높이 조절
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [content]);
+
   // 진행중인 마지막글 이벤트 여부 확인
   const [hasActiveEvent, setHasActiveEvent] = useState(false);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
@@ -695,7 +703,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
       }}
     >
       <div
-        className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col sm:max-h-[95vh]"
+        className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col sm:max-h-[95vh] min-h-[60vh] sm:min-h-0"
         style={{ maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined, transition: 'max-height 0.25s ease' }}
       >
         {/* 헤더 */}
@@ -1354,9 +1362,9 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                 <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
                   onFocus={() => activeHwCat && setGuideVisible(false)}
                   placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
-                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent min-h-[60px]"
-                  style={{ fontSize: '16px' }}
-                  rows={category === '재능판매' ? 2 : 3} />
+                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent"
+                  style={{ fontSize: '16px', minHeight: category === '재능판매' ? '80px' : '160px', overflowY: 'hidden' }}
+                  rows={1} />
               )}
 
               {/* 연결된 게임 (살래말래 제외) - 여러개 */}
