@@ -69,6 +69,8 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
         setParticipants(d.participants ?? []);
         setTotalCards(d.totalCards ?? 0);
         setHistory(d.history ?? []);
+        // kvTimeout: 대용량 이미지 항목 감지 → 강제 삭제 유도
+        if (d.kvTimeout) setLoadFailed(true);
       } else if (res.status === 546 && !isRetry) {
         // KV 이미지 용량 초과 → 자동 정리 후 재시도
         toast.loading('데이터 정리 중...', { id: 'cleanup' });

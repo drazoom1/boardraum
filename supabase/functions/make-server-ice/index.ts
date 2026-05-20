@@ -92,7 +92,20 @@ function calcPct(event: any): number {
 
 app.get(`${PREFIX}/ice/current`, async (c) => {
   try {
-    const event = await kv.get("ice_event_current");
+    // 타임아웃 보호: 6MB 이미지 등으로 읽기 불가 시 null 반환 (500 연쇄 방지)
+    let event: any = null;
+    try {
+      event = await Promise.race([
+        kv.get("ice_event_current"),
+        new Promise<null>((_, rej) => setTimeout(() => rej(new Error("kv_timeout")), 6000)),
+      ]);
+    } catch (e: any) {
+      if (e?.message === "kv_timeout") {
+        console.warn("[ice/current] KV 읽기 타임아웃 — 이전 이벤트에 대용량 이미지 있을 수 있음");
+        return c.json({ event: null });
+      }
+      throw e;
+    }
     if (!event) return c.json({ event: null });
     if (event.bannerHidden) return c.json({ event: null });
 
@@ -619,10 +632,22 @@ app.get(`${PREFIX}/ice/admin/overview`, async (c) => {
     const user = await requireAdmin(c);
     if (user instanceof Response) return user;
 
-    const [event, usageRows] = await Promise.all([
-      kv.get("ice_event_current"),
-      kv.getByPrefixWithKeys("ice_card_usage_"),
-    ]);
+    // 타임아웃 보호: 6MB 이미지 항목이 있어도 빠르게 응답
+    let eventRaw: any = null;
+    try {
+      eventRaw = await Promise.race([
+        kv.get("ice_event_current"),
+        new Promise<null>((_, rej) => setTimeout(() => rej(new Error("kv_timeout")), 6000)),
+      ]);
+    } catch (e: any) {
+      if (e?.message === "kv_timeout") {
+        console.warn("[overview] ice_event_current KV 타임아웃 — 대용량 이미지 항목 있을 수 있음");
+        // 이벤트 없이 빈 overview 반환 (프론트엔드에서 강제 삭제 버튼 표시)
+        return c.json({ event: null, participants: [], totalCards: 0, history: [], kvTimeout: true });
+      }
+      throw e;
+    }
+    const [event, usageRows] = [eventRaw, await kv.getByPrefixWithKeys("ice_card_usage_")];
     // 히스토리는 별도 try-catch — 실패해도 나머지 데이터는 정상 반환
     let historyRows: { key: string; value: any }[] = [];
     try {
