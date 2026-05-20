@@ -120,9 +120,10 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
           {!event && loadFailed && (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3">
               <p className="text-red-600 font-semibold">데이터를 불러오지 못했습니다</p>
-              <p className="text-xs text-gray-500">이전 이벤트에 용량이 큰 이미지가 저장되어 있을 수 있습니다.</p>
-              <div className="flex gap-2 justify-center">
-                <button onClick={() => load()} className="px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold">다시 시도</button>
+                      <p className="text-xs text-gray-500">이미지가 한 덩어리로 저장되어 있어 느립니다. 아래 버튼으로 이미지를 분리하면 이벤트가 정상 진행됩니다.</p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <button onClick={() => load()} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl text-sm font-bold">다시 시도</button>
+                <StripImagesButton accessToken={accessToken} onDone={load} />
                 <ForceDeleteButton accessToken={accessToken} onDone={load} />
               </div>
             </div>
@@ -148,6 +149,35 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
         </>
       )}
     </div>
+  );
+}
+
+// ── 이미지만 제거 (참여자 데이터 보존) ──
+function StripImagesButton({ accessToken, onDone }: { accessToken: string; onDone: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/strip-images-sql`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(`이미지 제거 완료! (참여자·진행 데이터 보존)`);
+        onDone();
+      } else {
+        toast.error(d.error || '이미지 제거 실패');
+      }
+    } catch { toast.error('네트워크 오류'); }
+    setLoading(false);
+  };
+
+  return (
+    <button onClick={handle} disabled={loading}
+      className="px-4 py-2 bg-blue-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 flex items-center gap-1">
+      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '⚡ 이미지 분리 (이벤트 유지)'}
+    </button>
   );
 }
 

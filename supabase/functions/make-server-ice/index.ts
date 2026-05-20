@@ -838,5 +838,71 @@ app.delete(`${PREFIX}/ice/admin/force-delete-current`, async (c) => {
 });
 
 // ══════════════════════════════════════════════════════════════════
+// [관리자] POST /ice/admin/strip-images-sql
+// 이미지만 DB에서 직접 제거 — 참여자 데이터/iceCurrent 보존
+// ══════════════════════════════════════════════════════════════════
+
+app.post(`${PREFIX}/ice/admin/strip-images-sql`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+    if (!dbUrl) return c.json({ error: "SUPABASE_DB_URL 환경변수 없음" }, 500);
+
+    // postgres 패키지로 직접 SQL 실행 (6MB KV를 JS로 읽지 않고 DB에서 바로 처리)
+    const { default: postgres } = await import("npm:postgres");
+    const sql = postgres(dbUrl, { max: 1, idle_timeout: 20 });
+    try {
+      // 1단계: iceImages 내 각 단계 이미지를 별도 KV 키로 분리 (이미지 보존)
+      //   ice_stage_image_{eventId}_{stage} = base64 이미지
+      await sql`
+        INSERT INTO kv_store_0b7d3bae (key, value)
+        SELECT
+          'ice_stage_image_' || (value->>'eventId') || '_' || stage_key,
+          value->'iceImages'->stage_key
+        FROM kv_store_0b7d3bae,
+        LATERAL jsonb_object_keys(value->'iceImages') AS stage_key
+        WHERE key = 'ice_event_current'
+          AND value ? 'iceImages'
+          AND value->>'eventId' IS NOT NULL
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+      `;
+
+      // 2단계: prizeGameImage도 별도 키로 분리
+      await sql`
+        INSERT INTO kv_store_0b7d3bae (key, value)
+        SELECT
+          'ice_prize_image_' || (value->>'eventId'),
+          value->'prizeGameImage'
+        FROM kv_store_0b7d3bae
+        WHERE key = 'ice_event_current'
+          AND value ? 'prizeGameImage'
+          AND value->>'eventId' IS NOT NULL
+          AND value->>'prizeGameImage' != '""'
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+      `;
+
+      // 3단계: 메인 이벤트 KV에서 이미지 제거 (참여자 데이터·iceCurrent 보존)
+      const result = await sql`
+        UPDATE kv_store_0b7d3bae
+        SET value = value - 'iceImages' - 'prizeGameImage'
+        WHERE key = 'ice_event_current'
+        RETURNING (octet_length(value::text)) AS new_size
+      `;
+
+      const newSize = result[0]?.new_size ?? 0;
+      console.log(`[얼음깨기] 이미지 분리 완료: 새 크기=${newSize}bytes by ${user.email}`);
+      return c.json({ success: true, newSize, message: "이미지가 별도 키로 분리됐습니다. 이벤트 정상 진행 가능합니다." });
+    } finally {
+      await sql.end().catch(() => {});
+    }
+  } catch (e) {
+    console.error("[ice/admin/strip-images-sql]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
 
 Deno.serve(app.fetch);
