@@ -438,6 +438,8 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
   const [published, setPublished] = useState(false);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [hidingBanner, setHidingBanner] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const handleToggleBanner = async () => {
     setHidingBanner(true);
@@ -454,6 +456,21 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
       onRefresh();
     } catch { toast.error('네트워크 오류'); }
     setHidingBanner(false);
+  };
+
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/clear-current`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || '마감 실패'); return; }
+      toast.success('이벤트가 마감됐습니다. 새 이벤트를 시작할 수 있습니다.');
+      onRefresh();
+    } catch { toast.error('네트워크 오류'); }
+    setClearing(false);
+    setConfirmClear(false);
   };
 
   const toggleExclude = (userId: string) => {
@@ -510,10 +527,27 @@ function DrawSection({ event, participants, totalCards, accessToken, onRefresh }
             </div>
             <p className="text-xs text-gray-400 mt-0.5">종료: {event.endedAt ? new Date(event.endedAt).toLocaleString('ko-KR') : '-'}</p>
           </div>
-          <button onClick={handleToggleBanner} disabled={hidingBanner}
-            className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50 ${event.bannerHidden ? 'text-blue-600 border-blue-300 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
-            {hidingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : (event.bannerHidden ? '📢 배너 다시 올리기' : '📴 배너 내리기')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleToggleBanner} disabled={hidingBanner}
+              className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50 ${event.bannerHidden ? 'text-blue-600 border-blue-300 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+              {hidingBanner ? <Loader2 className="w-3 h-3 animate-spin" /> : (event.bannerHidden ? '📢 배너 다시 올리기' : '📴 배너 내리기')}
+            </button>
+            {confirmClear ? (
+              <>
+                <span className="text-xs text-red-500 font-medium">마감할까요?</span>
+                <button onClick={handleClear} disabled={clearing}
+                  className="px-3 py-1.5 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 flex items-center gap-1">
+                  {clearing ? <Loader2 className="w-3 h-3 animate-spin" /> : '확인'}
+                </button>
+                <button onClick={() => setConfirmClear(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmClear(true)}
+                className="px-3 py-1.5 text-xs font-bold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+                🗂 이벤트 마감
+              </button>
+            )}
+          </div>
         </div>
         <div className="px-5 py-5 space-y-5">
 
