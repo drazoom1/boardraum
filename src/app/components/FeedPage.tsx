@@ -4095,6 +4095,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
 
   // 사용자 프로필 로드 — 요청을 순차적으로 분리해 동시 과부하 방지
   useEffect(() => {
+    if (!accessToken) return;
     const loadUserProfile = async () => {
       try {
         // 1단계: profile + staff/me (핵심 데이터 먼저)

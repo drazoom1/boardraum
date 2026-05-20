@@ -98,7 +98,16 @@ app.get(`${PREFIX}/ice/current`, async (c) => {
 
     const pct = calcPct(event);
     const stage = getIceStage(pct);
-    const currentStageImage = event.iceImages?.[stage] ?? null;
+
+    // 이미지는 별도 KV 키에서 로드 (메인 이벤트 KV는 이미지 미포함)
+    let currentStageImage: string | null = null;
+    if (event.eventId) {
+      currentStageImage = await kv.get(`ice_stage_image_${event.eventId}_${stage}`).catch(() => null) ?? null;
+      // 레거시: 이미지가 이벤트 본체에 있으면 거기서 읽고 백그라운드로 분리
+      if (!currentStageImage && event.iceImages?.[stage]) {
+        currentStageImage = event.iceImages[stage];
+      }
+    }
 
     let myCardCount = 0;
     const user = await getUser(c.req.header("Authorization"));
@@ -234,9 +243,18 @@ app.post(`${PREFIX}/ice/admin/create`, async (c) => {
     const user = await requireAdmin(c);
     if (user instanceof Response) return user;
 
-    // 기존 active 이벤트 충돌 방지
-    const existing = await kv.get("ice_event_current");
-    if (existing?.status === "active") {
+    // 기존 active 이벤트 충돌 방지 — 읽기 실패 시 생성 허용 (6MB 진단용)
+    let existingStatus: string | null = null;
+    try {
+      const existing = await Promise.race([
+        kv.get("ice_event_current"),
+        new Promise<null>((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
+      ]);
+      existingStatus = (existing as any)?.status ?? null;
+    } catch {
+      console.warn("[create] existing check failed/timed out, proceeding");
+    }
+    if (existingStatus === "active") {
       return c.json(
         { error: "이미 진행 중인 이벤트가 있습니다. 먼저 종료해주세요." },
         400,
@@ -265,21 +283,40 @@ app.post(`${PREFIX}/ice/admin/create`, async (c) => {
     }
 
     const eventId = `ice_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    // 이미지는 별도 KV 키에 저장 (메인 이벤트 KV 용량 절약)
+    const imageWrites: Promise<void>[] = [];
+    if (iceImages && typeof iceImages === "object") {
+      for (const [stage, b64] of Object.entries(iceImages)) {
+        if (b64) {
+          imageWrites.push(
+            kv.set(`ice_stage_image_${eventId}_${stage}`, b64).catch(() => {}),
+          );
+        }
+      }
+    }
+    if (prizeGameImage) {
+      imageWrites.push(
+        kv.set(`ice_prize_image_${eventId}`, prizeGameImage).catch(() => {}),
+      );
+    }
+
     const event = {
       eventId,
       title,
       description: description ?? "",
       prizeGameName: prizeGameName ?? "",
-      prizeGameImage: prizeGameImage ?? "",
       iceTotal: Number(iceTotal),
       iceDamagePerCard: Number(iceDamagePerCard),
       iceCurrent: Number(iceTotal),
-      iceImages: iceImages ?? {},
       status: "active",
       createdAt: Date.now(),
     };
 
     await kv.set("ice_event_current", event);
+    // 이미지 저장은 백그라운드 (이벤트 생성 응답을 막지 않음)
+    Promise.all(imageWrites).catch(() => {});
+
     console.log(`[얼음깨기] 이벤트 생성: ${eventId} by ${user.email}`);
     return c.json({ success: true, event });
   } catch (e) {
@@ -750,6 +787,27 @@ app.post(`${PREFIX}/ice/admin/cleanup-images`, async (c) => {
     return c.json({ success: true, cleaned });
   } catch (e) {
     console.error("[ice/admin/cleanup-images]", e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// [관리자] DELETE /ice/admin/force-delete-current
+// 6MB 이미지 등으로 읽기 불가한 이벤트 강제 삭제 (읽기 없이 바로 삭제)
+// ══════════════════════════════════════════════════════════════════
+
+app.delete(`${PREFIX}/ice/admin/force-delete-current`, async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    if (user instanceof Response) return user;
+
+    // 읽기 없이 바로 삭제 (6MB KV 읽기 우회)
+    await kv.del("ice_event_current");
+
+    console.log(`[얼음깨기] 강제 삭제 (읽기 없음): by ${user.email}`);
+    return c.json({ success: true });
+  } catch (e) {
+    console.error("[ice/admin/force-delete-current]", e);
     return c.json({ error: String(e) }, 500);
   }
 });

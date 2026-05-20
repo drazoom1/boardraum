@@ -116,9 +116,13 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
           {/* [1] 이벤트 없을 때 — 개최 폼 (로드 실패 시는 에러 표시) */}
           {!event && !loadFailed && <CreateForm accessToken={accessToken} onCreated={load} />}
           {!event && loadFailed && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-              <p className="text-red-600 font-semibold mb-3">데이터를 불러오지 못했습니다</p>
-              <button onClick={() => load()} className="px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold">다시 시도</button>
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3">
+              <p className="text-red-600 font-semibold">데이터를 불러오지 못했습니다</p>
+              <p className="text-xs text-gray-500">이전 이벤트에 용량이 큰 이미지가 저장되어 있을 수 있습니다.</p>
+              <div className="flex gap-2 justify-center">
+                <button onClick={() => load()} className="px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold">다시 시도</button>
+                <ForceDeleteButton accessToken={accessToken} onDone={load} />
+              </div>
             </div>
           )}
 
@@ -141,6 +145,48 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
           <HistorySection history={history} openId={openHistory} onToggle={setOpenHistory} />
         </>
       )}
+    </div>
+  );
+}
+
+// ── 강제 삭제 버튼 (이미지 용량 초과로 읽기 불가 시 사용) ──
+function ForceDeleteButton({ accessToken, onDone }: { accessToken: string; onDone: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${ICE_API}/ice/admin/force-delete-current`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        toast.success('이전 이벤트가 삭제됐습니다. 새 이벤트를 시작할 수 있습니다.');
+        onDone();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || '삭제 실패');
+      }
+    } catch { toast.error('네트워크 오류'); }
+    setLoading(false);
+    setConfirm(false);
+  };
+
+  if (!confirm) {
+    return (
+      <button onClick={() => setConfirm(true)} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-bold">
+        🚨 이전 이벤트 강제 삭제
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-red-600 font-medium">삭제 후 복구 불가!</span>
+      <button onClick={handle} disabled={loading}
+        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-bold disabled:opacity-50 flex items-center gap-1">
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '삭제'}
+      </button>
+      <button onClick={() => setConfirm(false)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600">취소</button>
     </div>
   );
 }

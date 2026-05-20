@@ -770,15 +770,16 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         setIsInitialLoad(true); isInitialLoadRef.current = true;
         if (!initialGameId) setActiveTab('feed'); // 로그인 시 홈피드로 이동 (게임 URL 직접 접속 시 제외)
 
-        // 병렬 실행으로 로그인 속도 개선
+        // role/staff/beta 확인 병렬 실행 (UI 표시 필수)
         const isAdmin = isAdminEmail(session.user.email);
         if (isAdmin) setBetaTesterStatus('approved');
         await Promise.all([
           fetchUserRole(session.access_token),
           checkStaff(session.access_token),
           isAdmin ? Promise.resolve() : checkBetaTesterStatus(session.access_token),
-          loadFromServer(session.access_token, true),
         ]);
+        // 게임 데이터는 백그라운드 로드 (UI 블로킹 없음)
+        loadFromServer(session.access_token, true);
 
       } else if (event === 'SIGNED_OUT') {
         setAccessToken(null); accessTokenRef.current = null;
@@ -804,30 +805,22 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
   const checkSession = async () => {
     try {
-      console.log('🔐 [Session] ========== SESSION CHECK START ==========');
-      console.log('💾 [Session] localStorage keys:', Object.keys(localStorage));
-      console.log('💾 [Session] supabase-auth exists:', !!localStorage.getItem('supabase-auth'));
-      
       const { data: { session }, error } = await supabase.auth.getSession();
-      
+
       if (error) {
         console.error('❌ [Session] Error:', error);
         setIsLoadingSession(false);
         return;
       }
-      
+
       if (session?.access_token) {
-        console.log('✅ [Session] Found existing session');
-        console.log('👤 [Session] User ID:', session.user.id);
-        console.log('📧 [Session] User email:', session.user.email);
-        console.log('🔑 [Session] Access token:', session.access_token.substring(0, 20) + '...');
         
         setAccessToken(session.access_token);
         accessTokenRef.current = session.access_token;
         setUserEmail(session.user.email || null);
         setUserId(session.user.id || null);
 
-        // ⚡ 병렬 처리: role 조회, 베타 상태 확인, 데이터 로드를 동시에 실행
+        // ⚡ 병렬 처리: role/staff/beta 확인 (UI 표시에 필요한 것만)
         const parallelTasks = [];
 
         // sityplanner2@naver.com이면 자동으로 관리자 설정
@@ -835,36 +828,31 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
           devLog('👑 [Admin] Setting up admin role...');
           parallelTasks.push(setupAdmin(session.access_token));
         }
-        
-        // ���버에서 role 조회
+
+        // 서버에서 role 조회
         parallelTasks.push(fetchUserRole(session.access_token));
         parallelTasks.push(checkStaff(session.access_token));
-        
+
         // Check beta tester status for non-admin users
         if (!isAdminEmail(session.user.email)) {
           parallelTasks.push(checkBetaTesterStatus(session.access_token));
         } else {
           setBetaTesterStatus('approved');
         }
-        
-        // 데이터 로드
-        parallelTasks.push(loadFromServer(session.access_token));
-        
-        // 모든 작업을 병렬로 실행 (타임아웃 10초)
+
+        // role/staff/beta 확인만 기다림 (타임아웃 5초)
         await Promise.race([
           Promise.all(parallelTasks),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Session check timeout')), 10000)
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Session check timeout')), 5000)
           )
         ]).catch(err => {
           console.error('⚠️ [Session] Some tasks failed or timed out:', err);
-          // 에러가 나도 계속 진행
         });
-      } else {
-        console.log('ℹ️ [Session] No existing session');
+
+        // 데이터 로드는 UI 블로킹 없이 백그라운드 실행 (localStorage 캐시가 즉시 표시됨)
+        loadFromServer(session.access_token);
       }
-      
-      console.log('🔐 [Session] ========== SESSION CHECK END ==========');
     } catch (error) {
       console.error('❌ [Session] Check error:', error);
     } finally {
