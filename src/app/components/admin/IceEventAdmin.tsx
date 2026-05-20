@@ -99,14 +99,17 @@ export function IceEventAdmin({ accessToken }: { accessToken: string }) {
           <h2 className="text-lg font-bold text-gray-900">🧊 얼음깨기 이벤트</h2>
           <p className="text-sm text-gray-400 mt-0.5">보너스카드로 얼음을 깨고 숨은 상품을 찾아요</p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          새로고침
-        </button>
+        <div className="flex items-center gap-2">
+          <StripImagesButton accessToken={accessToken} onDone={load} />
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            새로고침
+          </button>
+        </div>
       </div>
 
       {loading ? (
