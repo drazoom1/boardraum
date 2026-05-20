@@ -1496,7 +1496,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
 
         {/* 하단 툴바 */}
         <div className="px-4 sm:px-5 pt-2.5 sm:pt-4 border-t border-gray-100 flex-shrink-0 bg-white"
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
+          style={{ paddingBottom: 'max(calc(env(safe-area-inset-bottom) + 8px), 20px)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-0.5 sm:gap-1">
               {/* 이미지 - 살래말래에서 비활성화 */}
