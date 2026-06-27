@@ -826,7 +826,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl flex flex-col" style={{ maxHeight: '88vh' }}>
+      <DialogContent className="max-w-2xl flex flex-col" style={{ maxHeight: '88vh' }}
+        onInteractOutside={(e) => { if (showBggImport || showExcelImport) e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (showBggImport || showExcelImport) e.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle>게임 추가 {step === 1 ? '(1/3)' : step === 2 ? '(2/3)' : '(3/3)'}</DialogTitle>
           <DialogDescription>
