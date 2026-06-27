@@ -643,24 +643,29 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
     setGameFeedLoading(false);
   };
 
-  const loadPosts = async () => {
+  const loadPosts = async (force = false) => {
     if (!selectedGame) return;
 
     setIsLoading(true);
     try {
       const wikiId = getWikiGameId(selectedGame);
       const wikiCacheKey = `ss_game_wiki_${wikiId}`;
-      try {
-        const cached = sessionStorage.getItem(wikiCacheKey);
-        if (cached) {
-          const { ts, data } = JSON.parse(cached);
-          if (Date.now() - ts < 3 * 60 * 1000) {
-            setPosts(data);
-            setIsLoading(false);
-            return;
+      if (force) {
+        // 생성/수정/삭제 직후엔 세션 캐시를 비우고 서버에서 새로 받아온다
+        try { sessionStorage.removeItem(wikiCacheKey); } catch {}
+      } else {
+        try {
+          const cached = sessionStorage.getItem(wikiCacheKey);
+          if (cached) {
+            const { ts, data } = JSON.parse(cached);
+            if (Date.now() - ts < 3 * 60 * 1000) {
+              setPosts(data);
+              setIsLoading(false);
+              return;
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/customs/${wikiId}`,
@@ -862,7 +867,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
       if (response.ok) {
         toast.success('게시물이 승인되었습니다');
-        loadPosts();
+        loadPosts(true);
       }
     } catch (error) {
       console.error('Approve error:', error);
@@ -889,7 +894,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
       if (response.ok) {
         toast.success('게시물이 반려되었습니다');
-        loadPosts();
+        loadPosts(true);
       }
     } catch (error) {
       console.error('Reject error:', error);
@@ -915,7 +920,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
 
       if (response.ok) {
         toast.success('정보가 삭제되었습니다');
-        loadPosts();
+        loadPosts(true);
       } else {
         const errorData = await response.json();
         toast.error(`삭제 실패: ${errorData.error || '알 수 없는 오류'}`);
@@ -1001,7 +1006,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         toast.success('수정이 완료되었습니다!');
         setShowAddForm(false);
         setEditingPost(null);
-        loadPosts();
+        loadPosts(true);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.error('❌ [Update] Failed:', errorData);
@@ -1068,7 +1073,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         console.log('✅ [Submit] Success:', data);
         toast.success('등록이 완료되었습니다!');
         setShowAddForm(false);
-        loadPosts();
+        loadPosts(true);
       } else {
         const errorData = await response.json();
         console.error('❌ [Submit] Failed:', errorData);

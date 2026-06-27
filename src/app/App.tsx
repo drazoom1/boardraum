@@ -1721,14 +1721,14 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
             {/* 홈 = 피드 */}
             <button onClick={() => { if (activeTab === 'feed') { document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }}
-              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'feed' ? 'bg-gray-100' : ''}`} title="피드">
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'feed' ? 'bg-gray-100' : ''}`} title="커뮤니티">
               <span className="relative flex items-center justify-center flex-shrink-0">
                 <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-8 h-8 object-contain" />
                 {hasNewFeedPost && activeTab !== 'feed' && (
                   <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full" />
                 )}
               </span>
-              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>홈</span>}
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>커뮤니티</span>}
             </button>
 
             {/* 찾기 = 보드위키 */}
@@ -1976,7 +1976,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   <button onClick={() => { setActiveTab('feed'); setHasNewFeedPost(false); setShowMobileNav(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'feed' ? 'bg-gray-100' : ''}`}>
                     <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-7 h-7 object-contain" />
-                    <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>홈</span>
+                    <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>커뮤니티</span>
                   </button>
                   <button onClick={() => { setActiveTab('custom'); setWikiGame(undefined); setShowMobileNav(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'custom' ? 'bg-gray-100' : ''}`}>

@@ -3183,32 +3183,36 @@ app.delete("/make-server-0b7d3bae/customs/:postId", async (c) => {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     
-    const role = await getUserRole(user.id);
-    if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') {
-      console.error(`❌ [Delete Post] User ${user.email} is not admin`);
-      return c.json({ error: 'Forbidden: Admin only' }, 403);
-    }
-    
     const postId = c.req.param('postId');
-    
+
     // Find the existing post
     const { data, error } = await supabase
       .from("kv_store_0b7d3bae")
       .select("key, value")
       .like("key", "game_custom_%");
-    
+
     if (error) {
       console.error('❌ [Delete Post] KV Store query error:', error);
       return c.json({ error: error.message }, 500);
     }
-    
+
     const postItem = data.find(item => item.value?.id === postId);
-    
+
     if (!postItem) {
       console.error(`❌ [Delete Post] Post ${postId} not found`);
       return c.json({ error: 'Post not found' }, 404);
     }
-    
+
+    // 권한: 관리자 또는 작성자 본인만 삭제 가능
+    const role = await getUserRole(user.id);
+    const isAdmin = role === 'admin' || user.email === 'sityplanner2@naver.com';
+    const isAuthor = postItem.value?.created_by === user.id ||
+      (!!user.email && postItem.value?.created_by_email === user.email);
+    if (!isAdmin && !isAuthor) {
+      console.error(`❌ [Delete Post] User ${user.email} is neither admin nor author`);
+      return c.json({ error: 'Forbidden: 작성자 또는 관리자만 삭제할 수 있습니다' }, 403);
+    }
+
     
     // Delete the post from KV Store
     await kv.del(postItem.key);
