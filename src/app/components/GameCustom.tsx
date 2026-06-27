@@ -191,13 +191,13 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       const year = selectedGame.yearPublished || '';
       const desc = `${gameName}${year ? ` (${year}년)` : ''}${players ? ` · ${players}` : ''}${playTime ? ` · ${playTime}` : ''} — 보드라움에서 ${gameName} 정보, 리뷰, 커뮤니티를 만나보세요.`;
 
-      document.title = `${gameName} — 보드라움`;
+      document.title = `${gameName} 보드게임 정보`;
       setMeta('description', desc);
-      setMeta('og:title', `${gameName} — 보드라움`);
+      setMeta('og:title', `${gameName} 보드게임 정보`);
       setMeta('og:description', desc);
       setMeta('og:image', selectedGame.imageUrl || '');
       setMeta('og:url', `https://boardraum.site/game/${slug}`);
-      setMeta('twitter:title', `${gameName} — 보드라움`);
+      setMeta('twitter:title', `${gameName} 보드게임 정보`);
       setMeta('twitter:description', desc);
 
       // JSON-LD 삽입
