@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { BoardGame } from '../App';
 import {
   Dialog,
@@ -1373,8 +1374,8 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
           </div>
         )}
 
-      {/* ─── BGG 컬렉션 불러오기 모달 ─── */}
-      {showBggImport && (
+      {/* ─── BGG 컬렉션 불러오기 모달 (포털로 body에 렌더 → DialogContent transform에 의한 잘림 방지) ─── */}
+      {showBggImport && createPortal((
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -1449,7 +1450,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* ─── 엑셀 일괄등록 모달 ─── */}
       {showExcelImport && (

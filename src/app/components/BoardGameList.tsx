@@ -543,6 +543,16 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
+          {/* 게임 추가 / 위시 추가 버튼 */}
+          {!readOnly && (
+            <button
+              onClick={() => setIsAddDialogOpen(true)}
+              className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors shrink-0 whitespace-nowrap"
+              title={listType === '보유' ? '게임 추가' : '위시리스트 추가'}
+            >
+              <Plus className="w-4 h-4" /> {listType === '보유' ? '게임 추가' : '위시 추가'}
+            </button>
+          )}
         </div>
 
         {/* 새 글 모두 읽음 버튼 */}

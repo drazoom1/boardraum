@@ -185,6 +185,21 @@ async function gamesAll(): Promise<Array<{ key: string; value: any }>> {
   }
   return await getByPrefix(`site_game_`);
 }
+// 게임 이름 검색 — games 테이블 ILIKE 타겟 쿼리(빠름). 매칭 0/오류면 null(호출측 gamesAll 폴백).
+async function gamesSearch(query: string): Promise<Array<{ key: string; value: any }> | null> {
+  const q = (query || '').trim();
+  if (!q) return null;
+  try {
+    const like = `%${q.replace(/[%_,]/g, ' ')}%`;
+    const { data, error } = await supabase.from('games').select('*')
+      .or(`korean_name.ilike.${like},english_name.ilike.${like},name.ilike.${like}`)
+      .limit(100);
+    if (!error && data && data.length > 0) return data.map(gameRowToKv);
+  } catch (e) {
+    console.error('gamesSearch err:', e);
+  }
+  return null;
+}
 // 게임 1건 upsert (이중쓰기용)
 async function upsertGameRow(g: any): Promise<void> {
   if (!g?.id) return;
@@ -202,6 +217,83 @@ async function upsertGameRow(g: any): Promise<void> {
   } catch (e) {
     console.error('upsertGameRow error:', e);
   }
+}
+
+// ==================== 관계형 이관 2단계: posts / game_wiki ====================
+// posts: beta_post_(KV) → public.posts. 이중읽기(테이블 우선,KV폴백)+이중쓰기(모든 변경 동기화).
+async function postsAll(): Promise<Array<{ key: string; value: any }>> {
+  try {
+    const all: any[] = [];
+    const ps = 1000;
+    for (let from = 0; ; from += ps) {
+      const { data, error } = await supabase.from('posts').select('id,data').range(from, from + ps - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < ps) break;
+    }
+    if (all.length > 0) return all.map((r: any) => ({ key: `beta_post_${r.id}`, value: r.data }));
+  } catch (e) {
+    console.error('postsAll table err (KV폴백):', e);
+  }
+  return await getByPrefix(`beta_post_`);
+}
+function postToRow(p: any) {
+  const linked = Array.isArray(p.linkedGames) && p.linkedGames.length ? p.linkedGames : (p.linkedGame ? [p.linkedGame] : []);
+  return {
+    id: p.id, user_id: p.userId || null, category: p.category || null, title: p.title || null,
+    content: p.content || null, format: p.format || null,
+    images: p.images || [], linked_games: linked, talent_data: p.talentData || null, poll: p.poll || null,
+    likes: p.likes || [], comments: p.comments || [],
+    is_draft: !!p.isDraft, is_private: !!p.isPrivate, is_first_post: !!p.isFirstPost,
+    pinned: !!p.pinned, is_homework: !!p.isHomework,
+    created_at: p.createdAt || null, updated_at: p.updatedAt || null, data: p,
+  };
+}
+async function upsertPostRow(p: any) {
+  if (!p?.id) return;
+  try { await supabase.from('posts').upsert(postToRow(p), { onConflict: 'id' }); }
+  catch (e) { console.error('upsertPostRow', e); }
+}
+// kv.set(beta_post_) 대체: KV + 테이블 동시 저장
+async function savePost(id: string, obj: any) {
+  await kv.set(`beta_post_${id}`, obj);
+  await upsertPostRow(obj);
+}
+async function deletePostRow(id: string) {
+  try { await supabase.from('posts').delete().eq('id', id); }
+  catch (e) { console.error('deletePostRow', e); }
+}
+// game_wiki: game_custom_(KV) → public.game_wiki. 보드위키 모달 게임설명 조회 가속.
+async function wikiByGame(gameId: string, category?: string | null): Promise<any[] | null> {
+  try {
+    let q = supabase.from('game_wiki').select('data').eq('game_id', gameId).eq('status', 'approved');
+    if (category) q = q.eq('category', category);
+    const { data, error } = await q.order('created_at', { ascending: false });
+    if (!error && data && data.length > 0) return data.map((r: any) => r.data);
+  } catch (e) {
+    console.error('wikiByGame err:', e);
+  }
+  return null; // 빈 결과/오류 → 호출측 KV 폴백 (백필 전 안전)
+}
+function wikiToRow(w: any) {
+  return {
+    id: w.id, game_id: w.gameId || null, category: w.category || null, post_type: w.postType || null,
+    title: w.title || null, description: w.description || null, link: w.link || null,
+    size_info: w.sizeInfo || null, images: w.images || [], status: w.status || null,
+    created_by: w.created_by || null, created_by_name: w.created_by_name || null,
+    created_at: w.created_at || null, updated_at: w.updated_at || null,
+    likes: typeof w.likes === 'number' ? w.likes : 0, liked_by: w.liked_by || [], data: w,
+  };
+}
+async function upsertWikiRow(w: any) {
+  if (!w?.id) return;
+  try { await supabase.from('game_wiki').upsert(wikiToRow(w), { onConflict: 'id' }); }
+  catch (e) { console.error('upsertWikiRow', e); }
+}
+async function deleteWikiRow(id: string) {
+  try { await supabase.from('game_wiki').delete().eq('id', id); }
+  catch (e) { console.error('deleteWikiRow', e); }
 }
 
 // ==================== 🆕 NEW: Individual Game Storage System ====================
@@ -462,7 +554,7 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
     // ── 1순위: site_game_ KV (스코어 정렬) ───────────────────
     const siteEntries: Array<{ score: number; game: any }> = [];
     try {
-      const siteGameKeys = await gamesAll();
+      const siteGameKeys = (await gamesSearch(query)) ?? (await gamesAll());
       for (const item of siteGameKeys) {
         const g = item.value;
         if (!g?.id) continue;
@@ -2299,7 +2391,7 @@ app.get("/make-server-0b7d3bae/trending-games", async (c) => {
 
     // 7일치 게시글 게임태그 집계
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const postsData = await getByPrefix('beta_post_');
+    const postsData = await postsAll();
     const posts = postsData
       .map(d => d.value)
       .filter((p: any) => !p.isDraft && new Date(p.createdAt).getTime() >= thirtyDaysAgo);
@@ -2683,6 +2775,13 @@ app.get("/make-server-0b7d3bae/customs/:gameId", async (c) => {
       if (wikiCached) return c.json({ posts: wikiCached });
     }
 
+    // 테이블 우선(게임설명 가속) — 비었으면 아래 KV로 폴백
+    const wikiFromTable = await wikiByGame(gameId, category);
+    if (wikiFromTable !== null) {
+      if (!category) await kv.set(wikiCacheKey, wikiFromTable, 180).catch(() => {});
+      return c.json({ posts: wikiFromTable });
+    }
+
     // Get all posts for this game
     const prefix = `game_custom_${gameId}_`;
     const allPostsData = await getByPrefix(prefix);
@@ -2776,6 +2875,7 @@ app.post("/make-server-0b7d3bae/customs", async (c) => {
     
     
     await kv.set(kvKey, post);
+    await upsertWikiRow(post);
     kv.del(`game_wiki_cache_${gameId}`).catch(() => {});
 
     // 운영진/관리자 위키 등록 자동 적립 +10점
@@ -2877,6 +2977,7 @@ app.patch("/make-server-0b7d3bae/customs/:postId", async (c) => {
     
     
     await kv.set(postItem.key, updatedPost);
+    await upsertWikiRow(updatedPost);
     kv.del(`game_wiki_cache_${updatedPost.gameId}`).catch(() => {});
 
     return c.json({ success: true, post: updatedPost });
@@ -2942,6 +3043,7 @@ app.post("/make-server-0b7d3bae/customs/:postId/status", async (c) => {
     post.reviewed_by = user.id;
     
     await kv.set(postItem.key, post);
+    await upsertWikiRow(post);
 
     
     
@@ -2997,6 +3099,7 @@ app.delete("/make-server-0b7d3bae/customs/:postId", async (c) => {
     
     // Delete the post from KV Store
     await kv.del(postItem.key);
+    await deleteWikiRow(postId);
     const delGameId = postItem.value?.gameId;
     if (delGameId) kv.del(`game_wiki_cache_${delGameId}`).catch(() => {});
 
@@ -3062,6 +3165,7 @@ app.post("/make-server-0b7d3bae/customs/:postId/like", async (c) => {
     }
     
     await kv.set(postItem.key, post);
+    await upsertWikiRow(post);
     
     return c.json({ success: true, likes: post.likes, isLiked: likedIndex === -1 });
   } catch (error) {
@@ -3802,7 +3906,7 @@ app.get("/make-server-0b7d3bae/admin/posts-by-username", async (c) => {
     const username = c.req.query('username') || '';
     if (!username) return c.json({ error: 'username 파라미터 필요' }, 400);
 
-    const allPosts = await getByPrefix('beta_post_');
+    const allPosts = await postsAll();
     const matched = allPosts
       .map((d: any) => d.value)
       .filter((p: any) => p && (p.userName === username || p.authorName === username))
@@ -3996,7 +4100,7 @@ app.get("/make-server-0b7d3bae/community/drafts", async (c) => {
     const { data: { user } } = await supabase.auth.getUser(accessToken);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
 
-    const allPosts = await getByPrefix('beta_post_');
+    const allPosts = await postsAll();
     const drafts = allPosts
       .map((d: any) => d.value)
       .filter((p: any) => p && p.isDraft && p.userId === user.id)
@@ -4020,7 +4124,7 @@ app.get("/make-server-0b7d3bae/community/posts/by-game/:gameId", async (c) => {
     const cached = await kv.get(cacheKey);
     if (cached) return c.json({ posts: cached });
 
-    const postsData = await getByPrefix('beta_post_');
+    const postsData = await postsAll();
     const posts = postsData
       .map((d: any) => d.value)
       .filter((p: any) => {
@@ -4057,7 +4161,7 @@ app.get("/make-server-0b7d3bae/community/posts/by-user/:userId", async (c) => {
     const role = await getUserRole(user.id);
     const isAdmin = role === 'admin';
 
-    const postsData = await getByPrefix('beta_post_');
+    const postsData = await postsAll();
     const posts = postsData
       .map((d: any) => d.value)
       .filter((p: any) => {
@@ -4081,7 +4185,7 @@ app.get("/make-server-0b7d3bae/community/posts/latest-ts", async (c) => {
     const { data: { user } } = await supabase.auth.getUser(accessToken);
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
 
-    const allPosts = await getByPrefix('beta_post_');
+    const allPosts = await postsAll();
     const posts = allPosts.map((p: any) => p.value).filter((p: any) => p && !p.isDraft);
     if (posts.length === 0) return c.json({ latestAt: null, count: 0 });
     posts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -4098,7 +4202,7 @@ app.get("/make-server-0b7d3bae/community/posts/my-liked-ids", async (c) => {
     if (!token) return c.json({ likedPostIds: [] });
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user?.id) return c.json({ likedPostIds: [] });
-    const allPosts = await getByPrefix('beta_post_');
+    const allPosts = await postsAll();
     const likedPostIds = allPosts
       .filter(({ value: p }) => p && Array.isArray(p.likes) && p.likes.includes(user.id))
       .map(({ value: p }) => p.id as string);
@@ -4145,7 +4249,7 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
     }
 
     // 캐시 미스 — 전체 조회
-    const postsData = await getByPrefix('beta_post_');
+    const postsData = await postsAll();
     const posts = postsData.map(d => d.value);
 
     // draft 제외, 카테고리 필터
@@ -4260,7 +4364,7 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
 
     // 재능판매 하루 1개 제한 (KST = UTC+9)
     if (!isDraft && category === '재능판매') {
-      const allPosts = await getByPrefix('beta_post_');
+      const allPosts = await postsAll();
       const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
       const todayKST = nowKST.toISOString().slice(0, 10);
       const todayTalent = allPosts.find((p: any) => {
@@ -4509,7 +4613,7 @@ app.post("/make-server-0b7d3bae/admin/posts/:postId/cancel-first-post", async (c
 
     // 1. 게시글 isFirstPost 플래그 제거
     post.isFirstPost = undefined;
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
 
     // 2. user_first_post_ KV 삭제
     await kv.delete(`user_first_post_${targetUserId}`).catch(() => {});
@@ -4566,7 +4670,7 @@ app.post("/make-server-0b7d3bae/admin/posts/:postId/set-first-post", async (c) =
 
     // 1. 게시글 isFirstPost 플래그 설정
     post.isFirstPost = true;
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
 
     // 2. user_first_post_ KV 저장
     await kv.set(`user_first_post_${targetUserId}`, { postId, createdAt: new Date().toISOString() }).catch(() => {});
@@ -4691,6 +4795,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     }
     
     await kv.del(`beta_post_${postId}`);
+    await deletePostRow(postId);
     invalidateFeedCache().catch(() => {});
     // 게임 피드 캐시 무효화
     const delLinkedGames = Array.isArray(post.linkedGames) ? post.linkedGames : (post.linkedGame ? [post.linkedGame] : []);
@@ -4808,7 +4913,7 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     if (talentData !== undefined) updatedPost.talentData = talentData || null;
     if (isPrivate !== undefined) updatedPost.isPrivate = isPrivate;
     
-    await kv.set(`beta_post_${postId}`, updatedPost);
+    await savePost(postId, updatedPost);
     // 피드 캐시 무효화 (전체 + 해당 카테고리 + 게임 피드)
     const editLinkedGames = Array.isArray(updatedPost.linkedGames) ? updatedPost.linkedGames : (updatedPost.linkedGame ? [updatedPost.linkedGame] : []);
     await Promise.all([
@@ -4894,7 +4999,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/like", async (c) => {
       post.likes.push(user.id);
     }
     
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     
     if (likeIndex === -1) {
       // 좋아요 추가 → 포인트 적립 + 알림
@@ -5003,7 +5108,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments", async (c) => 
     
     post.comments.push(comment);
     
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     
     // 댓글 작성 포인트 + 알림
     // 첫 게시글 여부: 2026-04-23 이후 작성된 글 + post.isFirstPost 또는 KV 확인
@@ -5133,7 +5238,7 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId/comments/:commentId", a
       return false;
     };
     if (!findAndEdit(post.comments || [])) return c.json({ error: 'Comment not found or not yours' }, 403);
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     return c.json({ success: true });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -5162,7 +5267,7 @@ app.delete("/make-server-0b7d3bae/community/posts/:postId/comments/:commentId", 
     if (comment.userId !== user.id && !isAdmin) return c.json({ error: 'Forbidden' }, 403);
 
     post.comments.splice(commentIdx, 1);
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
 
     // 본인 댓글 삭제 시 포인트 회수 + 활동 카드 회수
     if (comment.userId === user.id) {
@@ -5210,7 +5315,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/poll/vote", async (c) =>
       post.poll.options[optionIndex].votes = [...(post.poll.options[optionIndex].votes || []), user.id];
     }
 
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     return c.json({ success: true, poll: post.poll });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -5249,7 +5354,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/sallae/vote", async (c) 
       post.sallae.think = [...post.sallae.think, user.id];
     }
 
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     return c.json({ success: true, sallae: post.sallae });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -5289,7 +5394,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/sallae/admin", async (c)
       post.sallae.think.push(`admin_think_${i}`);
     }
 
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     return c.json({ success: true, sallae: post.sallae });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -5318,7 +5423,7 @@ app.post("/make-server-0b7d3bae/community/posts/:postId/comments/:commentId/like
       ? likes.filter((id: string) => id !== user.id)
       : [...likes, user.id];
 
-    await kv.set(`beta_post_${postId}`, post);
+    await savePost(postId, post);
     return c.json({ success: true, liked: !alreadyLiked, likes: comment.likes });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -5986,7 +6091,7 @@ async function findEventWinner(event: any): Promise<{ winnerUserId: string | nul
   const cardCutoffMs2 = isExpiredByCards2 && event.lastReductionAt ? Number(event.lastReductionAt) : Infinity;
   const sleepStartH = event.sleepStart ?? 0;
   const sleepEndH = event.sleepEnd ?? 8;
-  const allPostsData = await getByPrefix('beta_post_');
+  const allPostsData = await postsAll();
   const eligiblePosts = allPostsData
     .map((d: any) => d.value)
     .filter((p: any) =>
@@ -7861,7 +7966,7 @@ app.get("/make-server-0b7d3bae/shared/:userId", async (c) => {
     }
 
     // 공개 게시물 조회 (비공개 제외)
-    const allPostsData = await getByPrefix('beta_post_');
+    const allPostsData = await postsAll();
     const publicPosts = allPostsData
       .map((d: any) => d.value)
       .filter((p: any) => p && p.userId === userId && !p.isDraft && !p.isPrivate)
@@ -10911,7 +11016,7 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId/best", async (c) => {
     // 새로 베스트 선정 시 기존 베스트글 자동 해제 (포인트는 유지)
     if (isBest && !post.isBest) {
       try {
-        const allPostsData = await getByPrefix('beta_post_');
+        const allPostsData = await postsAll();
         const prevBests = allPostsData
           .map((d: any) => d.value)
           .filter((p: any) => p && p.isBest && p.id !== postId);
@@ -10970,7 +11075,7 @@ app.get("/make-server-0b7d3bae/homework/submissions", async (c) => {
   try {
     const cats = (await kv.get('homework_categories') as any[] | null) || [];
     const catNames = cats.map((cat: any) => cat.name);
-    const allPostsData = await getByPrefix('beta_post_');
+    const allPostsData = await postsAll();
     const posts = allPostsData.map((d: any) => d.value).filter((p: any) => p && !p.isDraft && catNames.includes(p.category));
     posts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     // 포인트 지급 여부 확인
@@ -11127,7 +11232,7 @@ app.get("/make-server-0b7d3bae/homework/my", async (c) => {
     if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
     const cats = (await kv.get('homework_categories') as any[] | null) || [];
     const catNames = cats.map((cat: any) => cat.name);
-    const allPostsData = await getByPrefix('beta_post_');
+    const allPostsData = await postsAll();
     // 내 숙제 제출 게시물
     const mySubmissions = allPostsData
       .map((d: any) => d.value)
@@ -11279,7 +11384,7 @@ app.post("/make-server-0b7d3bae/last-post-event/auto-close", async (c) => {
     const cardCutoffMs     = isExpiredByCards && event.lastReductionAt ? Number(event.lastReductionAt) : Infinity;
     const acSleepStartH    = event.sleepStart ?? 0;
     const acSleepEndH      = event.sleepEnd ?? 8;
-    const allPostsData = await getByPrefix('beta_post_');
+    const allPostsData = await postsAll();
     const eligiblePosts = allPostsData
       .map((d: any) => d.value)
       .filter((p: any) =>
@@ -12749,7 +12854,7 @@ app.get("/make-server-0b7d3bae/sitemap.xml", async (c) => {
 
     // 최근 게시글 100개
     try {
-      const allPosts = await getByPrefix('beta_post_');
+      const allPosts = await postsAll();
       const published = allPosts
         .map((item: any) => item?.value ?? item)
         .filter((p: any) => p && !p.isDraft && !p.isPrivate && p.id)
