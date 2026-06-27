@@ -1739,7 +1739,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             </button>
 
             {/* 플러스 = 추가 메뉴 */}
-            <button onClick={() => requireAuth(() => setShowPlusMenu(true))}
+            <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); })}
               className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100`} title="추가">
               <img src={icon_plus_off} className="w-8 h-8 object-contain flex-shrink-0" />
               {sidebarExpanded && <span className="font-semibold text-gray-600">글쓰기</span>}
@@ -1983,7 +1983,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                     <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-7 h-7 object-contain" />
                     <span className={`font-semibold ${activeTab === 'custom' ? 'text-gray-900' : 'text-gray-600'}`}>보드위키</span>
                   </button>
-                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => setShowPlusMenu(true)); }}
+                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); }); }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100">
                     <img src={icon_plus_off} className="w-7 h-7 object-contain" />
                     <span className="font-semibold text-gray-600">글쓰기</span>
@@ -2025,7 +2025,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 플러스 */}
-              <button onClick={() => requireAuth(() => setShowPlusMenu(true))} className="flex flex-col items-center gap-1">
+              <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); })} className="flex flex-col items-center gap-1">
                 <img src={icon_plus_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 카트=방출마켓 */}
