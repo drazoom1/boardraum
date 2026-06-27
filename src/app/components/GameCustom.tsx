@@ -88,6 +88,7 @@ function setMeta(name: string, content: string) {
 export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, accessToken, userEmail, initialCategory, initialGame, initialTab = 'info', isEmbedded = false, onClose }: GameCustomProps) {
   const [selectedGame, setSelectedGame] = useState<BoardGame | null>(initialGame || null);
   const [ownerCount, setOwnerCount] = useState<number>(0);
+  const [bggPoll, setBggPoll] = useState<Array<{ numPlayers: string; best: number; recommended: number; notRecommended: number }>>([]);
   const isFirstMount = useRef(true);
 
   // initialGame에 유효한 bggId 없으면 이름으로 BGG 검색해서 자동 매칭
@@ -169,6 +170,21 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
       .then(r => r.ok ? r.json() : { count: 0 })
       .then(d => setOwnerCount(d.count || 0))
       .catch(() => setOwnerCount(0));
+  }, [selectedGame?.id, selectedGame?.bggId]);
+
+  // 인원별 평가(BGG 추천인원 투표) fetch
+  useEffect(() => {
+    setBggPoll([]);
+    if (!selectedGame) return;
+    const bggId = /^\d+$/.test(selectedGame.bggId || '') ? selectedGame.bggId
+      : /^\d+$/.test(selectedGame.id || '') ? selectedGame.id : '';
+    if (!bggId) return;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-details`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` }, body: JSON.stringify({ id: bggId }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (Array.isArray(d?.playerPoll)) setBggPoll(d.playerPoll); })
+      .catch(() => {});
   }, [selectedGame?.id, selectedGame?.bggId]);
 
   // 게임 진입/이탈 시 URL + 메타태그 + JSON-LD 업데이트
@@ -1777,8 +1793,45 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                 </div>
               )}
 
+              {/* 인원별 평가: BGG 추천인원 투표 자동 표시 */}
+              {category.id === 'player-count' && bggPoll.length > 0 && (
+                <div className="p-3">
+                  <div className="text-[11px] text-gray-400 mb-2">BGG 회원 추천인원 투표</div>
+                  <div className="space-y-2">
+                    {bggPoll.map(p => {
+                      const total = p.best + p.recommended + p.notRecommended;
+                      if (total === 0) return null;
+                      const verdict = (p.best >= p.recommended && p.best >= p.notRecommended)
+                        ? { label: '베스트', color: 'text-emerald-600 bg-emerald-50' }
+                        : (p.recommended >= p.notRecommended)
+                        ? { label: '추천', color: 'text-blue-600 bg-blue-50' }
+                        : { label: '비추천', color: 'text-gray-500 bg-gray-100' };
+                      const bw = Math.round((p.best / total) * 100);
+                      const rw = Math.round((p.recommended / total) * 100);
+                      const nw = 100 - bw - rw;
+                      return (
+                        <div key={p.numPlayers} className="flex items-center gap-2">
+                          <span className="w-12 text-xs font-semibold text-gray-700 flex-shrink-0">{p.numPlayers}명</span>
+                          <div className="flex-1 h-3 rounded-full overflow-hidden bg-gray-100 flex">
+                            <div className="h-full bg-emerald-400" style={{ width: bw + '%' }} title={`베스트 ${p.best}표`} />
+                            <div className="h-full bg-blue-300" style={{ width: rw + '%' }} title={`추천 ${p.recommended}표`} />
+                            <div className="h-full bg-gray-300" style={{ width: nw + '%' }} title={`비추천 ${p.notRecommended}표`} />
+                          </div>
+                          <span className={`w-12 text-center text-[11px] font-semibold rounded-full py-0.5 flex-shrink-0 ${verdict.color}`}>{verdict.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />베스트</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-300 inline-block" />추천</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />비추천</span>
+                  </div>
+                </div>
+              )}
+
               {/* 빈 상태 */}
-              {!isLoading && categoryPosts.length === 0 && (
+              {!isLoading && categoryPosts.length === 0 && !(category.id === 'player-count' && bggPoll.length > 0) && (
                 <div className="text-center py-4 text-gray-400 text-xs">
                   아직 등록된 정보가 없어요
                 </div>

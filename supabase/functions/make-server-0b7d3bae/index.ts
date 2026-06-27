@@ -854,8 +854,8 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
 
     const cacheKey = `bgg_details_${id}`;
     const cached = await kv.get(cacheKey);
-    // averageRating 있는 새 캐시만 유효
-    if (cached && cached.averageRating !== undefined) return c.json(cached);
+    // averageRating + playerPoll 있는 새 캐시만 유효 (없으면 재조회해 인원별 평가 채움)
+    if (cached && cached.averageRating !== undefined && cached.playerPoll !== undefined) return c.json(cached);
 
     const bggToken = Deno.env.get('BGG_API_TOKEN');
     if (!bggToken) return c.json({ error: 'BGG API token not configured' }, 500);
@@ -886,9 +886,10 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
     for (const m of xmlText.matchAll(/<link[^>]*type="boardgameartist"[^>]*value="([^"]+)"/g)) artists.push(m[1]);
     for (const m of xmlText.matchAll(/<link[^>]*type="boardgamepublisher"[^>]*value="([^"]+)"/g)) publishers.push(m[1]);
 
-    // 베스트/추천 인원
+    // 베스트/추천 인원 + 인원별 투표 전체(playerPoll)
     let bestPlayerCount = '';
     let recommendedPlayerCount = '';
+    const playerPoll: Array<{ numPlayers: string; best: number; recommended: number; notRecommended: number }> = [];
     const pollMatch = xmlText.match(/<poll[^>]*name="suggested_numplayers"[^>]*>([\s\S]*?)<\/poll>/);
     if (pollMatch) {
       let maxBestVotes = 0, maxRecVotes = 0;
@@ -896,8 +897,13 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
         const numP = r[1];
         const bm = r[2].match(/<result[^>]*value="Best"[^>]*numvotes="(\d+)"/);
         const rm = r[2].match(/<result[^>]*value="Recommended"[^>]*numvotes="(\d+)"/);
-        if (bm && parseInt(bm[1]) > maxBestVotes) { maxBestVotes = parseInt(bm[1]); bestPlayerCount = numP; }
-        if (rm && parseInt(rm[1]) > maxRecVotes) { maxRecVotes = parseInt(rm[1]); recommendedPlayerCount = numP; }
+        const nm = r[2].match(/<result[^>]*value="Not Recommended"[^>]*numvotes="(\d+)"/);
+        const best = bm ? parseInt(bm[1]) : 0;
+        const rec = rm ? parseInt(rm[1]) : 0;
+        const notRec = nm ? parseInt(nm[1]) : 0;
+        if (best + rec + notRec > 0) playerPoll.push({ numPlayers: numP, best, recommended: rec, notRecommended: notRec });
+        if (best > maxBestVotes) { maxBestVotes = best; bestPlayerCount = numP; }
+        if (rec > maxRecVotes) { maxRecVotes = rec; recommendedPlayerCount = numP; }
       }
     }
 
@@ -914,6 +920,7 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
       rank: rankMatch ? parseInt(rankMatch[1]) : 0,
       bestPlayerCount,
       recommendedPlayerCount,
+      playerPoll,
       designers: designers.slice(0, 5),
       artists: artists.slice(0, 5),
       publishers: publishers.slice(0, 3),
@@ -955,6 +962,7 @@ async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<an
 
     let bestPlayerCount = '';
     let recommendedPlayerCount = '';
+    const playerPoll: Array<{ numPlayers: string; best: number; recommended: number; notRecommended: number }> = [];
     const pollMatch = xmlText.match(/<poll[^>]*name="suggested_numplayers"[^>]*>([\s\S]*?)<\/poll>/);
     if (pollMatch) {
       let maxBestVotes = 0, maxRecVotes = 0;
@@ -962,8 +970,13 @@ async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<an
         const numP = r[1];
         const bm = r[2].match(/<result[^>]*value="Best"[^>]*numvotes="(\d+)"/);
         const rm = r[2].match(/<result[^>]*value="Recommended"[^>]*numvotes="(\d+)"/);
-        if (bm && parseInt(bm[1]) > maxBestVotes) { maxBestVotes = parseInt(bm[1]); bestPlayerCount = numP; }
-        if (rm && parseInt(rm[1]) > maxRecVotes) { maxRecVotes = parseInt(rm[1]); recommendedPlayerCount = numP; }
+        const nm = r[2].match(/<result[^>]*value="Not Recommended"[^>]*numvotes="(\d+)"/);
+        const best = bm ? parseInt(bm[1]) : 0;
+        const rec = rm ? parseInt(rm[1]) : 0;
+        const notRec = nm ? parseInt(nm[1]) : 0;
+        if (best + rec + notRec > 0) playerPoll.push({ numPlayers: numP, best, recommended: rec, notRecommended: notRec });
+        if (best > maxBestVotes) { maxBestVotes = best; bestPlayerCount = numP; }
+        if (rec > maxRecVotes) { maxRecVotes = rec; recommendedPlayerCount = numP; }
       }
     }
 
@@ -981,6 +994,7 @@ async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<an
       rank: rankMatch ? parseInt(rankMatch[1]) : 0,
       bestPlayerCount,
       recommendedPlayerCount,
+      playerPoll,
       designers: designers.slice(0, 5),
       artists: artists.slice(0, 5),
       publishers: publishers.slice(0, 3),
