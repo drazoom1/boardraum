@@ -36,6 +36,8 @@ interface BoardGameListProps {
   onAddDialogClose?: () => void; // 닫힘 콜백
   readOnly?: boolean; // 읽기 전용 (타인 프로필)
   isOwner?: boolean; // 본인 페이지 여부 (서버 설정 동기화용)
+  allowListChoice?: boolean; // 등록 다이얼로그에서 보유/위시 선택 허용
+  onAddToWishlist?: (games: BoardGame[]) => void; // 위시리스트로 등록
 }
 
 type SortOption = 'korean-asc' | 'english-asc' | 'recent-asc' | 'recent-desc' | 'rating-desc' | 'releasing';
@@ -190,7 +192,7 @@ function RecommendedGamesSection({
   );
 }
 
-export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki, accessToken, userId, userEmail, onMoveToOwned, onRelease, openAddDialog, onAddDialogClose, readOnly = false, isOwner = false }: BoardGameListProps) {
+export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki, accessToken, userId, userEmail, onMoveToOwned, onRelease, openAddDialog, onAddDialogClose, readOnly = false, isOwner = false, allowListChoice = false, onAddToWishlist }: BoardGameListProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -836,6 +838,8 @@ export function BoardGameList({ games, onGamesChange, listType, onNavigateToWiki
         existingGames={games}
         initialQuery={expansionTarget?.query || ''}
         initialParentGameId={expansionTarget?.parentGameId || ''}
+        allowListChoice={allowListChoice}
+        onAddToWishlist={onAddToWishlist}
       />
 
       {/* 공유 링크 다이얼로그 */}

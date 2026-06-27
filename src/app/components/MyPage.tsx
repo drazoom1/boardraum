@@ -567,46 +567,7 @@ export function MyPage({ accessToken, onClose, onLogout, ownedGames = [], wishli
           </button>
         </div>
 
-        {/* 숙제 슬라이드 */}
-        {hwCategories.length > 0 && (
-          <div className="border-b border-gray-50 px-4 py-2">
-            <p className="text-xs text-gray-400 font-medium mb-2">글 작성하고 상품도 받아보세요 : )</p>
-            <div className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl"
-              style={{ minHeight: '76px' }}>
-              {/* 왼쪽: 숙제 정보 */}
-              <div className="flex-1 flex flex-col justify-center min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <PenLine className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  <span className="font-semibold text-sm text-gray-700 truncate">{hwCategories[hwSlideIndex].name}</span>
-                  {hwCategories[hwSlideIndex].pointReward > 0 && (
-                    <span className="text-xs text-amber-500 font-semibold flex-shrink-0">+{hwCategories[hwSlideIndex].pointReward}pt</span>
-                  )}
-                </div>
-                <span className={`text-xs text-purple-500 font-medium mt-0.5 pl-5 ${hwCategories[hwSlideIndex].prizeReward ? 'visible' : 'invisible'}`}>
-                  🎁 {hwCategories[hwSlideIndex].prizeReward || '없음'}
-                </span>
-                <span className={`text-[10px] text-gray-400 mt-0.5 pl-5 ${(hwCategories[hwSlideIndex].startDate || hwCategories[hwSlideIndex].endDate) ? 'visible' : 'invisible'}`}>
-                  {hwCategories[hwSlideIndex].startDate?.replace(/-/g, '.') || '?'} ~ {hwCategories[hwSlideIndex].endDate?.replace(/-/g, '.') || '?'}
-                </span>
-              </div>
-              {/* 오른쪽: 제출 상태 버튼 */}
-              {(() => {
-                const submitted = myPosts.some(p => p.category === hwCategories[hwSlideIndex].name);
-                return submitted ? (
-                  <span className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-green-100 text-green-700 rounded-xl">
-                    ✅ 작성완료
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => { setComposerCategory(hwCategories[hwSlideIndex].name); setShowComposer(true); }}
-                    className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 transition-colors">
-                    작성하기
-                  </button>
-                );
-              })()}
-            </div>
-          </div>
-        )}
+        {/* 숙제 슬라이드 배너 제거됨 */}
 
         {/* 서브탭 (posts 탭, 본인만) */}
         {activeTab === 'posts' && !readOnly && (

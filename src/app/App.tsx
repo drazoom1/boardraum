@@ -1739,7 +1739,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             </button>
 
             {/* 플러스 = 추가 메뉴 */}
-            <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); })}
+            <button onClick={() => requireAuth(() => setShowPlusMenu(true))}
               className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100`} title="추가">
               <img src={icon_plus_off} className="w-8 h-8 object-contain flex-shrink-0" />
               {sidebarExpanded && <span className="font-semibold text-gray-600">글쓰기</span>}
@@ -1983,7 +1983,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                     <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-7 h-7 object-contain" />
                     <span className={`font-semibold ${activeTab === 'custom' ? 'text-gray-900' : 'text-gray-600'}`}>보드위키</span>
                   </button>
-                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); }); }}
+                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => setShowPlusMenu(true)); }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100">
                     <img src={icon_plus_off} className="w-7 h-7 object-contain" />
                     <span className="font-semibold text-gray-600">글쓰기</span>
@@ -2025,7 +2025,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 플러스 */}
-              <button onClick={() => requireAuth(() => { setViewingUserId(null); setActiveTab('feed'); setTriggerComposer(true); })} className="flex flex-col items-center gap-1">
+              <button onClick={() => requireAuth(() => setShowPlusMenu(true))} className="flex flex-col items-center gap-1">
                 <img src={icon_plus_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 카트=방출마켓 */}
@@ -2100,40 +2100,22 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   </div>
                 </div>
                 <div className="px-6 pb-8 space-y-2">
-                  {/* 보유 게임 추가 */}
-                  <button onClick={() => { setShowPlusMenu(false); setActiveTab('owned'); setTriggerAddDialog(true); }}
-                    className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors text-left">
-                    <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">🎲</div>
-                    <div>
-                      <p className="font-bold text-gray-900">보유 게임 추가</p>
-                      <p className="text-sm text-gray-500 mt-0.5">내 컬렉션에 새 게임을 등록해요</p>
-                    </div>
-                  </button>
-                  {/* 위시리스트 추가 */}
-                  <button onClick={() => { setShowPlusMenu(false); setActiveTab('wishlist'); setTriggerWishlistDialog(true); }}
-                    className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors text-left">
-                    <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">⭐</div>
-                    <div>
-                      <p className="font-bold text-gray-900">위시리스트 추가</p>
-                      <p className="text-sm text-gray-500 mt-0.5">갖고 싶은 게임을 담아둬요</p>
-                    </div>
-                  </button>
-                  {/* 게시물 작성 */}
+                  {/* 글쓰기 */}
                   <button onClick={() => { if (!accessToken) { setShowPlusMenu(false); setShowGuestModal(true); return; } setShowPlusMenu(false); setActiveTab('feed'); setTriggerComposer(true); }}
                     className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors text-left">
                     <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">✏️</div>
                     <div>
-                      <p className="font-bold text-gray-900">게시물 작성하기</p>
+                      <p className="font-bold text-gray-900">글쓰기</p>
                       <p className="text-sm text-gray-500 mt-0.5">피드에 글을 올려요</p>
                     </div>
                   </button>
-                  {/* 계산기 */}
-                  <button onClick={() => { setShowPlusMenu(false); setShowCalculator(true); }}
+                  {/* 보드게임 등록 */}
+                  <button onClick={() => { setShowPlusMenu(false); setActiveTab('owned'); setTriggerAddDialog(true); }}
                     className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors text-left">
-                    <div className="w-14 h-14 bg-cyan-50 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">🧮</div>
+                    <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">🎲</div>
                     <div>
-                      <p className="font-bold text-gray-900">점수 계산기</p>
-                      <p className="text-sm text-gray-500 mt-0.5">보드게임 점수를 계산해요</p>
+                      <p className="font-bold text-gray-900">보드게임 등록</p>
+                      <p className="text-sm text-gray-500 mt-0.5">보유 / 위시 리스트에 게임을 등록해요</p>
                     </div>
                   </button>
                 </div>
@@ -2226,6 +2208,8 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 onRelease={(game) => setReleaseGame(game)}
                 openAddDialog={triggerAddDialog}
                 onAddDialogClose={() => setTriggerAddDialog(false)}
+                allowListChoice
+                onAddToWishlist={(newGames) => handleWishlistGamesChange([...wishlistGames, ...newGames])}
               />
             )}
             

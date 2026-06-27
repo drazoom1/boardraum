@@ -111,9 +111,22 @@ interface AddGameDialogProps {
   existingGames?: BoardGame[];
   initialQuery?: string;        // 열릴 때 미리 채워질 검색어 (확장 추가 시)
   initialParentGameId?: string; // 열릴 때 미리 선택될 본판 ID
+  allowListChoice?: boolean;    // 등록 시 보유/위시 리스트 선택 토글 표시
+  onAddToWishlist?: (games: BoardGame[]) => void; // 위시리스트로 등록 (allowListChoice일 때 사용)
 }
 
-export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, existingGames = [], initialQuery = '', initialParentGameId = '' }: AddGameDialogProps) {
+export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, existingGames = [], initialQuery = '', initialParentGameId = '', allowListChoice = false, onAddToWishlist }: AddGameDialogProps) {
+  const [targetList, setTargetList] = useState<'보유' | '위시'>('보유'); // 등록 대상 리스트
+  // 보유/위시 분기 등록 헬퍼
+  const routeAdd = (gamesArr: BoardGame[]) => {
+    if (allowListChoice && targetList === '위시' && onAddToWishlist) {
+      onAddToWishlist(gamesArr);
+    } else if (onAddGames) {
+      onAddGames(gamesArr);
+    } else {
+      gamesArr.forEach(g => onAddGame(g));
+    }
+  };
   const [step, setStep] = useState(1); // 1: 검색, 2: 정보 확인, 3: 영상 입력
   const [isManualEntry, setIsManualEntry] = useState(false); // 직접 등록 모드
   const [formData, setFormData] = useState({
@@ -203,6 +216,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
   useEffect(() => {
     if (open) {
       loadAllRegisteredGames();
+      setTargetList('보유'); // 열릴 때마다 기본값 보유로 초기화
     }
   }, [open]);
 
@@ -795,9 +809,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
     }
     setLoadingBulk(false);
     if (newGames.length > 0) {
-      if (onAddGames) { onAddGames(newGames); } else { newGames.forEach(g => onAddGame(g)); }
+      routeAdd(newGames);
     }
-    toast.success(newGames.length + '개 게임이 등록되었습니다');
+    toast.success(`${newGames.length}개 게임이 ${allowListChoice && targetList === '위시' ? '위시리스트' : '보유 리스트'}에 등록되었습니다`);
     onOpenChange(false);
   };
   const handleSubmit = (e: React.FormEvent) => {
@@ -812,9 +826,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       createdAt: new Date().toISOString(),
     };
 
-    onAddGame(newGame);
+    routeAdd([newGame]);
     onOpenChange(false);
-    
+
     // Reset form
     setFormData({
       imageUrl: '',
@@ -846,6 +860,23 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
             {step === 3 && '규칙 영상 URL을 입력하세요'}
           </DialogDescription>
         </DialogHeader>
+
+        {/* 보유/위시 리스트 선택 토글 */}
+        {allowListChoice && !showBggImport && !showExcelImport && (
+          <div className="flex items-center gap-2 pb-1">
+            <span className="text-sm font-medium text-gray-500 flex-shrink-0">등록 위치</span>
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-xl flex-1">
+              <button type="button" onClick={() => setTargetList('보유')}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${targetList === '보유' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                🎲 보유 리스트
+              </button>
+              <button type="button" onClick={() => setTargetList('위시')}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${targetList === '위시' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                ⭐ 위시 리스트
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Step 1: 검색 */}
         {step === 1 && (
