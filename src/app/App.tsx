@@ -269,6 +269,16 @@ function PasswordResetModal({ onClose, expired = false }: { onClose: () => void;
   );
 }
 
+// 광고·제휴 문의 아이콘 — 스택형 카드 + "AD"
+function AdIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" className={className}>
+      <rect x="9" y="3.5" width="11" height="8.5" rx="2" />
+      <rect x="3.5" y="9" width="13.5" height="11.5" rx="2.5" fill="white" />
+      <text x="10.25" y="16.6" textAnchor="middle" fontSize="6.4" fontWeight="800" fill="currentColor" stroke="none" fontFamily="ui-sans-serif, system-ui, sans-serif">AD</text>
+    </svg>
+  );
+}
 
 function App() {
   // Set favicon dynamically
@@ -389,6 +399,8 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   
   // /post/:postId URL 진입 시 처리 (notificationPost state 선언 후 아래에서 처리)
   const [customMountKey, setCustomMountKey] = useState(0);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true); // PC 좌측 사이드바 펼침/접힘
+  const [showMobileNav, setShowMobileNav] = useState(false); // 모바일 좌측 네비 드로어
 
   // 탭 전환 시 스크롤 맨 위로
   useEffect(() => {
@@ -438,10 +450,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   }, [accessToken, noticeRefreshKey]);
 
   useEffect(() => {
-    if (!accessToken) { setBonusCardCount(null); return; }
-    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/me`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }).then(r => r.ok ? r.json() : null).then(d => { if (d) setBonusCardCount(d.cards ?? 0); }).catch(() => {});
+    setBonusCardCount(null); // 보너스카드 일단 숨김
   }, [accessToken]);
 
   // 경매 활성 여부 폴링 (탭 뱃지용)
@@ -1436,7 +1445,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               lastFeedPostAtRef.current = d.latestAt;
             } else if (d.latestAt !== lastFeedPostAtRef.current) {
               lastFeedPostAtRef.current = d.latestAt;
-              if (activeTab !== 'feed') setHasNewFeedPost(true);
+              // 새 글 알림 일단 비활성화
             }
           }
         }
@@ -1698,39 +1707,54 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         <>
           {/* Header */}
           {/* ── 좌측 사이드바 (PC) ── */}
-          <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-[72px] bg-white border-r border-gray-100 z-20 py-4 items-center gap-1">
-            {/* 로고 */}
-            <button onClick={() => setActiveTab('feed')} className="mb-4 w-10 h-10 flex items-center justify-center">
-              <img src={logoImage} alt="BOARDRAUM" className="w-9 h-9 object-contain" />
-            </button>
+          <aside className={`hidden lg:flex flex-col fixed left-0 top-0 h-full bg-white border-r border-gray-100 z-20 py-4 gap-1 transition-[width] duration-200 ${sidebarExpanded ? 'w-60 px-3' : 'w-[72px] items-center'}`}>
+            {/* 햄버거 토글 + 로고 */}
+            <div className={`flex items-center mb-4 ${sidebarExpanded ? 'w-full gap-1' : 'flex-col gap-2'}`}>
+              <button onClick={() => setSidebarExpanded(v => !v)} title="메뉴 접기/펼치기"
+                className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100 flex-shrink-0">
+                <Menu className="w-5 h-5" />
+              </button>
+              <button onClick={() => setActiveTab('feed')} className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <img src={logoImage} alt="BOARDRAUM" className="w-9 h-9 object-contain" />
+              </button>
+            </div>
 
             {/* 홈 = 피드 */}
-            <button onClick={() => { if (activeTab === 'feed') { document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }} className="w-12 h-12 flex items-center justify-center relative" title="피드">
-              <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-8 h-8 object-contain" />
-              {hasNewFeedPost && activeTab !== 'feed' && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] font-bold">N</span>
-              )}
+            <button onClick={() => { if (activeTab === 'feed') { document.getElementById('root')?.scrollTo({ top: 0, behavior: 'smooth' }); } else { setActiveTab('feed'); setHasNewFeedPost(false); } }}
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'feed' ? 'bg-gray-100' : ''}`} title="피드">
+              <span className="relative flex items-center justify-center flex-shrink-0">
+                <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-8 h-8 object-contain" />
+                {hasNewFeedPost && activeTab !== 'feed' && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full" />
+                )}
+              </span>
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>홈</span>}
             </button>
 
             {/* 찾기 = 보드위키 */}
             <button onClick={() => { setActiveTab('custom'); setWikiGame(undefined); }}
-              className="w-12 h-12 flex items-center justify-center" title="보드위키">
-              <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-8 h-8 object-contain" />
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'custom' ? 'bg-gray-100' : ''}`} title="보드위키">
+              <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-8 h-8 object-contain flex-shrink-0" />
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'custom' ? 'text-gray-900' : 'text-gray-600'}`}>보드위키</span>}
             </button>
 
             {/* 플러스 = 추가 메뉴 */}
             <button onClick={() => requireAuth(() => setShowPlusMenu(true))}
-              className="w-12 h-12 flex items-center justify-center" title="추가">
-              <img src={icon_plus_off} className="w-8 h-8 object-contain" />
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100`} title="추가">
+              <img src={icon_plus_off} className="w-8 h-8 object-contain flex-shrink-0" />
+              {sidebarExpanded && <span className="font-semibold text-gray-600">글쓰기</span>}
             </button>
 
             {/* 카트 = 방출 마켓 */}
             <button onClick={() => setActiveTab('market')}
-              className="w-12 h-12 flex items-center justify-center relative" title="방출 마켓">
-              <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-8 h-8 object-contain" />
-              {hasActiveAuction && activeTab !== 'market' && (
-                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
-              )}
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} relative rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`} title="방출 마켓">
+              <span className="relative flex items-center justify-center flex-shrink-0">
+                <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-8 h-8 object-contain" />
+                {hasActiveAuction && activeTab !== 'market' && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
+                )}
+              </span>
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>방출 마켓</span>}
             </button>
 
             {/* 사람 = 마이페이지 */}
@@ -1741,43 +1765,69 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 setViewingUserId(null); setActiveTab('mypage');
               }
             })}
-              className="w-12 h-12 flex items-center justify-center" title="마이페이지">
-              <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-8 h-8 object-contain" />
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`} title="마이페이지">
+              <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-8 h-8 object-contain flex-shrink-0" />
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이페이지</span>}
             </button>
 
             {/* 하단 설정 */}
-            <div className="mt-auto flex flex-col items-center gap-1 relative">
-              {/* 보너스카드 + 공지 버튼 */}
-              <div className="flex flex-col items-center gap-2">
-                {accessToken && bonusCardCount !== null && (
+            <div className={`mt-auto flex flex-col gap-1 relative ${sidebarExpanded ? '' : 'items-center'}`}>
+              {/* 광고·제휴 문의 */}
+              <button onClick={() => window.open('https://open.kakao.com/o/gPD26Qmi', '_blank', 'noopener')} title="광고·제휴 문의"
+                className={`${sidebarExpanded ? 'w-full flex items-center gap-2 px-1 py-1.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700`}>
+                <span className="w-10 flex items-center justify-center flex-shrink-0"><AdIcon className="w-6 h-6" /></span>
+                {sidebarExpanded && <span className="font-semibold text-gray-600">광고 문의</span>}
+              </button>
+              {/* 보너스 카드 */}
+              {accessToken && bonusCardCount !== null && (
+                sidebarExpanded ? (
+                  <div className={`w-full flex items-center gap-2 px-1 py-1.5${cardDeductAnim ? ' animate-card-deduct' : ''}`}>
+                    <span className="w-10 flex items-center justify-center text-[22px] leading-none flex-shrink-0">🃏</span>
+                    <span className="font-semibold text-gray-600">보너스 카드</span>
+                    <span className="ml-auto pr-2 text-sm font-bold text-gray-500">{bonusCardCount}</span>
+                  </div>
+                ) : (
                   <div className={`flex flex-col items-center leading-none${cardDeductAnim ? ' animate-card-deduct' : ''}`}>
                     <span className="text-[22px]">🃏</span>
                     <span className="text-[13px] text-gray-600 font-medium">{bonusCardCount}</span>
                   </div>
-                )}
-                <button onClick={() => setShowNoticeModal(true)}
-                  className="relative w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
-                  title="공지사항">
+                )
+              )}
+              {/* 공지사항 */}
+              <button onClick={() => setShowNoticeModal(true)}
+                className={`relative ${sidebarExpanded ? 'w-full flex items-center gap-2 px-1 py-1.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors`}
+                title="공지사항">
+                <span className="relative w-10 flex items-center justify-center flex-shrink-0">
                   <img src="/notice-icon.webp" alt="공지" style={{width:'20px',height:'20px'}} />
                   {(noticeIsNew || noticeUnreadCount > 0) && (
-                    <span className="absolute top-2 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                    <span className="absolute top-0 right-2 min-w-[12px] h-3 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
                       {noticeIsNew ? 'N' : noticeUnreadCount > 9 ? '9+' : noticeUnreadCount}
                     </span>
                   )}
-                </button>
-              </div>
-              {/* 알림 버튼 */}
+                </span>
+                {sidebarExpanded && <span className="font-semibold text-gray-600">공지사항</span>}
+              </button>
+              {/* 알림 */}
               {accessToken && (
-                <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
+                sidebarExpanded ? (
+                  <div className="w-full flex items-center gap-2 px-1 rounded-xl hover:bg-gray-100">
+                    <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
+                    <span className="font-semibold text-gray-600">알림</span>
+                  </div>
+                ) : (
+                  <NotificationBell accessToken={accessToken} onClick={() => setShowNotification(true)} />
+                )
               )}
+              {/* 설정 */}
               <button onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-gray-700" title="설정">
-                <Settings className="w-5 h-5" />
+                className={`${sidebarExpanded ? 'w-full flex items-center gap-2 px-1 py-1.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700`} title="설정">
+                <span className="w-10 flex items-center justify-center flex-shrink-0"><Settings className="w-5 h-5" /></span>
+                {sidebarExpanded && <span className="font-semibold text-gray-600">설정</span>}
               </button>
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
-                  <div className="fixed left-[80px] bottom-4 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 py-1 overflow-hidden">
+                  <div className={`fixed ${sidebarExpanded ? 'left-[248px]' : 'left-[80px]'} bottom-4 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 py-1 overflow-hidden`}>
                     <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100 truncate">{userEmail}</div>
                     {accessToken && (userRole === 'admin' || isAdminEmail(userEmail)) && (
                       <button onClick={() => { setActiveTab('admin'); setShowUserMenu(false); }}
@@ -1825,10 +1875,18 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
           {/* ── 상단 헤더 (모바일) ── */}
           <header className="lg:hidden bg-white border-b border-gray-100 sticky top-0 z-20">
             <div className="flex items-center justify-between px-4 py-3">
-              <button onClick={() => setActiveTab('owned')}>
-                <img src={logoImage} alt="BOARDRAUM" className="w-8 h-8 object-contain" />
-              </button>
               <div className="flex items-center gap-1">
+                <button onClick={() => setShowMobileNav(true)} className="w-9 h-9 flex items-center justify-center text-gray-700" title="메뉴">
+                  <Menu className="w-5 h-5" />
+                </button>
+                <button onClick={() => setActiveTab('owned')}>
+                  <img src={logoImage} alt="BOARDRAUM" className="w-8 h-8 object-contain" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => window.open('https://open.kakao.com/o/gPD26Qmi', '_blank', 'noopener')} title="광고·제휴 문의" className="w-9 h-9 flex items-center justify-center text-gray-700">
+                  <AdIcon className="w-5 h-5" />
+                </button>
                 {accessToken && bonusCardCount !== null && (
                   <span className={`text-[13px] text-gray-600 font-medium px-1${cardDeductAnim ? ' animate-card-deduct' : ''}`}><span className="text-[22px]">🃏</span>{bonusCardCount}</span>
                 )}
@@ -1904,6 +1962,53 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               </>
             )}
           </header>
+
+          {/* ── 모바일 좌측 네비 드로어 ── */}
+          {showMobileNav && (
+            <>
+              <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setShowMobileNav(false)} />
+              <div className="fixed top-0 left-0 bottom-0 w-64 bg-white shadow-xl z-50 flex flex-col lg:hidden">
+                <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
+                  <img src={logoImage} alt="BOARDRAUM" className="w-8 h-8 object-contain" />
+                  <button onClick={() => setShowMobileNav(false)} className="p-1"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="p-2 space-y-1">
+                  <button onClick={() => { setActiveTab('feed'); setHasNewFeedPost(false); setShowMobileNav(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'feed' ? 'bg-gray-100' : ''}`}>
+                    <img src={activeTab === 'feed' ? icon_home_on : icon_home_off} className="w-7 h-7 object-contain" />
+                    <span className={`font-semibold ${activeTab === 'feed' ? 'text-gray-900' : 'text-gray-600'}`}>홈</span>
+                  </button>
+                  <button onClick={() => { setActiveTab('custom'); setWikiGame(undefined); setShowMobileNav(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'custom' ? 'bg-gray-100' : ''}`}>
+                    <img src={activeTab === 'custom' ? icon_search_on : icon_search_off} className="w-7 h-7 object-contain" />
+                    <span className={`font-semibold ${activeTab === 'custom' ? 'text-gray-900' : 'text-gray-600'}`}>보드위키</span>
+                  </button>
+                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => setShowPlusMenu(true)); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100">
+                    <img src={icon_plus_off} className="w-7 h-7 object-contain" />
+                    <span className="font-semibold text-gray-600">글쓰기</span>
+                  </button>
+                  <button onClick={() => { setActiveTab('market'); setShowMobileNav(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`}>
+                    <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-7 h-7 object-contain" />
+                    <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>방출 마켓</span>
+                  </button>
+                  <button onClick={() => { setShowMobileNav(false); requireAuth(() => { setViewingUserId(null); setActiveTab('mypage'); }); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`}>
+                    <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-7 h-7 object-contain" />
+                    <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이페이지</span>
+                  </button>
+                  <div className="border-t border-gray-100 mt-1 pt-1">
+                    <button onClick={() => { setShowMobileNav(false); window.open('https://open.kakao.com/o/gPD26Qmi', '_blank', 'noopener'); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 text-gray-600">
+                      <AdIcon className="w-6 h-6" />
+                      <span className="font-semibold text-gray-600">광고 문의</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* ── 모바일 하단 탭바 ── */}
           <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 z-20 pb-safe shadow-lg">
@@ -2039,11 +2144,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
 
 
-          {/* 후원/피드백 공지 배너 */}
-          <NoticeBanner accessToken={accessToken} />
+          {/* 후원/피드백 공지 배너 — 일단 숨김 */}
 
           {/* Main Content */}
-          <main className="lg:ml-[72px] px-4 sm:px-6 py-6 mb-16 lg:mb-0 min-h-screen bg-[#f2f2f2]">
+          <main className={`${sidebarExpanded ? 'lg:ml-60' : 'lg:ml-[72px]'} transition-[margin] duration-200 px-4 sm:px-6 py-6 mb-16 lg:mb-0 min-h-screen bg-[#f2f2f2]`}>
             {/* Banner - Always visible */}
             <Banner 
               imageUrl={bannerUrl}
@@ -2073,7 +2177,7 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 }}
                 onGuestAction={() => setShowGuestModal(true)}
                 onNavigateToMarket={() => setActiveTab('market')}
-                onCardCountChange={(count) => setBonusCardCount(count)}
+                onCardCountChange={() => {}}
                 noticeRefreshKey={noticeRefreshKey}
                 wishlistGames={wishlistGames}
                 onRemoveFromWishlist={(gameId) => {

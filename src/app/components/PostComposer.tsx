@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Image as ImageIcon, Smile, Loader2, Gamepad2, Save, ChevronLeft, ChevronRight, Lock, LockOpen, BarChart2, Plus, Search } from 'lucide-react';
+import { X, Image as ImageIcon, Smile, Loader2, Gamepad2, Save, ChevronLeft, ChevronRight, ChevronDown, Lock, LockOpen, BarChart2, Plus, Search, Bold, Italic, Strikethrough, Link2, List, ListOrdered, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { getSupabaseClient } from '../lib/supabase';
@@ -169,6 +169,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
 }) {
   const isEditMode = !!editPost;
   const [content, setContent] = useState(editPost?.content || draftPost?.content || '');
+  const [title, setTitle] = useState((editPost as any)?.title || (draftPost as any)?.title || '');
   const [category, setCategory] = useState<string>(editPost?.category || draftPost?.category || initialCategory || '자유');
   const [showSubCategoryModal, setShowSubCategoryModal] = useState(false);
   const [pendingMainCategory, setPendingMainCategory] = useState<string | null>(null);
@@ -198,10 +199,13 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   );
   const [showGamePicker, setShowGamePicker] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [currentImagePreviewIndex, setCurrentImagePreviewIndex] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const sallaePhotoRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const imagePreviewScrollRef = useRef<HTMLDivElement>(null);
@@ -388,11 +392,86 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const avatarUrl = userProfile?.profileImage;
 
   const insertEmoji = (emoji: string) => {
+    editorRef.current?.focus();
+    try { document.execCommand('insertText', false, emoji); } catch { /* noop */ }
+    if (editorRef.current) setContent(htmlToMd(editorRef.current));
+  };
+
+  // 본문 서식: 선택 영역을 마크다운 기호로 감싸기
+  const wrapSel = (before: string, after: string = before) => {
     const el = textRef.current;
-    if (!el) return;
+    if (!el) { setContent(c => c + before + after); return; }
     const s = el.selectionStart, e = el.selectionEnd;
-    setContent(content.slice(0, s) + emoji + content.slice(e));
-    setTimeout(() => { el.selectionStart = el.selectionEnd = s + emoji.length; el.focus(); }, 0);
+    const sel = content.slice(s, e);
+    setContent(content.slice(0, s) + before + sel + after + content.slice(e));
+    setTimeout(() => { el.focus(); el.selectionStart = s + before.length; el.selectionEnd = e + before.length; }, 0);
+  };
+  // 본문 서식: 현재 줄 맨 앞에 접두사(목록 등) 추가
+  const prefixLine = (prefix: string) => {
+    const el = textRef.current;
+    if (!el) { setContent(c => (c ? c + '\n' : '') + prefix); return; }
+    const s = el.selectionStart;
+    const lineStart = content.lastIndexOf('\n', s - 1) + 1;
+    setContent(content.slice(0, lineStart) + prefix + content.slice(lineStart));
+    setTimeout(() => { el.focus(); el.selectionStart = el.selectionEnd = s + prefix.length; }, 0);
+  };
+
+  // ── WYSIWYG 에디터(contentEditable) ↔ 마크다운 변환 ──────────────
+  const nodeToMd = (node: Node): string => {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1) return '';
+    const el = node as HTMLElement;
+    const inner = Array.from(el.childNodes).map(nodeToMd).join('');
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    if (tag === 'b' || tag === 'strong') return inner ? `**${inner}**` : '';
+    if (tag === 'i' || tag === 'em') return inner ? `_${inner}_` : '';
+    if (tag === 's' || tag === 'strike' || tag === 'del') return inner ? `~~${inner}~~` : '';
+    if (tag === 'a') return `[${inner}](${el.getAttribute('href') || ''})`;
+    if (tag === 'li') return `${el.parentElement?.tagName.toLowerCase() === 'ol' ? '1.' : '-'} ${inner}\n`;
+    if (tag === 'ul' || tag === 'ol') return inner;
+    if (tag === 'div' || tag === 'p') return inner + '\n';
+    return inner;
+  };
+  const htmlToMd = (root: HTMLElement): string =>
+    Array.from(root.childNodes).map(nodeToMd).join('').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+  const mdToHtml = (md: string): string =>
+    (md || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/~~([^~]+)~~/g, '<s>$1</s>')
+      .replace(/_([^_\n]+)_/g, '<em>$1</em>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\n/g, '<br>');
+  const syncEditor = () => { if (editorRef.current) setContent(htmlToMd(editorRef.current)); };
+  const exec = (cmd: string, val?: string) => { editorRef.current?.focus(); try { document.execCommand(cmd, false, val); } catch { /* noop */ } syncEditor(); };
+  // 편집/임시저장 등 외부에서 content가 바뀌면 에디터에 주입(입력 중에는 건너뜀 → 커서 유지)
+  useEffect(() => {
+    const el = editorRef.current;
+    if (el && document.activeElement !== el) {
+      const html = mdToHtml(content);
+      if (el.innerHTML !== html) el.innerHTML = html;
+    }
+  }, [content]);
+
+  // 동영상 업로드 (서버 → Supabase Storage). 영상 URL은 images 배열에 함께 저장된다.
+  const handleVideoUpload = async (file: File) => {
+    try {
+      if (!file.type.startsWith('video/')) { toast.error('동영상 파일만 가능합니다'); return; }
+      if (file.size > 50 * 1024 * 1024) { toast.error('동영상은 50MB 이하만 가능합니다'); return; }
+      setUploadingImg(true);
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/upload-video`,
+        { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: fd });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || '업로드 실패'); }
+      const data = await res.json();
+      setImages(prev => [...prev, data.videoUrl]);
+      toast.success('동영상이 업로드되었습니다!');
+    } catch (e: any) {
+      toast.error(e.message || '동영상 업로드 실패');
+    } finally {
+      setUploadingImg(false);
+    }
   };
 
   // 이미지 압축 함수
@@ -584,7 +663,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
         const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${editPost.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ content, category, images: mainImageIndex === 0 ? images : [images[mainImageIndex], ...images.filter((_, i) => i !== mainImageIndex)], linkedGame: linkedGames[0] || null, linkedGames, talentData }),
+          body: JSON.stringify({ title: title.trim(), content, format: /(\*\*[^*]+\*\*|~~[^~]+~~|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/)/.test(content) ? 'md' : '', category, images: mainImageIndex === 0 ? images : [images[mainImageIndex], ...images.filter((_, i) => i !== mainImageIndex)], linkedGame: linkedGames[0] || null, linkedGames, talentData }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -604,7 +683,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
           body: JSON.stringify({
-            content, userName, userAvatar: avatarUrl, category,
+            title: title.trim(), content, format: /(\*\*[^*]+\*\*|~~[^~]+~~|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/)/.test(content) ? 'md' : '', userName, userAvatar: avatarUrl, category,
             images: mainImageIndex === 0 ? images : [images[mainImageIndex], ...images.filter((_, i) => i !== mainImageIndex)],
             linkedGame: linkedGames[0] || null, linkedGames, isDraft, talentData, isPrivate,
             poll: showPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2
@@ -641,23 +720,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
         toast.success('게시물이 등록됐어요!');
         onPosted();
         if (!isDraft) {
-          // 5% 확률 보너스카드 체크 (먼저 닫기 전에 확인)
-          let cardGranted = false;
-          try {
-            const cardRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bonus-cards/activity`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-              body: JSON.stringify({ type: 'post', sourceId: resData.post?.id }),
-            });
-            const cardData = await cardRes.json().catch(() => ({}));
-            if (cardData.granted) cardGranted = true;
-          } catch { /* 카드 실패해도 무시 */ }
-          if (cardGranted) {
-            setShowCardWon(true);
-            // 오버레이가 끝난 뒤 닫힘 (BonusCardWinOverlay onClose → onClose())
-          } else {
-            onClose();
-          }
+          onClose(); // 보너스카드 일단 비활성화 — 게시 후 바로 닫기
         }
       }
     } catch (e: any) { toast.error(e.message || (isEditMode ? '수정 실패' : '등록 실패')); }
@@ -691,19 +754,19 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   };
   const currentMain = getMainCategory(category);
   const hasEventCategory = category === '이벤트';
-  const allCategories = [...MAIN_CATEGORIES, '숙제'];
+  const allCategories = [...MAIN_CATEGORIES]; // 숙제 일단 제외
 
   return (
     <>
     <div
-      className="fixed inset-0 z-[9990] flex flex-col sm:items-center sm:justify-center sm:bg-black/60 sm:p-4"
+      className="fixed inset-0 z-[9990] flex flex-col bg-white"
       style={{
         paddingBottom: keyboardHeight > 0 ? keyboardHeight : undefined,
         transition: 'padding-bottom 0.25s ease',
       }}
     >
       <div
-        className="bg-white flex-1 flex flex-col sm:flex-none sm:w-full sm:max-w-lg sm:rounded-3xl sm:shadow-2xl sm:max-h-[95vh]"
+        className="bg-white flex-1 flex flex-col w-full sm:max-w-2xl sm:mx-auto sm:border-x border-gray-100"
         style={{
           paddingTop: 'env(safe-area-inset-top)',
           maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined,
@@ -758,40 +821,41 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               </div>
             </div>
           )}
-          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {allCategories.map(c => {
-              const isHw = hwCategories.some(h => h.name === c);
-              const isSelected = currentMain === c || (isHw && category === c);
-              const hasSub = SUB_CATEGORIES[c] && SUB_CATEGORIES[c].length > 0;
-              const isEventDisabled = c === '이벤트' && !hasActiveEvent;
-              return (
-                <button key={c} onClick={() => {
-                  if (isEventDisabled) return;
-                  if (c === '숙제') {
-                    setPendingMainCategory('숙제');
-                    setShowSubCategoryModal(true);
-                  } else if (hasSub) {
-                    setPendingMainCategory(c);
-                    setShowSubCategoryModal(true);
-                  } else {
-                    setCategory(c);
-                  }
-                }}
-                  disabled={isEventDisabled}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                    isEventDisabled
-                      ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200'
-                      : isSelected || (c === '숙제' && hwCategories.some(h => h.name === category))
-                        ? isHw ? 'bg-orange-500 text-white' : c === '이벤트' ? 'bg-cyan-500 text-white' : c === '숙제' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
-                        : isHw ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
-                        : c === '이벤트' ? 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border border-cyan-200'
-                        : c === '숙제' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}>
-                  {c === '이벤트' ? '🎉 ' : c === '숙제' ? '📚 ' : ''}{c}{hasSub || c === '숙제' ? ' ›' : ''}
-                </button>
-              );
-            })}
+          {/* 카테고리 선택바 (Reddit식 드롭다운 모양 — 동작은 기존과 동일) */}
+          <div className="relative inline-block">
+            <button type="button" onClick={() => setShowCategoryMenu(v => !v)}
+              className="inline-flex items-center gap-2 pl-4 pr-3 py-2 rounded-full border border-gray-300 text-sm font-bold text-gray-900 bg-white hover:bg-gray-50 transition-colors">
+              <span>{category === '이벤트' ? '🎉 ' : currentMain === '숙제' || hwCategories.some(h => h.name === category) ? '📚 ' : ''}{category}</span>
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            </button>
+            {showCategoryMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowCategoryMenu(false)} />
+                <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-2xl shadow-xl z-20 py-1 max-h-80 overflow-y-auto">
+                  {allCategories.map(c => {
+                    const isHw = hwCategories.some(h => h.name === c);
+                    const isSelected = currentMain === c || (isHw && category === c) || (c === '숙제' && hwCategories.some(h => h.name === category));
+                    const hasSub = SUB_CATEGORIES[c] && SUB_CATEGORIES[c].length > 0;
+                    const isEventDisabled = c === '이벤트' && !hasActiveEvent;
+                    return (
+                      <button key={c} disabled={isEventDisabled} onClick={() => {
+                        if (isEventDisabled) return;
+                        if (c === '숙제') { setPendingMainCategory('숙제'); setShowSubCategoryModal(true); }
+                        else if (hasSub) { setPendingMainCategory(c); setShowSubCategoryModal(true); }
+                        else { setCategory(c); }
+                        setShowCategoryMenu(false);
+                      }}
+                        className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between transition-colors ${
+                          isEventDisabled ? 'text-gray-300 cursor-not-allowed' : isSelected ? 'bg-gray-100 font-bold text-gray-900' : 'text-gray-700 hover:bg-gray-50'
+                        }`}>
+                        <span>{c === '이벤트' ? '🎉 ' : c === '숙제' ? '📚 ' : ''}{c}</span>
+                        {(hasSub || c === '숙제') && <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
           {/* 선택된 세부 태그 표시 */}
           {SUB_CATEGORIES[currentMain] && !MAIN_CATEGORIES.includes(category) && (
@@ -1211,17 +1275,36 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
 
         {/* 작성 영역 */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 sm:py-4">
-          <div className="flex gap-2.5 sm:gap-3">
-            <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs sm:text-sm font-bold text-gray-500 overflow-hidden">
-                {avatarUrl
-                  ? <img src={avatarUrl} className="w-full h-full object-cover" alt="profile" />
-                  : userName[0]?.toUpperCase()
-                }
-              </div>
+          {/* 제목 (SEO 검색 노출용) */}
+          <div className="relative mb-4">
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value.slice(0, 100))}
+              placeholder="제목"
+              className="w-full text-base font-semibold px-4 py-3.5 pr-16 rounded-2xl border border-gray-200 outline-none focus:border-gray-400 transition-colors placeholder-gray-400"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{title.length}/100</span>
+          </div>
+          {/* 게임 추가 (기존 보드라이프식 게임 검색 모달 사용) + 선택된 게임 칩 */}
+          {category !== '살래말래' && (
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <button type="button" onClick={() => setShowGamePicker(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                <Gamepad2 className="w-4 h-4" /> 게임 추가
+              </button>
+              {linkedGames.map((g, i) => (
+                <span key={g.id || i} className="inline-flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full bg-cyan-50 text-cyan-700 text-xs font-semibold">
+                  {g.imageUrl && <img src={g.imageUrl} className="w-4 h-4 rounded object-cover" alt="" />}
+                  {g.name}
+                  <button type="button" onClick={() => setLinkedGames(linkedGames.filter((_, j) => j !== i))} className="hover:text-cyan-900"><X className="w-3 h-3" /></button>
+                </span>
+              ))}
             </div>
+          )}
+          {/* 본문 구분선 */}
+          <div className="border-t border-gray-100 -mx-4 sm:-mx-5 mb-3" />
+          <div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-900 text-sm mb-2">{userName}</p>
 
               {/* 재능판매 전용 입력 */}
               {category === '재능판매' && (
@@ -1355,12 +1438,46 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                   </button>
                 </div>
               ) : (
-                <textarea ref={textRef} value={content} onChange={e => setContent(e.target.value)}
-                  onFocus={() => activeHwCat && setGuideVisible(false)}
-                  placeholder={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
-                  className="w-full text-sm text-gray-900 placeholder-gray-400 resize-none border-none outline-none bg-transparent"
-                  style={{ fontSize: '16px', minHeight: category === '재능판매' ? '80px' : '160px', overflowY: 'hidden' }}
-                  rows={1} />
+                <div className="rounded-2xl border border-gray-200 focus-within:border-gray-400 transition-colors overflow-hidden">
+                  {category !== '살래말래' && (
+                    <div className="flex items-center gap-0.5 flex-wrap px-2 py-1.5 border-b border-gray-100 text-gray-500">
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('bold')} title="굵게"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><Bold className="w-4 h-4" /></button>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('italic')} title="기울임"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><Italic className="w-4 h-4" /></button>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('strikeThrough')} title="취소선"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><Strikethrough className="w-4 h-4" /></button>
+                      <span className="w-px h-4 bg-gray-200 mx-1" />
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => { const u = prompt('링크 주소를 입력하세요', 'https://'); if (u) exec('createLink', u); }} title="링크"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><Link2 className="w-4 h-4" /></button>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('insertUnorderedList')} title="목록"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><List className="w-4 h-4" /></button>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => exec('insertOrderedList')} title="번호 목록"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><ListOrdered className="w-4 h-4" /></button>
+                      <span className="w-px h-4 bg-gray-200 mx-1" />
+                      <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingImg} title="이미지"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 disabled:opacity-40">{uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}</button>
+                      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+                        onChange={e => e.target.files && handleMultipleImageUpload(e.target.files)} />
+                      <button type="button" onClick={() => videoRef.current?.click()} disabled={uploadingImg} title="동영상"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 disabled:opacity-40"><Video className="w-4 h-4" /></button>
+                      <input ref={videoRef} type="file" accept="video/*" className="hidden"
+                        onChange={e => { if (e.target.files?.[0]) handleVideoUpload(e.target.files[0]); e.target.value = ''; }} />
+                      <button type="button" onClick={() => setShowEmojiPicker(true)} title="이모지"
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 ${showEmojiPicker ? 'text-yellow-500' : ''}`}><Smile className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setShowPoll(p => !p)} title="설문조사"
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 ${showPoll ? 'text-blue-500' : ''}`}><BarChart2 className="w-4 h-4 rotate-90" /></button>
+                    </div>
+                  )}
+                  <style>{`.composer-editor:empty:before{content:attr(data-ph);color:#9ca3af;pointer-events:none;}.composer-editor strong{font-weight:700;}.composer-editor em{font-style:italic;}.composer-editor s{text-decoration:line-through;}.composer-editor a{color:#06b6d4;text-decoration:underline;}.composer-editor ul{list-style:disc;padding-left:1.25rem;margin:0;}.composer-editor ol{list-style:decimal;padding-left:1.25rem;margin:0;}`}</style>
+                  <div ref={editorRef} contentEditable suppressContentEditableWarning
+                    onInput={syncEditor}
+                    onFocus={() => activeHwCat && setGuideVisible(false)}
+                    onPaste={e => { e.preventDefault(); const t = e.clipboardData.getData('text/plain'); try { document.execCommand('insertText', false, t); } catch { /* noop */ } syncEditor(); }}
+                    data-ph={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
+                    className="composer-editor w-full text-sm text-gray-900 outline-none px-3.5 py-3 break-words whitespace-pre-wrap"
+                    style={{ fontSize: '16px', minHeight: category === '재능판매' ? '80px' : '140px' }} />
+                </div>
               )}
 
               {/* 연결된 게임 (살래말래 제외) - 여러개 */}
@@ -1492,39 +1609,11 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               )}
             </div>
           </div>
-        </div>
-
-        {/* 하단 툴바 */}
-        <div className="px-4 sm:px-5 pt-2.5 sm:pt-4 border-t border-gray-100 flex-shrink-0 bg-white"
-          style={{ paddingBottom: 'max(calc(env(safe-area-inset-bottom) + 8px), 20px)' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-0.5 sm:gap-1">
-              {/* 이미지 - 살래말래에서 비활성화 */}
-              <button onClick={() => fileRef.current?.click()} disabled={uploadingImg || category === '살래말래'}
-                className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-colors ${category === '살래말래' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
-                {uploadingImg ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </button>
-              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
-                onChange={e => e.target.files && handleMultipleImageUpload(e.target.files)} />
-              {/* 이모지 */}
-              <button onClick={() => setShowEmojiPicker(true)}
-                className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-colors ${showEmojiPicker ? 'text-yellow-500 bg-yellow-50' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
-                <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-              {/* 설문조사 - 살래말래에서 비활성화 */}
-              <button onClick={() => setShowPoll(p => !p)} disabled={category === '살래말래'}
-                className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-colors ${category === '살래말래' ? 'text-gray-200 cursor-not-allowed' : showPoll ? 'text-blue-500 bg-blue-50' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
-                <BarChart2 className="w-4 h-4 sm:w-5 sm:h-5 rotate-90" />
-              </button>
-              {/* 게임 태그 - 살래말래에서 비활성화 (위에 전용 버튼 있음) */}
-              <button onClick={() => setShowGamePicker(true)} disabled={category === '살래말래'}
-                className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-colors ${category === '살래말래' ? 'text-gray-200 cursor-not-allowed' : linkedGames.length > 0 ? 'text-cyan-600 bg-cyan-50' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
-                <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            </div>
+          {/* 게시 버튼 (본문 박스 아래, 우측 정렬) */}
+          <div className="flex justify-end pt-3">
             <button onClick={() => submit(false)} disabled={submitting || !content.trim()}
-              className="h-9 sm:h-10 px-5 sm:px-6 bg-gray-900 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-gray-700 transition-colors">
-              {submitting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : '게시'}
+              className="h-10 px-6 bg-gray-900 text-white rounded-full text-sm font-bold disabled:opacity-40 hover:bg-gray-700 transition-colors flex items-center justify-center">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : '게시하기'}
             </button>
           </div>
         </div>

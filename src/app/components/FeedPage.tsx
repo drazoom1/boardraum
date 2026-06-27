@@ -17,7 +17,7 @@ import { InfluencerBanner } from './InfluencerBanner';
 
 const supabase = getSupabaseClient();
 
-const BASE_CATEGORIES = ['전체', '이벤트', '숙제', '자유', '정보', '게임리뷰', '질문'] as const;
+const BASE_CATEGORIES = ['전체', '이벤트', '자유', '정보', '게임리뷰', '질문'] as const;
 type BaseCategory = typeof BASE_CATEGORIES[number];
 const SUBCATEGORIES: Record<string, string[]> = {
   '숙제': ['최근 숙제', '지난 숙제'],
@@ -35,7 +35,9 @@ export interface FeedPost {
   userId: string;
   userName: string;
   userAvatar?: string;
+  title?: string;
   content: string;
+  format?: string;
   category: string;
   images: string[];
   linkedGame: { id: string; name: string; imageUrl: string } | null;
@@ -744,7 +746,7 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
 
   return (
     <>
-    {showCommentCardWon && <BonusCardWinOverlay onClose={() => setShowCommentCardWon(false)} />}
+    {false && showCommentCardWon && <BonusCardWinOverlay onClose={() => setShowCommentCardWon(false)} />}
     {showSpamWarning && <SpamWarningModal onClose={() => setShowSpamWarning(false)} />}
     <div className="mt-3 pt-3 border-t border-gray-50 space-y-3">
       {!showAll && topLevelComments.length > 3 && (
@@ -1132,6 +1134,27 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
       return part;
     });
   };
+
+  // 마크다운 렌더(서식 툴바로 작성한 글 전용 — format === 'md'). 굵게/기울임/취소선/링크 + 자동 링크
+  const renderRich = (text: string) => {
+    const nodes: React.ReactNode[] = [];
+    const regex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|_([^_\n]+)_|(https?:\/\/[^\s]+)/g;
+    let last = 0, m: RegExpExecArray | null, k = 0;
+    while ((m = regex.exec(text)) !== null) {
+      if (m.index > last) nodes.push(text.slice(last, m.index));
+      if (m[1] && m[2]) nodes.push(<a key={k++} href={m[2]} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-600 underline break-all" onClick={(e) => e.stopPropagation()}>{m[1]}</a>);
+      else if (m[3]) nodes.push(<strong key={k++} className="font-bold">{m[3]}</strong>);
+      else if (m[4]) nodes.push(<del key={k++}>{m[4]}</del>);
+      else if (m[5]) nodes.push(<em key={k++} className="italic">{m[5]}</em>);
+      else if (m[6]) nodes.push(<a key={k++} href={m[6]} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-600 underline break-all" onClick={(e) => e.stopPropagation()}>{m[6]}</a>);
+      last = regex.lastIndex;
+    }
+    if (last < text.length) nodes.push(text.slice(last));
+    return nodes;
+  };
+
+  // 동영상 URL 판별 (이미지 배열에 영상도 함께 저장됨)
+  const isVideo = (url: string) => /\.(mp4|webm|mov|m4v|ogg)(\?|$)/i.test(url || '');
 
   // 이미지 스크롤 감지
   useEffect(() => {
@@ -1747,13 +1770,18 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
           )}
         </div>
 
+        {/* 제목 (SEO 검색 노출용) */}
+        {post.title && (
+          <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-1.5 px-4 sm:px-8 break-words">{post.title}</h2>
+        )}
+
         {/* 본문 - 공지글은 5줄 접기 가능 */}
         {isPinned ? (
           <PinnedContent content={post.content} linkifyText={linkifyText}
             expanded={pinnedExpanded} onToggle={() => setPinnedExpanded(v => !v)}
             needsCollapse={pinnedNeedsCollapse} />
         ) : (
-          <p className="text-sm text-gray-800 leading-relaxed mb-3 whitespace-pre-wrap px-4 sm:px-8">{linkifyText(post.content)}</p>
+          <p className="text-sm text-gray-800 leading-relaxed mb-3 whitespace-pre-wrap px-4 sm:px-8">{(post as any).format === 'md' ? renderRich(post.content) : linkifyText(post.content)}</p>
         )}
 
         {/* 재능판매 카드 - 카드 좌측 정렬 */}
@@ -2133,9 +2161,11 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                       width: images.length === 1 ? '100%' : 'calc(100% - 48px)',
                       marginRight: images.length === 1 ? 0 : '8px',
                     }}>
-                    <img src={url} className="w-full object-contain cursor-pointer bg-gray-50"
-                      style={{ maxHeight: '480px' }}
-                      onClick={() => setLightboxIndex(i)} />
+                    {isVideo(url)
+                      ? <video src={url} controls playsInline className="w-full object-contain bg-gray-50" style={{ maxHeight: '480px' }} onClick={e => e.stopPropagation()} />
+                      : <img src={url} className="w-full object-contain cursor-pointer bg-gray-50"
+                          style={{ maxHeight: '480px' }}
+                          onClick={() => setLightboxIndex(i)} />}
                   </div>
                 ))}
                 {images.length > 1 && <div className="flex-shrink-0 w-2" />}
@@ -2150,8 +2180,10 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {images.map((url, i) => (
                     <div key={i} className="w-full flex-shrink-0 snap-center flex items-center justify-center bg-[#c9c9c9]">
-  <img src={url} className="w-full h-auto cursor-pointer"
-    onClick={() => setLightboxIndex(i)} />
+  {isVideo(url)
+    ? <video src={url} controls playsInline className="w-full h-auto" onClick={e => e.stopPropagation()} />
+    : <img src={url} className="w-full h-auto cursor-pointer"
+        onClick={() => setLightboxIndex(i)} />}
 </div>
                   ))}
                 </div>
@@ -2194,8 +2226,10 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                 )}
-                <img src={images[lightboxIndex]} className="max-w-full max-h-full object-contain"
-                  onClick={e => e.stopPropagation()} />
+                {isVideo(images[lightboxIndex])
+                  ? <video src={images[lightboxIndex]} controls autoPlay playsInline className="max-w-full max-h-full" onClick={e => e.stopPropagation()} />
+                  : <img src={images[lightboxIndex]} className="max-w-full max-h-full object-contain"
+                      onClick={e => e.stopPropagation()} />}
                 {lightboxIndex < images.length - 1 && (
                   <button className="absolute right-3 w-9 h-9 flex items-center justify-center text-white bg-white/20 rounded-full z-10"
                     onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1); }}>
@@ -4160,10 +4194,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         setPosts(incoming);
         // 폴링 중 새 첫 게시글 감지 → 이벤트 배너에 성공 확률 +3% 안내
         if (seenPostIdsRef.current !== null) {
-          const newFirst = incoming.filter(p => (p as any).isFirstPost && !seenPostIdsRef.current!.has(p.id) && p.userId !== userId);
-          if (newFirst.length > 0) {
-            toast.success('🎉 생애 첫 게시글 등장! 카드 성공 확률 +3%', { duration: 4000 });
-          }
+          // '생애 첫 게시글 등장' 알림 일단 비활성화 (카드 제도 숨김과 함께)
         }
         seenPostIdsRef.current = new Set(incoming.map(p => p.id));
       } else {
@@ -4540,7 +4571,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
       {/* 마지막글 이벤트 배너 - 2열 그리드 */}
       {/* ★ postsEverLoaded: posts 첫 fetch 완료 전엔 배너를 마운트하지 않음 */}
       {/* → 이벤트 데이터가 posts보다 먼저 도착해 lastPost=null로 잘못된 타이머를 계산하는 버그 방지 */}
-      {scheduledEvents.map(evt => (
+      {false && scheduledEvents.map(evt => (
         <ScheduledEventBanner key={evt.id} event={evt} userId={userId} accessToken={accessToken} />
       ))}
       {/* 인플루언서 신청 배너 */}
@@ -4555,33 +4586,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
           onGuestAction={onGuestAction}
         />
       )}
-      {/* 얼음깨기 이벤트 배너 — active/ended일 때 마지막글 이벤트보다 우선 표시 */}
-      {(iceEvent?.status === 'active' || iceEvent?.status === 'ended' || iceEvent?.status === 'drawn') ? (
-        <IceEventBanner
-          event={iceEvent}
-          accessToken={accessToken}
-          userId={userId}
-          bonusCards={bonusCards}
-          onCardUsed={(remaining) => {
-            setBonusCards(remaining);
-            onCardCountChange?.(remaining);
-          }}
-          onEventUpdate={(ev) => setIceEventAndCache(ev)}
-          onRefreshNeeded={() => refreshIceEventRef.current?.()}
-          onResyncCards={() => loadBonusCards()}
-          onGuestAction={onGuestAction}
-        />
-      ) : (
-        postsEverLoaded && lastPostEvents.length > 0 && (
-          <div className={lastPostEvents.filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id)).length >= 2 ? 'grid grid-cols-2 gap-2' : ''}>
-            {lastPostEvents
-              .filter((evt: any) => !eventWinners.some((w: any) => w.eventId === evt.id))
-              .map((evt: any) => (
-              <LastPostEventBanner key={evt.id || 'single'} event={evt} posts={posts} bonusCards={bonusCards} onUseCard={handleUseCard} userId={userId} accessToken={accessToken} compact={lastPostEvents.filter((e: any) => !eventWinners.some((w: any) => w.eventId === e.id)).length >= 2} onAutoClose={handleAutoClose} onLowTimer={() => setEventFastPoll(true)} isAdmin={isAdmin} />
-            ))}
-          </div>
-        )
-      )}
+      {/* 얼음깨기/마지막글 이벤트 배너 — 일단 숨김 */}
+      {/* 얼음깨기/마지막글 이벤트(카드) 배너 — 일단 전부 숨김 */}
       {/* 추천인 랭킹 이벤트 배너 */}
       {referralRankEvent && (
         <ReferralRankEventBanner event={referralRankEvent} accessToken={accessToken} />
@@ -4605,7 +4611,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               <X className="w-3.5 h-3.5" />
             </button>
           )}
-          {cardProbHot && (
+          {false && cardProbHot && (
             <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-50 text-orange-500 border border-orange-200 select-none">
               🔥 카드 확률 업!
             </span>
@@ -4809,7 +4815,7 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
               className="h-9 px-4 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition-colors">
               게시
             </button>
-            {hwCategories.length > 0 && (
+            {false && hwCategories.length > 0 && (
               <button
                 onClick={() => {
                   if (!userId) { onGuestAction?.(); return; }
@@ -4836,8 +4842,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
         </div>
       </div>
 
-      {/* 숙제 당첨 배너 */}
-      {hwWinner && (
+      {/* 숙제 당첨 배너 — 일단 숨김 */}
+      {false && hwWinner && (
         <button
           onClick={() => {
             if (!userId) { onGuestAction?.(); return; }

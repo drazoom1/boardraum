@@ -1,6 +1,8 @@
 {
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/post/:id", "destination": "/api/render?type=post&id=:id" },
+    { "source": "/game/:slug", "destination": "/api/render?type=game&slug=:slug" },
     { "source": "/((?!.*\\.pdf$).*)", "destination": "/index.html" }
   ]
 }

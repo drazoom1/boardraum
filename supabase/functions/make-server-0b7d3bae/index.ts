@@ -148,6 +148,62 @@ async function getByPrefix(prefix: string): Promise<Array<{ key: string; value: 
   }
 }
 
+// ==================== 관계형 이관 1단계: games 테이블 ====================
+// site_game_ (KV) → public.games. 이중읽기(테이블 우선, 비었으면 KV 폴백) + 이중쓰기.
+// 운영 테이블이 비어있어도 KV로 폴백되므로 코드 먼저 배포해도 안 깨진다.
+function gameRowToKv(r: any): { key: string; value: any } {
+  return {
+    key: `site_game_${r.id}`,
+    value: {
+      id: r.id,
+      bggId: r.bgg_id || undefined,
+      koreanName: r.korean_name || '',
+      englishName: r.english_name || '',
+      name: r.name || r.korean_name || '',
+      imageUrl: r.image_url || '',
+      yearPublished: r.year_published || '',
+      registeredAt: r.registered_at ?? undefined,
+    },
+  };
+}
+// 게임 전체 조회 — games 테이블 우선, 비었으면/오류면 KV(site_game_)로 폴백.
+// 반환 shape는 기존 gamesAll()와 동일: [{ key, value }]
+async function gamesAll(): Promise<Array<{ key: string; value: any }>> {
+  try {
+    const all: any[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase.from('games').select('*').range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < pageSize) break;
+    }
+    if (all.length > 0) return all.map(gameRowToKv);
+  } catch (e) {
+    console.error('gamesAll table error (KV로 폴백):', e);
+  }
+  return await getByPrefix(`site_game_`);
+}
+// 게임 1건 upsert (이중쓰기용)
+async function upsertGameRow(g: any): Promise<void> {
+  if (!g?.id) return;
+  try {
+    await supabase.from('games').upsert({
+      id: g.id,
+      bgg_id: g.bggId || null,
+      korean_name: g.koreanName || g.name || null,
+      english_name: g.englishName || null,
+      name: g.name || g.koreanName || null,
+      image_url: g.imageUrl || null,
+      year_published: g.yearPublished ? String(g.yearPublished) : null,
+      registered_at: typeof g.registeredAt === 'number' ? g.registeredAt : null,
+    }, { onConflict: 'id' });
+  } catch (e) {
+    console.error('upsertGameRow error:', e);
+  }
+}
+
 // ==================== 🆕 NEW: Individual Game Storage System ====================
 // 게임 하나당 키 하나로 저장 (데이터 유실 방지)
 // 변경 전: user_유저ID_owned = [{game1},{game2},...{game327}]
@@ -406,7 +462,7 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
     // ── 1순위: site_game_ KV (스코어 정렬) ───────────────────
     const siteEntries: Array<{ score: number; game: any }> = [];
     try {
-      const siteGameKeys = await getByPrefix('site_game_');
+      const siteGameKeys = await gamesAll();
       for (const item of siteGameKeys) {
         const g = item.value;
         if (!g?.id) continue;
@@ -774,7 +830,7 @@ app.post("/make-server-0b7d3bae/bgg-cache/migrate-all", async (c) => {
     const limit: number = body.limit ?? 10;
 
     // site_game_* 에서 bggId 목록 수집
-    const siteGames = await getByPrefix('site_game_');
+    const siteGames = await gamesAll();
     const bggIds = [...new Set(
       siteGames
         .map(({ value: g }: any) => g?.bggId || (g?.id && /^\d+$/.test(g.id) ? g.id : null))
@@ -1087,7 +1143,7 @@ app.get("/make-server-0b7d3bae/game/info", async (c) => {
     const q = norm(name);
 
     // site_game_* 에서 이름으로 검색
-    const siteGames = await getByPrefix('site_game_');
+    const siteGames = await gamesAll();
     let found: any = null;
     for (const { value: g } of siteGames) {
       if (!g?.id) continue;
@@ -1429,6 +1485,55 @@ app.post("/make-server-0b7d3bae/upload-image", async (c) => {
     return c.json({ imageUrl: publicUrl });
   } catch (error) {
     console.error('Image upload error:', error);
+    return c.json({ error: `Upload error: ${error instanceof Error ? error.message : 'Unknown error'}` }, 500);
+  }
+});
+
+// 동영상 업로드 (Supabase Storage, 같은 버킷에 저장 → 공개 URL 반환)
+app.post("/make-server-0b7d3bae/upload-video", async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File;
+    if (!file) {
+      return c.json({ error: 'No file provided' }, 400);
+    }
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-m4v'];
+    if (!file.type.startsWith('video/') && !allowedTypes.includes(file.type)) {
+      return c.json({ error: 'Invalid file type. Only video files are allowed.' }, 400);
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      return c.json({ error: 'File too large. Maximum size is 50MB.' }, 400);
+    }
+
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(7);
+    let extension = file.name.split('.').pop() || 'mp4';
+    if (extension.length > 5) extension = 'mp4';
+    const filename = `video-${timestamp}-${random}.${extension}`;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(filename, uint8Array, {
+        contentType: file.type || 'video/mp4',
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Storage video upload error:', error);
+      return c.json({ error: `Upload failed: ${error.message}` }, 500);
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(filename);
+
+    return c.json({ videoUrl: publicUrl });
+  } catch (error) {
+    console.error('Video upload error:', error);
     return c.json({ error: `Upload error: ${error instanceof Error ? error.message : 'Unknown error'}` }, 500);
   }
 });
@@ -1991,7 +2096,7 @@ app.get("/make-server-0b7d3bae/data/all-games", async (c) => {
     }
 
     // ── 1순위: site_game_* ──
-    const siteGameKeys = await getByPrefix('site_game_');
+    const siteGameKeys = await gamesAll();
     for (const item of siteGameKeys) {
       const g = item.value;
       if (!g?.id || !(g.koreanName || g.englishName || g.name)) continue;
@@ -2238,7 +2343,7 @@ app.get("/make-server-0b7d3bae/trending-games", async (c) => {
     const blacklist: string[] = (await kv.get('trending_blacklist')) || [];
 
     // site_game_ 및 game_image_ 에서 최신 이미지 보완
-    const siteGames = await getByPrefix('site_game_');
+    const siteGames = await gamesAll();
     const siteImageMap: Record<string, string> = {};
     for (const item of siteGames) {
       const g = item.value;
@@ -4066,7 +4171,7 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
     // site_game_* 데이터로 linkedGames imageUrl 보완 (직접 등록 게임 이미지 누락 방지)
     let postsEnriched = postsWithRank;
     try {
-      const siteGameItems = await getByPrefix('site_game_');
+      const siteGameItems = await gamesAll();
       const normName = (n: string) => (n || '').toLowerCase().replace(/\s+/g, ' ').trim();
       const imgById = new Map<string, string>();
       const imgByName = new Map<string, string>();
@@ -4143,7 +4248,7 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       }
     }
     
-    const { content, userName, userAvatar, category, images, linkedGame, linkedGames, isDraft, talentData, isPrivate, poll } = await c.req.json();
+    const { title, content, format, userName, userAvatar, category, images, linkedGame, linkedGames, isDraft, talentData, isPrivate, poll } = await c.req.json();
     
     if (!isDraft && (!content || content.trim().length === 0)) {
       return c.json({ error: 'Content is required' }, 400);
@@ -4186,6 +4291,8 @@ app.post("/make-server-0b7d3bae/community/posts", async (c) => {
       userId: user.id,
       userName: resolvedUserName,
       userAvatar: userAvatar || null,
+      title: (title || '').trim().slice(0, 100),
+      format: format === 'md' ? 'md' : '',
       content: (content || '').trim(),
       category: category || '자유',
       images: Array.isArray(images) ? images : [],
@@ -4645,7 +4752,7 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
       return c.json({ error: 'Forbidden: Only post author can edit' }, 403);
     }
 
-    const { content, category, images, linkedGame, linkedGames, talentData, isPrivate } = await c.req.json();
+    const { title, content, format, category, images, linkedGame, linkedGames, talentData, isPrivate } = await c.req.json();
 
     // 운영진(비관리자, 비작성자)은 linkedGames만 수정 가능
     if (isStaff && !isAdmin && post.userId !== user.id) {
@@ -4664,6 +4771,8 @@ app.patch("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
       ...post,
       updatedAt: new Date().toISOString(),
     };
+    if (title !== undefined) updatedPost.title = (title || '').trim().slice(0, 100);
+    if (format !== undefined) updatedPost.format = format === 'md' ? 'md' : '';
     if (content !== undefined) updatedPost.content = content.trim();
     if (category !== undefined) updatedPost.category = category;
     if (images !== undefined) updatedPost.images = images || [];
@@ -12255,7 +12364,7 @@ app.get("/make-server-0b7d3bae/admin/site-games", async (c) => {
     };
 
     // 1) site_game_* — 최우선
-    const siteData = await getByPrefix('site_game_');
+    const siteData = await gamesAll();
     for (const { value: g } of siteData) {
       if (!g?.id) continue;
       const _b = g.bggId != null ? String(g.bggId) : '';
@@ -12621,7 +12730,7 @@ app.get("/make-server-0b7d3bae/sitemap.xml", async (c) => {
     // 게임 URL (site_game_ + game_custom_ 양쪽 수집, 이름 중복 제거)
     const gameNames = new Set<string>();
     try {
-      const siteGames = await getByPrefix('site_game_');
+      const siteGames = await gamesAll();
       for (const { value: g } of siteGames) {
         const name = g?.koreanName || g?.englishName || g?.name;
         if (name) gameNames.add(name);
@@ -12690,8 +12799,30 @@ app.post("/make-server-0b7d3bae/site-games/register", async (c) => {
         await kv.set(siteKey, { ...existing, koreanName: game.koreanName || game.name, name: game.koreanName || game.name });
       }
     }
+    // 이중쓰기: games 테이블에도 반영 (KV 최신값 기준)
+    const finalGame = await kv.get(siteKey);
+    if (finalGame) await upsertGameRow(finalGame);
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// ── 백필: site_game_ (KV) → games 테이블 (관리자, 멱등) ──────────
+// 사용법: 브랜치/스테이징에서 먼저 POST 호출 → tableCount 확인 → 운영 적용
+app.post("/make-server-0b7d3bae/admin/migrate/games", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const items = await getByPrefix(`site_game_`);
+    let ok = 0, fail = 0;
+    for (const { value: g } of items) {
+      if (!g?.id) { fail++; continue; }
+      try { await upsertGameRow(g); ok++; } catch { fail++; }
+    }
+    const { count } = await supabase.from('games').select('*', { count: 'exact', head: true });
+    return c.json({ success: true, kvCount: items.length, upserted: ok, failed: fail, tableCount: count ?? null });
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
 });
 
 
