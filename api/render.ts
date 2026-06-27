@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+// SSR: 게임/글 URL을 봇이 읽을 수 있는 HTML로 (rebuild touch)
 
 // 게임/글 상세 URL을 봇이 읽을 수 있도록 서버에서 제목·본문·메타·JSON-LD가 채워진 HTML을 반환한다.
 // 사람은 그대로 SPA(React)가 #root를 다시 렌더하므로 동작에는 영향 없음.
