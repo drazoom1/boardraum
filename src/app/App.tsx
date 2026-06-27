@@ -1747,14 +1747,14 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
 
             {/* 카트 = 방출 마켓 */}
             <button onClick={() => setActiveTab('market')}
-              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} relative rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`} title="방출 마켓">
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} relative rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`} title="보드마켓">
               <span className="relative flex items-center justify-center flex-shrink-0">
                 <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-8 h-8 object-contain" />
                 {hasActiveAuction && activeTab !== 'market' && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
                 )}
               </span>
-              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>방출 마켓</span>}
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>보드마켓</span>}
             </button>
 
             {/* 사람 = 마이페이지 */}
@@ -1765,9 +1765,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                 setViewingUserId(null); setActiveTab('mypage');
               }
             })}
-              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`} title="마이페이지">
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`} title="마이리스트">
               <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-8 h-8 object-contain flex-shrink-0" />
-              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이페이지</span>}
+              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이리스트</span>}
             </button>
 
             {/* 하단 설정 */}
@@ -1991,12 +1991,12 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                   <button onClick={() => { setActiveTab('market'); setShowMobileNav(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`}>
                     <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-7 h-7 object-contain" />
-                    <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>방출 마켓</span>
+                    <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>보드마켓</span>
                   </button>
                   <button onClick={() => { setShowMobileNav(false); requireAuth(() => { setViewingUserId(null); setActiveTab('mypage'); }); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`}>
                     <img src={activeTab === 'mypage' && !viewingUserId ? icon_person_on : icon_person_off} className="w-7 h-7 object-contain" />
-                    <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이페이지</span>
+                    <span className={`font-semibold ${activeTab === 'mypage' && !viewingUserId ? 'text-gray-900' : 'text-gray-600'}`}>마이리스트</span>
                   </button>
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button onClick={() => { setShowMobileNav(false); window.open('https://open.kakao.com/o/gPD26Qmi', '_blank', 'noopener'); }}

@@ -1886,7 +1886,7 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                 <div className="flex border-b border-gray-100">
                   <button onClick={() => setActiveRankTab('bgg')}
                     className={`flex-1 py-3 text-sm font-bold transition-colors ${activeRankTab === 'bgg' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-                    🌐 BGG 추천 작품
+                    🌐 BGG 랭킹
                   </button>
                   <button onClick={() => setActiveRankTab('trending')}
                     className={`flex-1 py-3 text-sm font-bold transition-colors ${activeRankTab === 'trending' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
@@ -1907,6 +1907,28 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
                       setTrendingShowAll(false);
                       toast.success('순위를 새로 불러왔어요');
                     }}
+                    className="px-3 py-3 text-gray-400 hover:text-gray-600 transition-colors text-sm">
+                      🔄
+                    </button>
+                  )}
+                  {activeRankTab === 'bgg' && (
+                    <button onClick={async () => {
+                      setHotLoading(true);
+                      try { sessionStorage.removeItem('cache_bgg_hot'); } catch {}
+                      try {
+                        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-hot?force=true`, {
+                          headers: { Authorization: `Bearer ${publicAnonKey}` },
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setHotGames(data || []);
+                          try { sessionStorage.setItem('cache_bgg_hot', JSON.stringify({ ts: Date.now(), data: data || [] })); } catch {}
+                        }
+                      } catch {}
+                      setHotLoading(false);
+                      toast.success('BGG 랭킹을 새로 불러왔어요 (모든 회원 공유)');
+                    }}
+                    title="BGG 랭킹 새로고침 (모든 회원에게 반영)"
                     className="px-3 py-3 text-gray-400 hover:text-gray-600 transition-colors text-sm">
                       🔄
                     </button>
