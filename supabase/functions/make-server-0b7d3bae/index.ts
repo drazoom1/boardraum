@@ -148,6 +148,10 @@ async function getByPrefix(prefix: string): Promise<Array<{ key: string; value: 
   }
 }
 
+// 관계형 테이블 사용 스위치. false면 모든 헬퍼가 KV로 동작(마이그 전과 동일, 오버헤드 0).
+// 운영에서 games/posts/game_wiki SQL을 모두 Run + 검증한 뒤에만 true로 바꿔 재배포한다.
+const USE_TABLES = false;
+
 // ==================== 관계형 이관 1단계: games 테이블 ====================
 // site_game_ (KV) → public.games. 이중읽기(테이블 우선, 비었으면 KV 폴백) + 이중쓰기.
 // 운영 테이블이 비어있어도 KV로 폴백되므로 코드 먼저 배포해도 안 깨진다.
@@ -169,6 +173,7 @@ function gameRowToKv(r: any): { key: string; value: any } {
 // 게임 전체 조회 — games 테이블 우선, 비었으면/오류면 KV(site_game_)로 폴백.
 // 반환 shape는 기존 gamesAll()와 동일: [{ key, value }]
 async function gamesAll(): Promise<Array<{ key: string; value: any }>> {
+  if (!USE_TABLES) return await getByPrefix(`site_game_`);
   try {
     const all: any[] = [];
     const pageSize = 1000;
@@ -187,6 +192,7 @@ async function gamesAll(): Promise<Array<{ key: string; value: any }>> {
 }
 // 게임 이름 검색 — games 테이블 ILIKE 타겟 쿼리(빠름). 매칭 0/오류면 null(호출측 gamesAll 폴백).
 async function gamesSearch(query: string): Promise<Array<{ key: string; value: any }> | null> {
+  if (!USE_TABLES) return null;
   const q = (query || '').trim();
   if (!q) return null;
   try {
@@ -202,6 +208,7 @@ async function gamesSearch(query: string): Promise<Array<{ key: string; value: a
 }
 // 게임 1건 upsert (이중쓰기용)
 async function upsertGameRow(g: any): Promise<void> {
+  if (!USE_TABLES) return;
   if (!g?.id) return;
   try {
     await supabase.from('games').upsert({
@@ -222,6 +229,7 @@ async function upsertGameRow(g: any): Promise<void> {
 // ==================== 관계형 이관 2단계: posts / game_wiki ====================
 // posts: beta_post_(KV) → public.posts. 이중읽기(테이블 우선,KV폴백)+이중쓰기(모든 변경 동기화).
 async function postsAll(): Promise<Array<{ key: string; value: any }>> {
+  if (!USE_TABLES) return await getByPrefix(`beta_post_`);
   try {
     const all: any[] = [];
     const ps = 1000;
@@ -251,6 +259,7 @@ function postToRow(p: any) {
   };
 }
 async function upsertPostRow(p: any) {
+  if (!USE_TABLES) return;
   if (!p?.id) return;
   try { await supabase.from('posts').upsert(postToRow(p), { onConflict: 'id' }); }
   catch (e) { console.error('upsertPostRow', e); }
@@ -261,11 +270,13 @@ async function savePost(id: string, obj: any) {
   await upsertPostRow(obj);
 }
 async function deletePostRow(id: string) {
+  if (!USE_TABLES) return;
   try { await supabase.from('posts').delete().eq('id', id); }
   catch (e) { console.error('deletePostRow', e); }
 }
 // game_wiki: game_custom_(KV) → public.game_wiki. 보드위키 모달 게임설명 조회 가속.
 async function wikiByGame(gameId: string, category?: string | null): Promise<any[] | null> {
+  if (!USE_TABLES) return null;
   try {
     let q = supabase.from('game_wiki').select('data').eq('game_id', gameId).eq('status', 'approved');
     if (category) q = q.eq('category', category);
@@ -287,11 +298,13 @@ function wikiToRow(w: any) {
   };
 }
 async function upsertWikiRow(w: any) {
+  if (!USE_TABLES) return;
   if (!w?.id) return;
   try { await supabase.from('game_wiki').upsert(wikiToRow(w), { onConflict: 'id' }); }
   catch (e) { console.error('upsertWikiRow', e); }
 }
 async function deleteWikiRow(id: string) {
+  if (!USE_TABLES) return;
   try { await supabase.from('game_wiki').delete().eq('id', id); }
   catch (e) { console.error('deleteWikiRow', e); }
 }

@@ -1376,14 +1376,12 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
           </div>
         )}
 
-      {/* ─── BGG 컬렉션 불러오기 모달 (포털로 body에 렌더 → DialogContent transform에 의한 잘림 방지) ─── */}
-      {showBggImport && createPortal((
-        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-              <h3 className="font-bold text-gray-900 flex items-center gap-2"><Library className="w-4 h-4" /> BGG 컬렉션 불러오기</h3>
-              <button onClick={() => { setShowBggImport(false); setBggCollection([]); }} className="text-gray-400 hover:text-gray-700"><X className="w-5 h-5" /></button>
-            </div>
+      {/* ─── BGG 컬렉션 불러오기 (중첩 Dialog → 잘림/포커스 문제 없음) ─── */}
+      <Dialog open={showBggImport} onOpenChange={(v) => { if (!v) { setShowBggImport(false); setBggCollection([]); } }}>
+        <DialogContent className="max-w-lg flex flex-col p-0 gap-0 overflow-hidden" style={{ maxHeight: '85vh' }}>
+            <DialogHeader className="px-5 py-4 border-b border-gray-100 flex-shrink-0 space-y-0 text-left">
+              <DialogTitle className="font-bold text-gray-900 flex items-center gap-2 text-base"><Library className="w-4 h-4" /> BGG 컬렉션 불러오기</DialogTitle>
+            </DialogHeader>
             <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
               <p className="text-xs text-gray-500 mb-2">BGG 사용자명을 입력하면 보유 컬렉션을 가져와요</p>
               <div className="flex gap-2">
@@ -1450,9 +1448,8 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
                 </button>
               )}
             </div>
-          </div>
-        </div>
-      ), document.body)}
+        </DialogContent>
+      </Dialog>
 
       {/* ─── 엑셀 일괄등록 모달 ─── */}
       {showExcelImport && (
