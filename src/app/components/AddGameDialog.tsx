@@ -29,6 +29,29 @@ const decodeHtml = (s: string) => (s || '')
   .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
   .replace(/&amp;/g, '&');
 
+// BGG 상세 → 표시용 포맷 헬퍼
+const formatPlayers = (min?: number, max?: number, best?: string) => {
+  let base = '';
+  if (min && max) base = min === max ? `${min}명` : `${min}-${max}명`;
+  else if (min) base = `${min}명`;
+  else if (max) base = `${max}명`;
+  const b = (best || '').toString().trim().replace(/명$/, '');
+  if (b && base) return `${base} (추천 ${b}명)`;
+  if (b) return `${b}명`;
+  return base;
+};
+const formatPlayTime = (minPT?: number, maxPT?: number) => {
+  if (minPT && maxPT) return minPT === maxPT ? `${minPT}분` : `${minPT}-${maxPT}분`;
+  if (maxPT) return `${maxPT}분`;
+  if (minPT) return `${minPT}분`;
+  return '';
+};
+const formatDifficulty = (complexity?: number) => {
+  if (!complexity || complexity <= 0) return '';
+  const d = complexity < 2 ? '초급' : complexity < 3 ? '중급' : complexity < 4 ? '중상급' : '고급';
+  return `${d} (${complexity.toFixed(1)}/5)`;
+};
+
 // 본판 게임 검색 컴포넌트
 function ParentGameSearch({ games, selectedId, onSelect, initialQuery }: {
   games: import('../App').BoardGame[];
@@ -331,9 +354,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
             englishName: d.name || g.name,
             imageUrl: d.imageUrl || g.thumbnail || '',
             bggId: g.bggId,
-            recommendedPlayers: d.minPlayers && d.maxPlayers ? `${d.minPlayers}-${d.maxPlayers}명` : '',
-            playTime: d.maxPlayTime ? `${d.maxPlayTime}분` : '',
-            difficulty: d.complexity > 0 ? `${d.complexity.toFixed(1)}` : '',
+            recommendedPlayers: formatPlayers(d.minPlayers, d.maxPlayers, d.bestPlayerCount),
+            playTime: formatPlayTime(d.minPlayTime, d.maxPlayTime),
+            difficulty: formatDifficulty(d.complexity),
             rating: d.rating || undefined,
             videoUrl: '',
             isExpansion: false,
@@ -472,9 +495,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
             englishName: d.name || g.name,
             imageUrl: d.imageUrl || '',
             bggId: g.matched!.id,
-            recommendedPlayers: d.minPlayers && d.maxPlayers ? `${d.minPlayers}-${d.maxPlayers}명` : '',
-            playTime: d.maxPlayTime ? `${d.maxPlayTime}분` : '',
-            difficulty: d.complexity > 0 ? `${d.complexity.toFixed(1)}` : '',
+            recommendedPlayers: formatPlayers(d.minPlayers, d.maxPlayers, d.bestPlayerCount),
+            playTime: formatPlayTime(d.minPlayTime, d.maxPlayTime),
+            difficulty: formatDifficulty(d.complexity),
             rating: d.rating || undefined,
             videoUrl: '',
             isExpansion: false,
@@ -546,8 +569,25 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
         return true;
       });
 
-      setSearchResults(dedupedResults.slice(0, 20));
-      setShowResults(dedupedResults.length > 0);
+      const finalList = dedupedResults.slice(0, 20);
+      setSearchResults(finalList);
+      setShowResults(finalList.length > 0);
+
+      // 썸네일 없는 BGG 결과는 배치로 이미지 비동기 로드 (검색 속도는 유지)
+      const needThumbs = finalList.filter(g => g.source === 'bgg' && !g.thumbnail).map(g => g.id);
+      if (needThumbs.length > 0) {
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-thumbnails`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+          body: JSON.stringify({ ids: needThumbs }),
+        })
+          .then(r => r.ok ? r.json() : {})
+          .then((map: Record<string, string>) => {
+            if (!map || typeof map !== 'object') return;
+            setSearchResults(prev => prev.map(g => (g.source === 'bgg' && !g.thumbnail && map[g.id]) ? { ...g, thumbnail: map[g.id] } : g));
+          })
+          .catch(() => {});
+      }
     } catch (error) {
       console.error('BGG search error:', error);
       toast.error(`BGG 검색 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
@@ -596,7 +636,8 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
   const filteredRegisteredGames = getFilteredRegisteredGames();
 
   // 등록된 게임 선택 시 정보 복사
-  const handleSelectRegisteredGame = (game: BoardGame) => {
+  const handleSelectRegisteredGame = async (game: BoardGame) => {
+    // 저장된 값으로 즉시 표시
     setFormData({
       imageUrl: game.imageUrl || '',
       koreanName: game.koreanName || '',
@@ -612,10 +653,32 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       quantity: 1,
       bggId: game.bggId || '',
     });
-    
     setShowResults(false);
-    toast.success('등록된 게임 정보를 가져왔습니다! 📋');
     setStep(2);
+
+    // 인원/시간/난이도 중 비어있는 항목이 있고 BGG ID가 있으면 BGG에서 보강
+    const needsEnrich = game.bggId && /^\d+$/.test(String(game.bggId)) &&
+      (!game.recommendedPlayers || !game.playTime || !game.difficulty || !game.imageUrl);
+    if (needsEnrich) {
+      try {
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-details`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+          body: JSON.stringify({ id: game.bggId }),
+        });
+        if (response.ok) {
+          const details: BGGGameDetails = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            recommendedPlayers: prev.recommendedPlayers || formatPlayers(details.minPlayers, details.maxPlayers, details.bestPlayerCount),
+            playTime: prev.playTime || formatPlayTime(details.minPlayTime, details.maxPlayTime),
+            difficulty: prev.difficulty || formatDifficulty(details.complexity),
+            imageUrl: prev.imageUrl || details.imageUrl || '',
+          }));
+        }
+      } catch { /* 보강 실패해도 저장값으로 진행 */ }
+    }
+    toast.success('게임 정보를 가져왔습니다! 📋');
   };
 
   const handleSelectGame = async (result: BGGSearchResult) => {
@@ -641,45 +704,12 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       const details: BGGGameDetails = await response.json();
       console.log('Game details:', details);
 
-      // 인원수 포맷팅 — 가능 인원(min-max) 기준
-      let recommendedPlayers = '';
-      if (details.minPlayers && details.maxPlayers) {
-        if (details.minPlayers === details.maxPlayers) {
-          recommendedPlayers = `${details.minPlayers}명`;
-        } else {
-          recommendedPlayers = `${details.minPlayers}-${details.maxPlayers}명`;
-        }
-      } else if (details.bestPlayerCount) {
-        // min/max 없을 때만 fallback으로 best 사용
-        recommendedPlayers = details.bestPlayerCount + '명';
-      }
+      // 인원수 포맷팅 — 가능 인원(min-max) + 추천(best) 인원 괄호 표기
+      const recommendedPlayers = formatPlayers(details.minPlayers, details.maxPlayers, details.bestPlayerCount);
 
-      // 플레이 시간 포맷팅
-      let playTime = '';
-      if (details.minPlayTime && details.maxPlayTime) {
-        if (details.minPlayTime === details.maxPlayTime) {
-          playTime = `${details.minPlayTime}분`;
-        } else {
-          playTime = `${details.minPlayTime}-${details.maxPlayTime}분`;
-        }
-      } else if (details.maxPlayTime) {
-        playTime = `${details.maxPlayTime}분`;
-      }
-
-      // 난이도 포맷팅 (1-5 스케일)
-      let difficulty = '';
-      if (details.complexity > 0) {
-        if (details.complexity < 2) {
-          difficulty = '초급';
-        } else if (details.complexity < 3) {
-          difficulty = '중급';
-        } else if (details.complexity < 4) {
-          difficulty = '중상급';
-        } else {
-          difficulty = '고급';
-        }
-        difficulty += ` (${details.complexity.toFixed(1)}/5)`;
-      }
+      // 플레이 시간 / 난이도 포맷팅
+      const playTime = formatPlayTime(details.minPlayTime, details.maxPlayTime);
+      const difficulty = formatDifficulty(details.complexity);
 
       // 검색한 이름을 한국어명에 넣고, 나머지 정보는 BGG에서 가져온 값으로 자동 채우기
       setFormData({
@@ -800,8 +830,8 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
         } else {
           const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/bgg-details`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ id: item.id }) });
           const d = res.ok ? await res.json() : {};
-          const rp = d.minPlayers && d.maxPlayers ? (d.minPlayers === d.maxPlayers ? d.minPlayers + '명' : d.minPlayers + '-' + d.maxPlayers + '명') : (d.bestPlayerCount ? d.bestPlayerCount + '명' : '');
-          newGame = { id: Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + item.id, koreanName: item.name, englishName: item.name, recommendedPlayers: rp, playTime: d.playTime ? d.playTime + '분' : '', difficulty: d.complexity ? String(Math.round(d.complexity * 10) / 10) : '', imageUrl: d.imageUrl || '', videoUrl: '', bggId: item.id, isExpansion: !!item.expansionType, expansionType: item.expansionType || undefined, parentGameId: item.expansionType ? item.parentGameId : undefined, createdAt: new Date().toISOString(), quantity: 1 };
+          const rp = formatPlayers(d.minPlayers, d.maxPlayers, d.bestPlayerCount);
+          newGame = { id: Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + item.id, koreanName: item.name, englishName: item.name, recommendedPlayers: rp, playTime: formatPlayTime(d.minPlayTime, d.maxPlayTime), difficulty: formatDifficulty(d.complexity), imageUrl: d.imageUrl || '', videoUrl: '', bggId: item.id, isExpansion: !!item.expansionType, expansionType: item.expansionType || undefined, parentGameId: item.expansionType ? item.parentGameId : undefined, createdAt: new Date().toISOString(), quantity: 1 };
           await new Promise(r => setTimeout(r, 150));
         }
         newGames.push(newGame);

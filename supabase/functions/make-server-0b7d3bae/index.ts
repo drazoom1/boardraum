@@ -685,6 +685,50 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
   }
 });
 
+// BGG 썸네일 배치 조회 (검색 결과 이미지 로드용) — thing?id=1,2,3 한 번에
+app.post("/make-server-0b7d3bae/bgg-thumbnails", async (c) => {
+  try {
+    const { ids } = await c.req.json();
+    if (!Array.isArray(ids) || ids.length === 0) return c.json({});
+    const wanted = ids.map(String).slice(0, 30);
+
+    // 캐시 우선
+    const result: Record<string, string> = {};
+    const missing: string[] = [];
+    for (const id of wanted) {
+      const cached = await kv.get(`bgg_thumb_${id}`);
+      if (typeof cached === 'string') result[id] = cached;
+      else missing.push(id);
+    }
+
+    if (missing.length > 0) {
+      const bggToken = Deno.env.get('BGG_API_TOKEN');
+      const headers: Record<string, string> = {};
+      if (bggToken) headers['Authorization'] = `Bearer ${bggToken}`;
+      try {
+        const url = `https://boardgamegeek.com/xmlapi2/thing?id=${missing.join(',')}`;
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const xml = await res.text();
+          const items = xml.matchAll(/<item[^>]*id="(\d+)"[^>]*>([\s\S]*?)<\/item>/g);
+          for (const m of items) {
+            const id = m[1];
+            const content = m[2];
+            const tm = content.match(/<thumbnail>([^<]*)<\/thumbnail>/);
+            let thumb = tm ? tm[1].trim() : '';
+            if (thumb.startsWith('//')) thumb = 'https:' + thumb;
+            result[id] = thumb;
+            await kv.set(`bgg_thumb_${id}`, thumb, { expiresIn: 604800 }); // 7일 캐시
+          }
+        }
+      } catch (e) { console.error('bgg-thumbnails fetch error:', e); }
+    }
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
 // BGG 사용자 컬렉션 불러오기
 app.get("/make-server-0b7d3bae/bgg/collection/:username", async (c) => {
   const username = c.req.param('username');
