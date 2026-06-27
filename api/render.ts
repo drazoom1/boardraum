@@ -33,6 +33,7 @@ async function fetchShell(host: string): Promise<string> {
 
 function buildHead(title: string, description: string, image: string, url: string, ldJson: string): string {
   const tags = [
+    '<meta property="og:site_name" content="보드라움" />',
     '<meta property="og:title" content="' + esc(title) + '" />',
     '<meta property="og:description" content="' + esc(description) + '" />',
     image ? '<meta property="og:image" content="' + esc(image) + '" />' : '',
@@ -101,22 +102,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const g = await fetchJson(SUPA + '/game/info?name=' + encodeURIComponent(name));
       if (g && (g.koreanName || g.id)) {
         const gameName = g.koreanName || g.englishName || name;
-        const title = gameName + ' — 보드라움';
-        const en = g.englishName && g.englishName !== gameName ? ' (' + g.englishName + ')' : '';
-        const yr = g.yearPublished ? ' ' + g.yearPublished + '년' : '';
-        const description = (gameName + en + yr + ' 보드게임 정보·플레이 인원·후기를 보드라움에서 확인하세요.').slice(0, 160);
-        const image = g.imageUrl || '';
+        const en = g.englishName && g.englishName !== gameName ? g.englishName : '';
+        const title = gameName + ' 보드게임 정보';
         const url = SITE + '/game/' + encodeURIComponent(slug);
+        const image = g.imageUrl || '';
+
+        // 별점/평가수 (BGG)
+        const rating = g.averageRating > 0 ? Math.round(g.averageRating * 10) / 10 : 0;
+        const ratingCount = g.usersRated > 0 ? g.usersRated : 0;
+
+        // 사실 기반 설명문 구성 (보드라이프식)
+        const players = (g.minPlayers && g.maxPlayers)
+          ? (g.minPlayers === g.maxPlayers ? g.minPlayers + '명' : g.minPlayers + '-' + g.maxPlayers + '명') : '';
+        const ptime = (g.minPlayTime && g.maxPlayTime)
+          ? (g.minPlayTime === g.maxPlayTime ? g.maxPlayTime + '분' : g.minPlayTime + '-' + g.maxPlayTime + '분')
+          : (g.maxPlayTime ? g.maxPlayTime + '분' : '');
+        const descParts: string[] = [];
+        descParts.push(gameName + (en ? '(' + en + ')' : '') + '의 보드게임 정보입니다.');
+        const facts: string[] = [];
+        if (players) facts.push('인원 ' + players);
+        if (ptime) facts.push('플레이타임 ' + ptime);
+        if (g.complexity > 0) facts.push('난이도 ' + (Math.round(g.complexity * 100) / 100) + '/5');
+        if (rating > 0) facts.push('BGG 평점 ' + rating.toFixed(1) + '/10' + (ratingCount ? ' (' + ratingCount + '명 평가)' : ''));
+        if (facts.length) descParts.push(facts.join(', ') + '.');
+        if (Array.isArray(g.designers) && g.designers.length) descParts.push('디자이너: ' + g.designers.slice(0, 3).join(', ') + '.');
+        const description = descParts.join(' ').slice(0, 200);
+
+        // 화면에 보이는 본문 (구조화 데이터와 일치하도록 평점도 노출)
         const contentHtml =
-          '<article><h1>' + esc(gameName) + '</h1>' +
-          (g.englishName ? '<p>' + esc(g.englishName) + '</p>' : '') +
-          '<p>' + esc(description) + '</p>' +
+          '<article><h1>' + esc(title) + '</h1>' +
+          (en ? '<p>' + esc(en) + '</p>' : '') +
           (image ? '<img src="' + esc(image) + '" alt="' + esc(gameName) + '" />' : '') +
+          '<p>' + esc(description) + '</p>' +
+          (rating > 0 ? '<p>BGG 평점 <strong>' + rating.toFixed(1) + '</strong>/10' + (ratingCount ? ' (' + ratingCount + '명 평가)' : '') + '</p>' : '') +
           '</article>';
-        const ld: any = { '@context': 'https://schema.org', '@type': 'Game', name: gameName, url: url };
-        if (g.englishName) ld.alternateName = g.englishName;
-        if (image) ld.image = image;
-        if (g.yearPublished) ld.datePublished = String(g.yearPublished);
+
+        // 구조화 데이터: Product(별점) + BreadcrumbList(경로)
+        const product: any = {
+          '@type': 'Product',
+          name: title,
+          category: '보드게임',
+          url: url,
+        };
+        if (image) product.image = image;
+        if (en) product.alternateName = en;
+        if (description) product.description = description;
+        if (Array.isArray(g.publishers) && g.publishers.length) product.brand = { '@type': 'Brand', name: g.publishers[0] };
+        if (rating > 0 && ratingCount > 0) {
+          product.aggregateRating = {
+            '@type': 'AggregateRating',
+            ratingValue: rating.toFixed(1),
+            bestRating: '10',
+            worstRating: '1',
+            ratingCount: String(ratingCount),
+          };
+        }
+        const breadcrumb = {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: '보드라움', item: SITE },
+            { '@type': 'ListItem', position: 2, name: '보드위키', item: SITE + '/wiki' },
+            { '@type': 'ListItem', position: 3, name: gameName, item: url },
+          ],
+        };
+        const ld = { '@context': 'https://schema.org', '@graph': [product, breadcrumb] };
         html = inject(html, title, description, image, url, JSON.stringify(ld).split('<').join('\\u003c'), contentHtml);
       }
     }

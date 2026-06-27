@@ -874,6 +874,7 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
     const maxPlayTimeMatch = xmlText.match(/<maxplaytime[^>]*value="(\d+)"/);
     const averageWeightMatch = xmlText.match(/<averageweight[^>]*value="([\d.]+)"/);
     const averageRatingMatch = xmlText.match(/<average[^>]*value="([\d.]+)"/);
+    const usersRatedMatch = xmlText.match(/<usersrated[^>]*value="(\d+)"/);
     const minAgeMatch = xmlText.match(/<minage[^>]*value="(\d+)"/);
     const rankMatch = xmlText.match(/<rank[^>]*type="subtype"[^>]*value="(\d+)"/);
 
@@ -908,6 +909,7 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
       maxPlayTime: maxPlayTimeMatch ? parseInt(maxPlayTimeMatch[1]) : 0,
       complexity: averageWeightMatch ? parseFloat(averageWeightMatch[1]) : 0,
       averageRating: averageRatingMatch ? parseFloat(averageRatingMatch[1]) : 0,
+      usersRated: usersRatedMatch ? parseInt(usersRatedMatch[1]) : 0,
       minAge: minAgeMatch ? parseInt(minAgeMatch[1]) : 0,
       rank: rankMatch ? parseInt(rankMatch[1]) : 0,
       bestPlayerCount,
@@ -940,6 +942,7 @@ async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<an
     const maxPlayTimeMatch = xmlText.match(/<maxplaytime[^>]*value="(\d+)"/);
     const averageWeightMatch = xmlText.match(/<averageweight[^>]*value="([\d.]+)"/);
     const averageRatingMatch = xmlText.match(/<average[^>]*value="([\d.]+)"/);
+    const usersRatedMatch = xmlText.match(/<usersrated[^>]*value="(\d+)"/);
     const minAgeMatch = xmlText.match(/<minage[^>]*value="(\d+)"/);
     const rankMatch = xmlText.match(/<rank[^>]*type="subtype"[^>]*value="(\d+)"/);
 
@@ -973,6 +976,7 @@ async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<an
       maxPlayTime: maxPlayTimeMatch ? parseInt(maxPlayTimeMatch[1]) : 0,
       complexity: averageWeightMatch ? parseFloat(averageWeightMatch[1]) : 0,
       averageRating: averageRatingMatch ? parseFloat(averageRatingMatch[1]) : 0,
+      usersRated: usersRatedMatch ? parseInt(usersRatedMatch[1]) : 0,
       minAge: minAgeMatch ? parseInt(minAgeMatch[1]) : 0,
       rank: rankMatch ? parseInt(rankMatch[1]) : 0,
       bestPlayerCount,
@@ -1333,6 +1337,17 @@ app.get("/make-server-0b7d3bae/game/info", async (c) => {
     let details: any = null;
     if (bggId) {
       details = await kv.get(`bgg_details_${bggId}`);
+      // 캐시에 평가수(usersRated)가 없으면 BGG에서 재조회 후 갱신 (SEO 별점용)
+      if (bggId && (!details || details.usersRated === undefined)) {
+        const bggToken = Deno.env.get('BGG_API_TOKEN');
+        if (bggToken) {
+          const fresh = await fetchAndParseBggDetails(bggId, bggToken);
+          if (fresh) {
+            details = { ...(details || {}), ...fresh };
+            await kv.set(`bgg_details_${bggId}`, details);
+          }
+        }
+      }
     }
 
     const imageUrl = found.imageUrl || details?.imageUrl || '';
@@ -1349,6 +1364,8 @@ app.get("/make-server-0b7d3bae/game/info", async (c) => {
       maxPlayTime: details?.maxPlayTime || 0,
       complexity: details?.complexity || 0,
       averageRating: details?.averageRating || 0,
+      usersRated: details?.usersRated || 0,
+      minAge: details?.minAge || 0,
       rank: details?.rank || 0,
       designers: details?.designers || [],
       publishers: details?.publishers || [],
