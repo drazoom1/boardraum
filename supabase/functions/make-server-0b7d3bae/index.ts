@@ -508,12 +508,21 @@ app.get("/make-server-0b7d3bae/health", (c) => {
 // BGG API proxy endpoint with caching
 app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
   try {
-    const { query } = await c.req.json();
+    const body = await c.req.json();
+    const query = body?.query;
+    const bggOnly = body?.bggOnly === true; // 프론트가 site 결과를 자체 보유 목록으로 처리하므로 서버 풀스캔 생략 가능
     if (!query) return c.json({ error: 'Query is required' }, 400);
 
     // ── 유틸 ──────────────────────────────────────────────────
     const normalizeName = (n: string) => (n || '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
     const noSpace = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '');
+    // BGG XML의 HTML 엔티티 디코딩 (&quot; &amp; &#039; &ouml; 등)
+    const decodeEntities = (s: string) => (s || '')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#0?39;/g, "'")
+      .replace(/&#0?34;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
+      .replace(/&amp;/g, '&').trim();
 
     // 초성 추출
     const CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
@@ -566,7 +575,7 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
 
     // ── 1순위: site_game_ KV (스코어 정렬) ───────────────────
     const siteEntries: Array<{ score: number; game: any }> = [];
-    try {
+    if (!bggOnly) try {
       const siteGameKeys = (await gamesSearch(query)) ?? (await gamesAll());
       for (const item of siteGameKeys) {
         const g = item.value;
@@ -614,7 +623,7 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
             const xml = await res.text();
             const matches = xml.matchAll(/<item[^>]*id="(\d+)"[^>]*>[\s\S]*?<name[^>]*value="([^"]*)"[^>]*\/>[\s\S]*?(?:<yearpublished[^>]*value="(\d+)"[^>]*\/>)?[\s\S]*?<\/item>/g);
             for (const m of matches) {
-              bggItems.push({ id: m[1], name: m[2], yearPublished: m[3] || '', source: 'bgg' });
+              bggItems.push({ id: m[1], name: decodeEntities(m[2]), yearPublished: m[3] || '', source: 'bgg' });
             }
             await kv.set(cacheKey, bggItems);
           }
@@ -628,11 +637,27 @@ app.post("/make-server-0b7d3bae/bgg-search", async (c) => {
       siteIds.add(String(g.id));
       if (g.bggId) siteIds.add(String(g.bggId));
     }
-    const bggFiltered = bggItems.filter((g: any) => {
-      if (siteIds.has(String(g.id))) return false;
-      if (alreadySeen(`bgg_${g.id}`, '', g.name || '')) return false;
-      return true;
-    });
+    const bggFiltered = bggItems
+      .map((g: any) => ({ ...g, name: decodeEntities(g.name) })) // 캐시에 남은 옛 미디코딩 이름도 정리
+      .filter((g: any) => {
+        if (siteIds.has(String(g.id))) return false;
+        if (alreadySeen(`bgg_${g.id}`, '', g.name || '')) return false;
+        return true;
+      })
+      // 관련도 순 정렬: 완전일치 > 앞부분 일치 > 단어 앞부분 일치 > 부분포함
+      .map((g: any) => {
+        const n = noSpace(g.name);
+        const words = (g.name || '').toLowerCase().split(/[\s:!?,.\-]+/).filter(Boolean);
+        let score = 0;
+        if (n === qNorm) score = 5;
+        else if (n.startsWith(qNorm)) score = 4;
+        else if (words.some((w: string) => w.startsWith(qRaw))) score = 3.5;
+        else if (n.includes(qNorm)) score = 3;
+        else if ((g.name || '').toLowerCase().includes(qRaw)) score = 2;
+        return { g, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .map(x => x.g);
 
     // 최종 안전망 dedup (bggId + 한글명 + 영문명)
     const finalSeenBggIds = new Set<string>();

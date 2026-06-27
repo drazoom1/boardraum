@@ -20,6 +20,15 @@ import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 // Get singleton Supabase client
 const supabase = getSupabaseClient();
+
+// HTML 엔티티 디코딩 (BGG 이름의 &quot; &amp; 등 — 옛 캐시 방어용)
+const decodeHtml = (s: string) => (s || '')
+  .replace(/&quot;|&#0?34;/g, '"').replace(/&apos;|&#0?39;/g, "'")
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
+  .replace(/&amp;/g, '&');
+
 // 본판 게임 검색 컴포넌트
 function ParentGameSearch({ games, selectedId, onSelect, initialQuery }: {
   games: import('../App').BoardGame[];
@@ -245,7 +254,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
     if (searchQuery.length >= 1) {
       const timeout = setTimeout(() => {
         searchBGG(searchQuery);
-      }, 500);
+      }, 250);
       setSearchTimeout(timeout);
     } else {
       setSearchResults([]);
@@ -482,7 +491,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`,
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query, bggOnly: true })
       });
 
       if (!response.ok) {
@@ -985,7 +994,7 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
                           ? <img src={thumb} className="w-10 h-10 object-cover rounded-xl flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
                           : <div className="w-10 h-10 rounded-xl bg-gray-100 flex-shrink-0 flex items-center justify-center text-lg">🎲</div>}
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleSelectGame(result)}>
-                          <div className="font-medium text-gray-900">{result.name}</div>
+                          <div className="font-medium text-gray-900">{decodeHtml(result.name)}</div>
                           {result.yearPublished && <div className="text-sm text-gray-500">({result.yearPublished})</div>}
                         </div>
                         <button type="button"
