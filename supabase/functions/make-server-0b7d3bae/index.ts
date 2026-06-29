@@ -2848,8 +2848,10 @@ async function getUserName(userId: string): Promise<string> {
 // 역할 인메모리 캐시 (isolate 재사용 시 유효, 30초)
 const _roleCache = new Map<string, { role: string; at: number }>();
 
+const ADMIN_EMAILS = ['sityplanner2@naver.com', 'honjobso@gmail.com'];
+
 async function getUserRole(userId: string, email?: string): Promise<string> {
-  if (email === 'sityplanner2@naver.com') return 'admin';
+  if (email && ADMIN_EMAILS.includes(email)) return 'admin';
 
   // 인메모리 캐시 확인 (30초)
   const cached = _roleCache.get(userId);
@@ -2872,7 +2874,7 @@ async function getUserRole(userId: string, email?: string): Promise<string> {
   }
 
   let role = profile.role || 'user';
-  if (profile.email === 'sityplanner2@naver.com') {
+  if (profile.email && ADMIN_EMAILS.includes(profile.email)) {
     role = 'admin';
     if (profile.role !== 'admin') {
       profile.role = 'admin';
@@ -4930,6 +4932,75 @@ app.get("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     const pts = await getUserPoints(post.userId).catch(() => null);
     return c.json({ post: { ...post, userRankPoints: pts } });
   } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// 전체 회원에게 게시물(소식)을 이메일로 발송 — 관리자 전용
+app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
+  try {
+    const accessToken = c.req.header('Authorization')?.split(' ')[1];
+    if (!accessToken) return c.json({ error: 'Unauthorized' }, 401);
+    const { data: { user } } = await supabase.auth.getUser(accessToken);
+    if (!user?.id) return c.json({ error: 'Unauthorized' }, 401);
+    const role = await getUserRole(user.id, user.email ?? undefined);
+    if (role !== 'admin') return c.json({ error: '관리자만 발송할 수 있어요' }, 403);
+
+    const { postId } = await c.req.json();
+    if (!postId) return c.json({ error: 'postId 필요' }, 400);
+    const post = await kv.get(`beta_post_${postId}`);
+    if (!post || post.isDraft) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
+
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    if (!resendKey) return c.json({ error: '이메일 발송 설정(RESEND_API_KEY)이 없어요' }, 500);
+
+    const SITE = 'https://www.boardraum.site';
+    const postUrl = `${SITE}/post/${postId}`;
+    const title = String(post.title || '보드라움 소식').slice(0, 120);
+    // 요약: 본문에서 URL·🔗줄 정리 후 앞부분
+    const summary = String(post.content || '')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/🔗[^\n]*/g, '')
+      .replace(/\n{2,}/g, '\n').trim().slice(0, 400);
+    const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
+      <p style="font-size:13px;color:#06b6d4;font-weight:700;margin:0 0 8px">📢 보드라움 소식</p>
+      <h2 style="margin:0 0 14px;font-size:20px;line-height:1.3">${esc(title)}</h2>
+      <p style="white-space:pre-wrap;line-height:1.7;color:#374151;font-size:15px;margin:0">${esc(summary)}</p>
+      <a href="${postUrl}" style="display:inline-block;margin-top:22px;background:#111;color:#fff;text-decoration:none;font-weight:700;padding:13px 24px;border-radius:12px">소식 자세히 보기 →</a>
+      <p style="color:#9ca3af;font-size:12px;margin-top:30px">보드라움 · <a href="${SITE}" style="color:#9ca3af">www.boardraum.site</a></p>
+    </div>`;
+
+    // 전체 회원 이메일 수집
+    const emails: string[] = [];
+    let page = 1;
+    while (page <= 20) {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error || !data?.users?.length) break;
+      for (const u of data.users) { if (u.email) emails.push(u.email); }
+      if (data.users.length < 1000) break;
+      page++;
+    }
+    const uniq = [...new Set(emails)];
+    if (uniq.length === 0) return c.json({ error: '발송할 대상이 없어요' }, 400);
+
+    // Resend 배치 발송 (개별 수신 — BCC/노출 없음), 100개씩
+    let sent = 0, failed = 0;
+    for (let i = 0; i < uniq.length; i += 100) {
+      const chunk = uniq.slice(i, i + 100);
+      try {
+        const res = await fetch('https://api.resend.com/emails/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendKey}` },
+          body: JSON.stringify(chunk.map(to => ({ from: '보드라움 <noreply@boardraum.site>', to, subject: `[보드라움 소식] ${title}`, html }))),
+        });
+        if (res.ok) sent += chunk.length;
+        else { failed += chunk.length; console.error('broadcast batch fail:', await res.text()); }
+      } catch (e) { failed += chunk.length; console.error('broadcast batch error:', e); }
+    }
+
+    return c.json({ success: true, total: uniq.length, sent, failed });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Unknown error' }, 500);
+  }
 });
 
 // 이벤트 시작 시 실격자 목록 초기화 (start action에 포함)

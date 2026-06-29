@@ -1457,6 +1457,23 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('공지 해제 실패'); }
   };
 
+  const handleBroadcastEmail = async () => {
+    setShowMenu(false);
+    if (!confirm('이 소식을 전체 회원에게 이메일로 발송할까요?\n(요약 + 자세히 보기 버튼이 포함됩니다)')) return;
+    const t = toast.loading('전체 회원에게 메일 발송 중…');
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/broadcast-post-email`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ postId: post.id }) }
+      );
+      const d = await res.json().catch(() => ({}));
+      toast.dismiss(t);
+      if (res.ok) toast.success(`메일 발송 완료 (${d.sent ?? 0}/${d.total ?? 0}명)`);
+      else toast.error(d.error || '메일 발송 실패');
+    } catch { toast.dismiss(t); toast.error('메일 발송 실패'); }
+  };
+
   const handleNoticeToggleFeed = async (showInFeed: boolean) => {
     setShowMenu(false);
     try {
@@ -1665,6 +1682,10 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                         <button onClick={() => { setShowMenu(false); setAdminTagQueue(post.linkedGames || []); setShowAdminGameTag(true); }}
                           className="w-full px-4 py-2 text-left text-sm text-cyan-600 hover:bg-cyan-50 transition-colors">
                           🎲 게임태그 추가/수정
+                        </button>
+                        <button onClick={handleBroadcastEmail}
+                          className="w-full px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-50 transition-colors">
+                          📧 전체 회원에게 메일 발송
                         </button>
                         {noticeInfo ? (
                           <>
