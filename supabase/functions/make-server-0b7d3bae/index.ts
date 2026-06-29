@@ -729,6 +729,66 @@ app.post("/make-server-0b7d3bae/bgg-thumbnails", async (c) => {
   }
 });
 
+// BGG 후기(평점 코멘트) 가져와서 한국어 번역 — 보드라움에 후기 없을 때 폴백용
+app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
+  try {
+    const id = c.req.query('id') || '';
+    if (!/^\d+$/.test(id)) return c.json({ reviews: [], bggUrl: '' });
+    const bggUrl = `https://boardgamegeek.com/boardgame/${id}/ratings?comment=1`;
+
+    const cacheKey = `bgg_reviews_v2_${id}`;
+    const cached = await kv.get(cacheKey);
+    if (cached?.reviews) return c.json(cached);
+
+    const dec = (s: string) => (s || '')
+      .replace(/&quot;/g, '"').replace(/&apos;|&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+      .replace(/&amp;/g, '&')
+      .replace(/:[a-z]+:/gi, ' ')              // BGG 이모지 마크업 (:star: :nostar: 등)
+      .replace(/\[\/?[a-z][^\]]*\]/gi, ' ')    // BBCode 태그 [b] [thing=..] 등
+      .replace(/\s+/g, ' ').trim();
+
+    const bggToken = Deno.env.get('BGG_API_TOKEN');
+    const headers: Record<string, string> = {};
+    if (bggToken) headers['Authorization'] = `Bearer ${bggToken}`;
+
+    let comments: Array<{ username: string; rating: string; value: string }> = [];
+    try {
+      const url = `https://boardgamegeek.com/xmlapi2/thing?id=${id}&ratingcomments=1&pagesize=60`;
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const xml = await res.text();
+        for (const m of xml.matchAll(/<comment[^>]*username="([^"]*)"[^>]*rating="([^"]*)"[^>]*value="([^"]*)"[^>]*\/>/g)) {
+          const value = dec(m[3]);
+          if (value && value.length >= 15) comments.push({ username: m[1], rating: m[2], value });
+        }
+      }
+    } catch (e) { console.error('bgg reviews fetch error:', e); }
+
+    // 텍스트 긴 것 우선, 상위 5개
+    comments.sort((a, b) => b.value.length - a.value.length);
+    comments = comments.slice(0, 5);
+
+    // 한국어 번역 (MyMemory 무료 API, 키 불필요)
+    const reviews: any[] = [];
+    for (const cm of comments) {
+      let translated = '';
+      try {
+        const q = cm.value.slice(0, 450);
+        const tr = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=en|ko`);
+        if (tr.ok) { const tj = await tr.json(); translated = tj?.responseData?.translatedText || ''; }
+      } catch {}
+      reviews.push({ username: cm.username, rating: cm.rating, original: cm.value, translated });
+    }
+
+    const out = { reviews, bggUrl };
+    await kv.set(cacheKey, out, { expiresIn: 604800 }); // 7일 캐시
+    return c.json(out);
+  } catch (error) {
+    return c.json({ reviews: [], bggUrl: '', error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
 // BGG 사용자 컬렉션 불러오기
 app.get("/make-server-0b7d3bae/bgg/collection/:username", async (c) => {
   const username = c.req.param('username');

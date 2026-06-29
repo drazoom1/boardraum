@@ -6,6 +6,7 @@ import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { getSupabaseClient } from '../lib/supabase';
 import { ChessRankBadge } from './ChessRankBadge';
 import { getRankByStats } from './chessRank';
+import { GameReviewsButton } from './GameReviewsButton';
 import type { BoardGame } from '../App';
 import { PostComposer } from './PostComposer';
 import { BonusCardWinOverlay } from './BonusCardWinOverlay';
@@ -1822,6 +1823,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                     {g.imageUrl && <img src={g.imageUrl} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />}
                     <span className="text-sm font-medium text-gray-700 truncate flex-1">{g.imageUrl ? '' : '🎲 '}{g.name}</span>
                   </div>
+                  <GameReviewsButton game={{ id: g.id, bggId: (g as any).bggId, name: g.name }} compact />
                   <button
                     onClick={(e) => { e.stopPropagation(); if (!userId) { onGuestAction?.(); return; } isWished ? onRemoveFromWishlist?.(g.id) : onAddToWishlist?.({ id: g.id, name: g.name, imageUrl: g.imageUrl || '' }); }}
                     className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isWished ? 'text-red-400' : 'text-gray-300 hover:text-red-400'}`}>
