@@ -1106,6 +1106,8 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailIsAd, setEmailIsAd] = useState(true);
+  const [emailTitleEdit, setEmailTitleEdit] = useState('');
+  const [emailBodyEdit, setEmailBodyEdit] = useState('');
   const imageScrollRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   
@@ -1470,15 +1472,18 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
 
   const handleBroadcastEmail = () => {
     setShowMenu(false);
+    setEmailTitleEdit(emailTitle);
+    setEmailBodyEdit(emailSummary);
     setShowEmailPreview(true);
   };
   const doBroadcastSend = async () => {
+    if (!emailBodyEdit.trim()) { toast.error('내용을 입력해주세요'); return; }
     setEmailSending(true);
     try {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/broadcast-post-email`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ postId: post.id, isAd: emailIsAd }) }
+          body: JSON.stringify({ postId: post.id, isAd: emailIsAd, title: emailTitleEdit.trim(), summary: emailBodyEdit }) }
       );
       const d = await res.json().catch(() => ({}));
       if (res.ok) { toast.success(`메일 발송 완료 (${d.sent ?? 0}/${d.total ?? 0}명)`); setShowEmailPreview(false); }
@@ -2382,12 +2387,23 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               <h3 className="font-bold text-gray-900 text-sm">📧 전체 회원 메일 발송 미리보기</h3>
               <button onClick={() => !emailSending && setShowEmailPreview(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">✕</button>
             </div>
-            <div className="overflow-y-auto p-4">
-              <div className="text-xs text-gray-400 mb-2">제목: <span className="text-gray-700 font-medium">{emailIsAd ? '(광고) ' : ''}[보드라움 소식] {emailTitle}</span></div>
+            <div className="overflow-y-auto p-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500">제목 (수정 가능)</label>
+                <input value={emailTitleEdit} onChange={e => setEmailTitleEdit(e.target.value)} maxLength={120}
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <p className="text-[11px] text-gray-400 mt-1">메일 제목: {emailIsAd ? '(광고) ' : ''}[보드라움 소식] {emailTitleEdit || '(제목 없음)'}</p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500">내용 (수정 가능)</label>
+                <textarea value={emailBodyEdit} onChange={e => setEmailBodyEdit(e.target.value)} rows={7}
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y" />
+              </div>
+              <div className="text-[11px] text-gray-400">미리보기 ↓</div>
               <div className="border border-gray-200 rounded-xl p-5 bg-white">
                 <p className="text-[13px] text-cyan-500 font-bold mb-2">📢 보드라움 소식{emailIsAd ? ' (광고)' : ''}</p>
-                <h2 className="text-lg font-bold text-gray-900 mb-3 leading-snug">{emailTitle}</h2>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{emailSummary || '(내용 없음)'}</p>
+                <h2 className="text-lg font-bold text-gray-900 mb-3 leading-snug">{emailTitleEdit || '(제목 없음)'}</h2>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{emailBodyEdit || '(내용 없음)'}</p>
                 <div className="mt-5">
                   <span className="inline-block bg-gray-900 text-white text-sm font-bold px-5 py-3 rounded-xl">소식 자세히 보기 →</span>
                 </div>

@@ -4952,7 +4952,7 @@ app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
     const role = await getUserRole(user.id, user.email ?? undefined);
     if (role !== 'admin') return c.json({ error: '관리자만 발송할 수 있어요' }, 403);
 
-    const { postId, isAd } = await c.req.json();
+    const { postId, isAd, title: titleOverride, summary: summaryOverride } = await c.req.json();
     if (!postId) return c.json({ error: 'postId 필요' }, 400);
     const post = await kv.get(`beta_post_${postId}`);
     if (!post || post.isDraft) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
@@ -4962,11 +4962,16 @@ app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
 
     const SITE = 'https://www.boardraum.site';
     const postUrl = `${SITE}/post/${postId}`;
-    const title = String(post.title || '보드라움 소식').slice(0, 120);
-    const summary = String(post.content || '')
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/🔗[^\n]*/g, '')
-      .replace(/\n{2,}/g, '\n').trim().slice(0, 400);
+    // 관리자가 미리보기에서 편집했으면 그 값 사용, 아니면 게시물에서 자동 구성
+    const title = (typeof titleOverride === 'string' && titleOverride.trim())
+      ? titleOverride.trim().slice(0, 120)
+      : String(post.title || '보드라움 소식').slice(0, 120);
+    const summary = (typeof summaryOverride === 'string' && summaryOverride.trim())
+      ? summaryOverride.slice(0, 2000)
+      : String(post.content || '')
+          .replace(/https?:\/\/\S+/g, '')
+          .replace(/🔗[^\n]*/g, '')
+          .replace(/\n{2,}/g, '\n').trim().slice(0, 400);
     const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const subject = `${isAd ? '(광고) ' : ''}[보드라움 소식] ${title}`;
     const makeHtml = (unsubUrl: string) => `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
