@@ -2665,6 +2665,27 @@ export function MarketPage({ accessToken, userId, userNickname, isAdmin, onCance
     ...(userId ? [{ key: 'mine', label: '내 방출' }] : []),
   ] as const;
 
+  // ── 보드마켓 개편 준비중 (중고시장 → 보드게임 신작 포인트 상점) ──
+  // 기존 마켓 UI는 아래에 그대로 보존되어 있으며, 개편 완료 시 이 블록만 제거하면 됩니다.
+  if (true) {
+    return (
+      <div className="max-w-2xl mx-auto px-4">
+        <div className="mt-10 bg-white rounded-3xl shadow-sm border border-gray-100 px-6 py-12 text-center">
+          <div className="text-5xl mb-4">🛠️</div>
+          <h2 className="text-xl font-black text-gray-900 mb-2">보드마켓 공사중</h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            더 좋은 보드마켓으로 새단장 하고 있어요.<br />
+            <span className="font-semibold text-gray-700">보드게임 신작 상품을 포인트로 구매</span>할 수 있는<br />
+            공간으로 곧 찾아옵니다.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-600 bg-cyan-50 px-3 py-1.5 rounded-full">
+            🚧 업데이트 준비중
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-3">
 
