@@ -144,6 +144,12 @@ export function GameReviewsButton({ game, compact = false }: {
                         </button>
                       ))}
                     </div>
+                    {/* 원본에서 전체 후기 보기 */}
+                    <a href={items[0].link} target="_blank" rel="noopener noreferrer"
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-sm font-semibold text-gray-600 transition-colors">
+                      {source === 'bgg' ? 'BGG에서 후기 자세히 보기' : '보드라움에서 후기 자세히 보기'}
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                   </>
                 )}
 
