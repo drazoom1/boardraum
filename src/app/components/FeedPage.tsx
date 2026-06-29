@@ -1105,6 +1105,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const [adminTagQueue, setAdminTagQueue] = useState<{id: string; name: string; imageUrl: string}[]>([]);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
+  const [emailIsAd, setEmailIsAd] = useState(true);
   const imageScrollRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   
@@ -1477,7 +1478,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/broadcast-post-email`,
         { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({ postId: post.id }) }
+          body: JSON.stringify({ postId: post.id, isAd: emailIsAd }) }
       );
       const d = await res.json().catch(() => ({}));
       if (res.ok) { toast.success(`메일 발송 완료 (${d.sent ?? 0}/${d.total ?? 0}명)`); setShowEmailPreview(false); }
@@ -2382,17 +2383,22 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
               <button onClick={() => !emailSending && setShowEmailPreview(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">✕</button>
             </div>
             <div className="overflow-y-auto p-4">
-              <div className="text-xs text-gray-400 mb-2">제목: <span className="text-gray-700 font-medium">[보드라움 소식] {emailTitle}</span></div>
+              <div className="text-xs text-gray-400 mb-2">제목: <span className="text-gray-700 font-medium">{emailIsAd ? '(광고) ' : ''}[보드라움 소식] {emailTitle}</span></div>
               <div className="border border-gray-200 rounded-xl p-5 bg-white">
-                <p className="text-[13px] text-cyan-500 font-bold mb-2">📢 보드라움 소식</p>
+                <p className="text-[13px] text-cyan-500 font-bold mb-2">📢 보드라움 소식{emailIsAd ? ' (광고)' : ''}</p>
                 <h2 className="text-lg font-bold text-gray-900 mb-3 leading-snug">{emailTitle}</h2>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{emailSummary || '(내용 없음)'}</p>
                 <div className="mt-5">
                   <span className="inline-block bg-gray-900 text-white text-sm font-bold px-5 py-3 rounded-xl">소식 자세히 보기 →</span>
                 </div>
                 <p className="text-[11px] text-gray-400 mt-6">보드라움 · www.boardraum.site</p>
+                <p className="text-[10px] text-gray-300 mt-1">이 메일은 보드라움 회원에게 보내는 소식이에요. · <span className="underline">수신거부</span></p>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">실제 메일에서 '소식 자세히 보기'는 이 게시물로 이동하는 버튼이에요.</p>
+              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                <input type="checkbox" checked={emailIsAd} onChange={e => setEmailIsAd(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                <span className="text-xs text-gray-600">광고성(할인·판매 홍보) 메일 — 제목에 <b>(광고)</b> 표기 <span className="text-gray-400">(상품 홍보는 법적으로 표기 권장)</span></span>
+              </label>
+              <p className="text-[11px] text-gray-400 mt-2">· '소식 자세히 보기'는 이 게시물로 이동하는 버튼이에요.<br/>· 맨 아래 <b>수신거부</b> 링크가 자동 포함되며, 누르면 그 회원은 소식 메일에서 자동 제외됩니다.</p>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
               <button onClick={() => setShowEmailPreview(false)} disabled={emailSending}

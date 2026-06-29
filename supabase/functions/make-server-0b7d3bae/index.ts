@@ -4934,6 +4934,14 @@ app.get("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
 
+// 소식 수신거부 토큰 (이메일 기반 결정적 해시 — 타인 임의 수신거부 방지)
+const SOKSIK_UNSUB_SALT = 'boardraum-soksik-unsub-v1';
+const SOKSIK_FUNC_BASE = 'https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae';
+async function soksikUnsubToken(email: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.toLowerCase().trim() + '|' + SOKSIK_UNSUB_SALT));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+
 // 전체 회원에게 게시물(소식)을 이메일로 발송 — 관리자 전용
 app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
   try {
@@ -4944,7 +4952,7 @@ app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
     const role = await getUserRole(user.id, user.email ?? undefined);
     if (role !== 'admin') return c.json({ error: '관리자만 발송할 수 있어요' }, 403);
 
-    const { postId } = await c.req.json();
+    const { postId, isAd } = await c.req.json();
     if (!postId) return c.json({ error: 'postId 필요' }, 400);
     const post = await kv.get(`beta_post_${postId}`);
     if (!post || post.isDraft) return c.json({ error: '게시물을 찾을 수 없어요' }, 404);
@@ -4955,18 +4963,19 @@ app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
     const SITE = 'https://www.boardraum.site';
     const postUrl = `${SITE}/post/${postId}`;
     const title = String(post.title || '보드라움 소식').slice(0, 120);
-    // 요약: 본문에서 URL·🔗줄 정리 후 앞부분
     const summary = String(post.content || '')
       .replace(/https?:\/\/\S+/g, '')
       .replace(/🔗[^\n]*/g, '')
       .replace(/\n{2,}/g, '\n').trim().slice(0, 400);
     const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
-      <p style="font-size:13px;color:#06b6d4;font-weight:700;margin:0 0 8px">📢 보드라움 소식</p>
+    const subject = `${isAd ? '(광고) ' : ''}[보드라움 소식] ${title}`;
+    const makeHtml = (unsubUrl: string) => `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
+      <p style="font-size:13px;color:#06b6d4;font-weight:700;margin:0 0 8px">📢 보드라움 소식${isAd ? ' (광고)' : ''}</p>
       <h2 style="margin:0 0 14px;font-size:20px;line-height:1.3">${esc(title)}</h2>
       <p style="white-space:pre-wrap;line-height:1.7;color:#374151;font-size:15px;margin:0">${esc(summary)}</p>
       <a href="${postUrl}" style="display:inline-block;margin-top:22px;background:#111;color:#fff;text-decoration:none;font-weight:700;padding:13px 24px;border-radius:12px">소식 자세히 보기 →</a>
       <p style="color:#9ca3af;font-size:12px;margin-top:30px">보드라움 · <a href="${SITE}" style="color:#9ca3af">www.boardraum.site</a></p>
+      <p style="color:#b0b0b0;font-size:11px;margin-top:6px">이 메일은 보드라움 회원에게 보내는 소식이에요.${isAd ? ' 광고성 정보 포함.' : ''} 더 이상 받지 않으시려면 <a href="${unsubUrl}" style="color:#b0b0b0;text-decoration:underline">수신거부</a>를 눌러주세요.</p>
     </div>`;
 
     // 전체 회원 이메일 수집
@@ -4979,27 +4988,55 @@ app.post("/make-server-0b7d3bae/admin/broadcast-post-email", async (c) => {
       if (data.users.length < 1000) break;
       page++;
     }
-    const uniq = [...new Set(emails)];
+    const uniq = [...new Set(emails.map(e => e.toLowerCase().trim()))];
     if (uniq.length === 0) return c.json({ error: '발송할 대상이 없어요' }, 400);
 
-    // Resend 배치 발송 (개별 수신 — BCC/노출 없음), 100개씩
+    // 수신거부자 제외
+    const optoutItems = await getByPrefix('soksik_optout_');
+    const optoutSet = new Set(optoutItems.map(it => it.key.replace('soksik_optout_', '')));
+    const targets = uniq.filter(e => !optoutSet.has(e));
+    if (targets.length === 0) return c.json({ error: '발송 대상이 없어요(전원 수신거부)' }, 400);
+
+    // 수신자별 개별 html(수신거부 링크 포함)
+    const recipients = await Promise.all(targets.map(async to => {
+      const t = await soksikUnsubToken(to);
+      const unsubUrl = `${SOKSIK_FUNC_BASE}/soksik/unsubscribe?e=${encodeURIComponent(to)}&t=${t}`;
+      return { from: '보드라움 <noreply@boardraum.site>', to, subject, html: makeHtml(unsubUrl) };
+    }));
+
     let sent = 0, failed = 0;
-    for (let i = 0; i < uniq.length; i += 100) {
-      const chunk = uniq.slice(i, i + 100);
+    for (let i = 0; i < recipients.length; i += 100) {
+      const chunk = recipients.slice(i, i + 100);
       try {
         const res = await fetch('https://api.resend.com/emails/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendKey}` },
-          body: JSON.stringify(chunk.map(to => ({ from: '보드라움 <noreply@boardraum.site>', to, subject: `[보드라움 소식] ${title}`, html }))),
+          body: JSON.stringify(chunk),
         });
         if (res.ok) sent += chunk.length;
         else { failed += chunk.length; console.error('broadcast batch fail:', await res.text()); }
       } catch (e) { failed += chunk.length; console.error('broadcast batch error:', e); }
     }
 
-    return c.json({ success: true, total: uniq.length, sent, failed });
+    return c.json({ success: true, total: targets.length, optout: uniq.length - targets.length, sent, failed });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Unknown error' }, 500);
+  }
+});
+
+// 소식 수신거부 (이메일 링크에서 호출, 로그인 불필요)
+app.get("/make-server-0b7d3bae/soksik/unsubscribe", async (c) => {
+  const page = (msg: string) => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>보드라움 소식 수신거부</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f2;margin:0;padding:48px 16px"><div style="max-width:420px;margin:0 auto;background:#fff;border-radius:18px;padding:32px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.06)"><p style="font-size:13px;color:#06b6d4;font-weight:700;margin:0 0 12px">📢 보드라움 소식</p>${msg}<p style="margin-top:26px"><a href="https://www.boardraum.site" style="color:#888;font-size:13px">보드라움으로 가기 →</a></p></div></body></html>`;
+  try {
+    const email = (c.req.query('e') || '').toLowerCase().trim();
+    const token = c.req.query('t') || '';
+    if (!email || !token) return c.html(page('<h2 style="color:#111">잘못된 요청이에요</h2>'), 400);
+    const expected = await soksikUnsubToken(email);
+    if (token !== expected) return c.html(page('<h2 style="color:#111">유효하지 않은 링크예요</h2>'), 400);
+    await kv.set(`soksik_optout_${email}`, { at: new Date().toISOString() });
+    return c.html(page('<h2 style="color:#111;margin:0 0 8px">수신거부 완료 ✅</h2><p style="color:#666;font-size:14px;margin:0">앞으로 보드라움 소식 메일을 보내지 않을게요.</p>'));
+  } catch (e) {
+    return c.html(page('<h2 style="color:#111">오류가 발생했어요</h2>'), 500);
   }
 });
 
