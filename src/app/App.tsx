@@ -358,6 +358,39 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
   const [wishlistGames, setWishlistGames] = useState<BoardGame[]>([]);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  // 📢 소식(뉴스) 큐레이션 작성 — 관리자/스태프 전용
+  const [showSoksik, setShowSoksik] = useState(false);
+  const [soksikTitle, setSoksikTitle] = useState('');
+  const [soksikSummary, setSoksikSummary] = useState('');
+  const [soksikLink, setSoksikLink] = useState('');
+  const [soksikImage, setSoksikImage] = useState('');
+  const [soksikPosting, setSoksikPosting] = useState(false);
+  const submitSoksik = async () => {
+    if (!soksikSummary.trim()) { toast.error('내용(요약)을 입력해주세요'); return; }
+    setSoksikPosting(true);
+    try {
+      const content = `${soksikSummary.trim()}${soksikLink.trim() ? `\n\n🔗 출처: ${soksikLink.trim()}` : ''}`.slice(0, 1000);
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          title: soksikTitle.trim() || '📢 보드라움 소식',
+          content,
+          category: '자유',
+          images: soksikImage.trim() ? [soksikImage.trim()] : [],
+        }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `게시 실패 (${res.status})`); }
+      toast.success('소식이 게시됐어요 📢');
+      setShowSoksik(false);
+      setSoksikTitle(''); setSoksikSummary(''); setSoksikLink(''); setSoksikImage('');
+      setActiveTab('feed');
+    } catch (e: any) {
+      toast.error(e.message || '게시에 실패했어요');
+    } finally {
+      setSoksikPosting(false);
+    }
+  };
   const [triggerAddDialog, setTriggerAddDialog] = useState(false);
   const [triggerWishlistDialog, setTriggerWishlistDialog] = useState(false);
   const [triggerComposer, setTriggerComposer] = useState(false);
@@ -2118,12 +2151,75 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                       <p className="text-sm text-gray-500 mt-0.5">보유 / 위시 리스트에 게임을 등록해요</p>
                     </div>
                   </button>
+                  {/* 📢 소식 작성 (관리자/스태프) */}
+                  {(userRole === 'admin' || isStaff) && (
+                    <button onClick={() => { setShowPlusMenu(false); setShowSoksik(true); }}
+                      className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors text-left">
+                      <div className="w-14 h-14 bg-cyan-50 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl">📢</div>
+                      <div>
+                        <p className="font-bold text-gray-900">소식 작성</p>
+                        <p className="text-sm text-gray-500 mt-0.5">보드게임 뉴스를 출처·이미지와 함께 올려요</p>
+                      </div>
+                    </button>
+                  )}
                 </div>
               </div>
               </div>
             </>
           )}
 
+          {/* 📢 소식 작성 모달 (관리자/스태프) */}
+          {showSoksik && (
+            <>
+              <div className="fixed inset-0 bg-black/60 z-[9990]" onClick={() => !soksikPosting && setShowSoksik(false)} />
+              <div className="fixed inset-0 z-[9991] flex items-center justify-center p-4 pointer-events-none">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto max-h-[90vh] overflow-y-auto">
+                  <div className="px-6 pt-5 pb-2 flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-gray-900">📢 소식 작성</h3>
+                    <button onClick={() => !soksikPosting && setShowSoksik(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="px-6 pb-6 space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500">제목</label>
+                      <input value={soksikTitle} onChange={e => setSoksikTitle(e.target.value)} maxLength={100}
+                        placeholder="예: 에버델 신규 확장 발표"
+                        className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500">내용(요약) <span className="text-red-400">*</span></label>
+                      <textarea value={soksikSummary} onChange={e => setSoksikSummary(e.target.value)} rows={4} maxLength={800}
+                        placeholder="소식을 직접 요약해서 적어주세요. (출처 글을 그대로 복사하지 말고 직접 작성)"
+                        className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500">출처 링크</label>
+                      <input value={soksikLink} onChange={e => setSoksikLink(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500">이미지 URL</label>
+                      <input value={soksikImage} onChange={e => setSoksikImage(e.target.value)}
+                        placeholder="이미지 주소 붙여넣기 (직접 올린 이미지 권장)"
+                        className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                      {soksikImage.trim() && (
+                        <img src={soksikImage.trim()} alt="미리보기" className="mt-2 w-full max-h-44 object-cover rounded-xl border border-gray-100"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          onLoad={e => { (e.target as HTMLImageElement).style.display = 'block'; }} />
+                      )}
+                      <p className="text-[11px] text-gray-400 mt-1">※ 보드라이프·디시 등 봇 차단 사이트 이미지는 안 뜰 수 있어요. 직접 업로드한 이미지나 BGG 이미지 권장.</p>
+                    </div>
+                    <button onClick={submitSoksik} disabled={soksikPosting}
+                      className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-bold rounded-xl transition-colors">
+                      {soksikPosting ? '게시 중…' : '소식 게시하기'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
 
           {/* 후원/피드백 공지 배너 — 일단 숨김 */}

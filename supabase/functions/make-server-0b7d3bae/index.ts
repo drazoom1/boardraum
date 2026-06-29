@@ -3045,10 +3045,8 @@ app.patch("/make-server-0b7d3bae/customs/:postId", async (c) => {
     const postId = c.req.param('postId');
     
     // Find the existing post
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
     
     if (error) {
       console.error('❌ [Update Post] KV Store query error:', error);
@@ -3129,10 +3127,8 @@ app.post("/make-server-0b7d3bae/customs/:postId/status", async (c) => {
     
     
     // Query KV Store directly to get {key, value} pairs
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
     
     if (error) {
       console.error('❌ [Update Status] KV Store query error:', error);
@@ -3186,10 +3182,8 @@ app.delete("/make-server-0b7d3bae/customs/:postId", async (c) => {
     const postId = c.req.param('postId');
 
     // Find the existing post
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
 
     if (error) {
       console.error('❌ [Delete Post] KV Store query error:', error);
@@ -3246,10 +3240,8 @@ app.post("/make-server-0b7d3bae/customs/:postId/like", async (c) => {
     
     
     // Query KV Store directly to get {key, value} pairs
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
     
     if (error) {
       console.error('❌ [Like] KV Store query error:', error);
@@ -3504,10 +3496,8 @@ app.get("/make-server-0b7d3bae/admin/debug/all-customs", async (c) => {
     
     
     // Query KV Store directly to get {key, value} pairs
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
     
     if (error) {
       console.error('❌ [Debug] KV Store query error:', error);
@@ -3574,10 +3564,8 @@ app.post("/make-server-0b7d3bae/admin/fix-pending-status", async (c) => {
     
     
     // Query KV Store directly to get {key, value} pairs
-    const { data, error } = await supabase
-      .from("kv_store_0b7d3bae")
-      .select("key, value")
-      .like("key", "game_custom_%");
+    const data = await getByPrefix('game_custom_'); // 페이지네이션으로 1000행 제한 회피 (raw .like는 1000행만 반환)
+    const error: any = null;
     
     if (error) {
       console.error('❌ [Fix] KV Store query error:', error);
