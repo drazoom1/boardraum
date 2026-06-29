@@ -4809,8 +4809,8 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             }
           </button>
           <button onClick={() => { if (!userId) { onGuestAction?.(); return; } setShowComposer(true); }}
-            className="flex-1 min-w-0 text-left text-sm text-gray-400 px-4 py-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors whitespace-nowrap overflow-hidden">
-            자유롭게 소통하세요.
+            className="flex-1 min-w-0 text-left text-sm text-gray-400 px-4 py-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
+            보드게임 후기, 소식 등을 남겨 포인트를 모으세요.
           </button>
           <div className="flex gap-1 flex-shrink-0">
             <button onClick={() => { if (!userId) { onGuestAction?.(); return; } setShowComposer(true); }}

@@ -1474,7 +1474,7 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
                     onInput={syncEditor}
                     onFocus={() => activeHwCat && setGuideVisible(false)}
                     onPaste={e => { e.preventDefault(); const t = e.clipboardData.getData('text/plain'); try { document.execCommand('insertText', false, t); } catch { /* noop */ } syncEditor(); }}
-                    data-ph={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '자유롭게 소통하세요.'}
+                    data-ph={category === '살래말래' ? '이 게임에 대해 한마디! (선택)' : activeHwCat ? `${activeHwCat.name} 숙제를 작성해주세요...` : category === '재능판매' ? '재능에 대해 설명해주세요...' : '보드게임 후기, 소식 등을 남겨 포인트를 모으세요.'}
                     className="composer-editor w-full text-sm text-gray-900 outline-none px-3.5 py-3 break-words whitespace-pre-wrap"
                     style={{ fontSize: '16px', minHeight: category === '재능판매' ? '80px' : '140px' }} />
                 </div>
