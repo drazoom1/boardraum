@@ -1103,6 +1103,8 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [showAdminGameTag, setShowAdminGameTag] = useState(false);
   const [adminTagQueue, setAdminTagQueue] = useState<{id: string; name: string; imageUrl: string}[]>([]);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
   const imageScrollRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   
@@ -1457,10 +1459,20 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
     } catch { toast.error('공지 해제 실패'); }
   };
 
-  const handleBroadcastEmail = async () => {
+  // 발송 전 미리보기에 쓸 이메일 구성 (서버 로직과 동일하게)
+  const emailTitle = String(post.title || '보드라움 소식').slice(0, 120);
+  const emailSummary = String(post.content || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/🔗[^\n]*/g, '')
+    .replace(/\n{2,}/g, '\n').trim().slice(0, 400);
+  const emailPostUrl = `https://www.boardraum.site/post/${post.id}`;
+
+  const handleBroadcastEmail = () => {
     setShowMenu(false);
-    if (!confirm('이 소식을 전체 회원에게 이메일로 발송할까요?\n(요약 + 자세히 보기 버튼이 포함됩니다)')) return;
-    const t = toast.loading('전체 회원에게 메일 발송 중…');
+    setShowEmailPreview(true);
+  };
+  const doBroadcastSend = async () => {
+    setEmailSending(true);
     try {
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/broadcast-post-email`,
@@ -1468,10 +1480,10 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
           body: JSON.stringify({ postId: post.id }) }
       );
       const d = await res.json().catch(() => ({}));
-      toast.dismiss(t);
-      if (res.ok) toast.success(`메일 발송 완료 (${d.sent ?? 0}/${d.total ?? 0}명)`);
+      if (res.ok) { toast.success(`메일 발송 완료 (${d.sent ?? 0}/${d.total ?? 0}명)`); setShowEmailPreview(false); }
       else toast.error(d.error || '메일 발송 실패');
-    } catch { toast.dismiss(t); toast.error('메일 발송 실패'); }
+    } catch { toast.error('메일 발송 실패'); }
+    finally { setEmailSending(false); }
   };
 
   const handleNoticeToggleFeed = async (showInFeed: boolean) => {
@@ -2362,6 +2374,37 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
       )}
 
       {/* 관리자 게임태그 추가 모달 */}
+      {showEmailPreview && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4" onClick={() => !emailSending && setShowEmailPreview(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 text-sm">📧 전체 회원 메일 발송 미리보기</h3>
+              <button onClick={() => !emailSending && setShowEmailPreview(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">✕</button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              <div className="text-xs text-gray-400 mb-2">제목: <span className="text-gray-700 font-medium">[보드라움 소식] {emailTitle}</span></div>
+              <div className="border border-gray-200 rounded-xl p-5 bg-white">
+                <p className="text-[13px] text-cyan-500 font-bold mb-2">📢 보드라움 소식</p>
+                <h2 className="text-lg font-bold text-gray-900 mb-3 leading-snug">{emailTitle}</h2>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{emailSummary || '(내용 없음)'}</p>
+                <div className="mt-5">
+                  <span className="inline-block bg-gray-900 text-white text-sm font-bold px-5 py-3 rounded-xl">소식 자세히 보기 →</span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-6">보드라움 · www.boardraum.site</p>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">실제 메일에서 '소식 자세히 보기'는 이 게시물로 이동하는 버튼이에요.</p>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+              <button onClick={() => setShowEmailPreview(false)} disabled={emailSending}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors">취소</button>
+              <button onClick={doBroadcastSend} disabled={emailSending}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 disabled:opacity-60 transition-colors">
+                {emailSending ? '발송 중…' : '전체 회원에게 보내기'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAdminGameTag && (
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
