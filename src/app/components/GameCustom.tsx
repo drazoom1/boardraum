@@ -597,12 +597,10 @@ export function GameCustom({ ownedGames, wishlistGames = [], onAddToWishlist, ac
         }
       });
 
-      // BGG ID는 bgg_ 접두사 변형도 추가, 비-BGG ID는 원본만
+      // 서버가 gameId의 bgg_ 접두사를 벗겨 같은 캐시키로 처리하므로 `bgg_342942`는
+      // `342942`와 완전히 동일한 결과 → 접두사 변형은 중복 호출이라 제외한다.
       const withPrefixes = new Set<string>();
-      idsToTry.forEach(id => {
-        withPrefixes.add(id);
-        withPrefixes.add(`bgg_${id}`);
-      });
+      idsToTry.forEach(id => withPrefixes.add(id));
       rawIdsToTry.forEach(id => withPrefixes.add(id));
 
       const validIds = [...withPrefixes].filter(id => id.length > 0 && id !== 'bgg_');
