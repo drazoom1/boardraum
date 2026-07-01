@@ -60,7 +60,7 @@ export function GameReviewsButton({ game, compact = false }: {
           setSource('bgg');
           setItems((bd.reviews as any[]).map(x => ({
             source: 'bgg' as const,
-            title: `${x.username || 'BGG 유저'} · ★${x.rating}`,
+            title: x.username || 'BGG 유저',
             content: x.translated || x.original || '',
             original: x.original || '',
             rating: x.rating,
@@ -135,12 +135,19 @@ export function GameReviewsButton({ game, compact = false }: {
                     <div className="divide-y divide-gray-100">
                       {items.map((it, i) => (
                         <button key={i} type="button" onClick={() => setSelected(it)}
-                          className="w-full text-left py-3 px-1 flex items-center gap-2 hover:bg-gray-50 rounded-lg transition-colors">
-                          {it.rating != null && it.rating !== '' && (
-                            <span className="flex-shrink-0 text-[11px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">★{it.rating}</span>
+                          className="w-full text-left py-3 px-1 hover:bg-gray-50 rounded-lg transition-colors">
+                          <div className="flex items-center gap-2 mb-1">
+                            {it.rating != null && it.rating !== '' && (
+                              <span className="flex-shrink-0 text-[11px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">★{it.rating}</span>
+                            )}
+                            <span className="flex-1 truncate text-sm font-semibold text-gray-800">{it.title}</span>
+                            <span className="flex-shrink-0 text-gray-300 text-xs">›</span>
+                          </div>
+                          {it.content && (
+                            <p className="text-xs text-gray-500 leading-relaxed" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {it.content}
+                            </p>
                           )}
-                          <span className="flex-1 truncate text-sm text-gray-800">{it.title}</span>
-                          <span className="flex-shrink-0 text-gray-300 text-xs">›</span>
                         </button>
                       ))}
                     </div>

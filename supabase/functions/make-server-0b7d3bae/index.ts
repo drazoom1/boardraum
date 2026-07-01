@@ -769,17 +769,16 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
     comments.sort((a, b) => b.value.length - a.value.length);
     comments = comments.slice(0, 5);
 
-    // 한국어 번역 (MyMemory 무료 API, 키 불필요)
-    const reviews: any[] = [];
-    for (const cm of comments) {
+    // 한국어 번역 (MyMemory 무료 API, 키 불필요) — 병렬 처리로 로딩 단축
+    const reviews = await Promise.all(comments.map(async (cm) => {
       let translated = '';
       try {
         const q = cm.value.slice(0, 450);
         const tr = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=en|ko`);
         if (tr.ok) { const tj = await tr.json(); translated = tj?.responseData?.translatedText || ''; }
       } catch {}
-      reviews.push({ username: cm.username, rating: cm.rating, original: cm.value, translated });
-    }
+      return { username: cm.username, rating: cm.rating, original: cm.value, translated };
+    }));
 
     const out = { reviews, bggUrl };
     await kv.set(cacheKey, out, { expiresIn: 604800 }); // 7일 캐시
