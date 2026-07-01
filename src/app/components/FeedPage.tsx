@@ -2204,7 +2204,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                     }}>
                     {isVideo(url)
                       ? <video src={url} controls playsInline className="w-full object-contain bg-gray-50" style={{ maxHeight: '480px' }} onClick={e => e.stopPropagation()} />
-                      : <img src={url} className="w-full object-contain cursor-pointer bg-gray-50"
+                      : <img src={url} loading="lazy" decoding="async" className="w-full object-contain cursor-pointer bg-gray-50"
                           style={{ maxHeight: '480px' }}
                           onClick={() => setLightboxIndex(i)} />}
                   </div>
@@ -2223,7 +2223,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
                     <div key={i} className="w-full flex-shrink-0 snap-center flex items-center justify-center bg-[#c9c9c9]">
   {isVideo(url)
     ? <video src={url} controls playsInline className="w-full h-auto" onClick={e => e.stopPropagation()} />
-    : <img src={url} className="w-full h-auto cursor-pointer"
+    : <img src={url} loading="lazy" decoding="async" className="w-full h-auto cursor-pointer"
         onClick={() => setLightboxIndex(i)} />}
 </div>
                   ))}

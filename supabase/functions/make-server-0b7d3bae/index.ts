@@ -4432,6 +4432,11 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+    // 피드 payload 상한 — 최근 300개만 반환 (전체 스캔+임베드 댓글로 4MB+ 되던 것 방지).
+    // 더 오래된 글은 프로필/게임피드/검색/직접링크로 접근 가능.
+    const FEED_LIMIT = 300;
+    filtered = filtered.slice(0, FEED_LIMIT);
+
     // userRankPoints 병렬 조회로 붙이기
     const postsWithRank = await Promise.all(filtered.map(async (post: any) => {
       if (post.userRankPoints) return post; // 이미 있으면 스킵
