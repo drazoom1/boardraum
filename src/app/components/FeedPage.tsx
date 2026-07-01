@@ -18,7 +18,7 @@ import { InfluencerBanner } from './InfluencerBanner';
 
 const supabase = getSupabaseClient();
 
-const BASE_CATEGORIES = ['전체', '이벤트', '자유', '정보', '게임리뷰', '질문'] as const;
+const BASE_CATEGORIES = ['전체', '소식', '이벤트', '자유', '정보', '게임리뷰', '질문'] as const;
 type BaseCategory = typeof BASE_CATEGORIES[number];
 const SUBCATEGORIES: Record<string, string[]> = {
   '숙제': ['최근 숙제', '지난 숙제'],
