@@ -1019,7 +1019,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         (async () => {
           try {
             const bidOf = (g: any) => String(g?.bggId || g?.id || '').replace(/^bgg_/, '');
-            const wants = (g: any) => !g?.recommendedPlayers || !g?.playTime || !g?.difficulty;
+            const hasRec = (s: any) => typeof s === 'string' && s.includes('추천');
+            // 정보가 비었거나, 추천인원이 옛 기본포맷("4명"처럼 '추천' 없는 값)이면 보강 대상.
+            const wants = (g: any) => !hasRec(g?.recommendedPlayers) || !g?.playTime || !g?.difficulty;
             let pending = [...new Set(
               [...owned, ...wishlist].filter((g) => /^\d+$/.test(bidOf(g)) && wants(g)).map(bidOf)
             )];
@@ -1047,7 +1049,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               if (!inf) return g;
               const next = { ...g };
               let ch = false;
-              if (!next.recommendedPlayers && inf.recommendedPlayers) { next.recommendedPlayers = inf.recommendedPlayers; ch = true; }
+              // 추천인원: 비었거나 옛 기본포맷('추천' 없음)이면 BGG 값(추천 포함)으로 업그레이드.
+              if (inf.recommendedPlayers && !hasRec(next.recommendedPlayers) && next.recommendedPlayers !== inf.recommendedPlayers) {
+                next.recommendedPlayers = inf.recommendedPlayers; ch = true;
+              }
               if (!next.playTime && inf.playTime) { next.playTime = inf.playTime; ch = true; }
               if (!next.difficulty && inf.difficulty) { next.difficulty = inf.difficulty; ch = true; }
               return ch ? next : g;
