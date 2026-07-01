@@ -223,19 +223,24 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   const [showFirstPostCelebration, setShowFirstPostCelebration] = useState(false);
   const [firstPostCardDismissed, setFirstPostCardDismissed] = useState(false);
 
-  // 모바일 키보드 대응: 키보드가 올라오면 paddingBottom으로 모달을 밀어올림
+  // 모바일 키보드 대응: 컨테이너를 visualViewport(키보드 위 실제 보이는 영역)에 정확히 맞춘다.
   const [vvHeight, setVvHeight] = useState<number>(() =>
     typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 800
   );
+  const [vvOffsetTop, setVvOffsetTop] = useState<number>(0);
   useEffect(() => {
     const update = () => {
       const vv = window.visualViewport;
       setVvHeight(vv ? vv.height : window.innerHeight);
+      setVvOffsetTop(vv ? vv.offsetTop : 0);
     };
+    update();
     window.visualViewport?.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('scroll', update);
     window.addEventListener('resize', update);
     return () => {
       window.visualViewport?.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
     };
   }, []);
@@ -759,18 +764,17 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
   return (
     <>
     <div
-      className="fixed inset-0 z-[9990] flex flex-col bg-white"
+      className="fixed left-0 right-0 z-[9990] flex flex-col bg-white"
       style={{
-        paddingBottom: keyboardHeight > 0 ? keyboardHeight : undefined,
-        transition: 'padding-bottom 0.25s ease',
+        top: vvOffsetTop,
+        height: vvHeight,
+        transition: 'height 0.2s ease, top 0.2s ease',
       }}
     >
       <div
-        className="bg-white flex-1 flex flex-col w-full sm:max-w-2xl sm:mx-auto sm:border-x border-gray-100"
+        className="bg-white flex-1 min-h-0 flex flex-col w-full sm:max-w-2xl sm:mx-auto sm:border-x border-gray-100"
         style={{
-          paddingTop: 'env(safe-area-inset-top)',
-          maxHeight: keyboardHeight > 0 ? vvHeight - 16 : undefined,
-          transition: 'max-height 0.25s ease',
+          paddingTop: keyboardHeight > 0 ? undefined : 'env(safe-area-inset-top)',
         }}
       >
         {/* 헤더 */}
@@ -1609,10 +1613,11 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
               )}
             </div>
           </div>
-          {/* 게시 버튼 (본문 박스 아래, 우측 정렬) */}
-          <div className="flex justify-end pt-3">
+          {/* 게시 버튼 — 하단 고정 바 (키보드 위에 항상 보이게) */}
+          <div className="flex-shrink-0 flex justify-end px-4 sm:px-5 py-2.5 border-t border-gray-100 bg-white"
+            style={{ paddingBottom: keyboardHeight > 0 ? 10 : 'calc(env(safe-area-inset-bottom) + 10px)' }}>
             <button onClick={() => submit(false)} disabled={submitting || !content.trim()}
-              className="h-10 px-6 bg-gray-900 text-white rounded-full text-sm font-bold disabled:opacity-40 hover:bg-gray-700 transition-colors flex items-center justify-center">
+              className="h-10 px-7 bg-gray-900 text-white rounded-full text-sm font-bold disabled:opacity-40 hover:bg-gray-700 transition-colors flex items-center justify-center">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : '게시하기'}
             </button>
           </div>
