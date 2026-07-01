@@ -883,11 +883,11 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
         onInteractOutside={(e) => { if (showBggImport || showExcelImport) e.preventDefault(); }}
         onEscapeKeyDown={(e) => { if (showBggImport || showExcelImport) e.preventDefault(); }}>
         <DialogHeader>
-          <DialogTitle>게임 추가 {step === 1 ? '(1/3)' : step === 2 ? '(2/3)' : '(3/3)'}</DialogTitle>
+          <DialogTitle>게임 추가</DialogTitle>
           <DialogDescription>
-            {step === 1 && 'BoardGameGeek에서 게임을 검색하세요'}
-            {step === 2 && '게임 정보를 확인하세요'}
-            {step === 3 && '규칙 영상 URL을 입력하세요'}
+            {step === 1 && '게임 이름으로 검색해 바로 추가하세요'}
+            {step === 2 && '정보를 확인하고 등록하세요'}
+            {step === 3 && '규칙 영상을 추가하세요 (선택)'}
           </DialogDescription>
         </DialogHeader>
 
@@ -911,56 +911,9 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
         {/* Step 1: 검색 */}
         {step === 1 && (
           <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
-            {/* BGG 컬렉션 + 엑셀 등록 버튼 */}
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => { setShowBggImport(true); setBggCollection([]); setBggImportSelected(new Set()); }}
-                className="flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-900 hover:bg-gray-50 transition-all group">
-                <Library className="w-4 h-4 text-gray-400 group-hover:text-gray-700" />
-                <span className="text-sm font-semibold text-gray-600 group-hover:text-gray-900">BGG 컬렉션</span>
-              </button>
-              <label className="flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-900 hover:bg-gray-50 transition-all group cursor-pointer">
-                <FileSpreadsheet className="w-4 h-4 text-gray-400 group-hover:text-gray-700" />
-                <span className="text-sm font-semibold text-gray-600 group-hover:text-gray-900">엑셀 등록</span>
-                <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden" onChange={e => { if (e.target.files?.[0]) handleExcelFile(e.target.files[0]); e.target.value = ''; }} />
-              </label>
-            </div>
-
-            {/* 직접 등록 버튼 - 상단에 눈에 띄게 배치 */}
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="font-semibold text-blue-900 mb-1">BGG에 없는 게임인가요?</h4>
-                  <p className="text-sm text-blue-700">
-                    직접 게임 정보를 입력하여 등록할 수 있습니다
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setIsManualEntry(true);
-                    setStep(2);
-                    toast.info('직접 등록 모드로 전환되었습니다');
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  직접 등록
-                </Button>
-              </div>
-            </div>
-
-            {/* 구분선 */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">또는 BGG에서 검색</span>
-              </div>
-            </div>
-            
+            {/* 게임 검색 (핵심 — 맨 위 크게) */}
             <div className="space-y-2 relative">
-              <Label htmlFor="search">게임 검색</Label>
+              <Label htmlFor="search" className="text-base font-bold">어떤 게임을 추가할까요?</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <Input
@@ -1109,6 +1062,26 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
                 </Button>
               </div>
             )}
+
+            {/* 다른 방법 — 하단에 컴팩트하게 */}
+            <div className="pt-3 mt-1 border-t border-gray-100">
+              <p className="text-xs text-gray-400 mb-2">다른 방법으로 추가</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => { setShowBggImport(true); setBggCollection([]); setBggImportSelected(new Set()); }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-600 transition-colors">
+                  <Library className="w-4 h-4" /> BGG 컬렉션 한번에
+                </button>
+                <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-600 transition-colors cursor-pointer">
+                  <FileSpreadsheet className="w-4 h-4" /> 엑셀
+                  <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden" onChange={e => { if (e.target.files?.[0]) handleExcelFile(e.target.files[0]); e.target.value = ''; }} />
+                </label>
+                <button type="button" onClick={() => { setIsManualEntry(true); setStep(2); toast.info('직접 등록 모드로 전환되었습니다'); }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-600 transition-colors">
+                  <Upload className="w-4 h-4" /> 직접 등록
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">BGG에 없는 게임은 ‘직접 등록’ · 여러 개는 ‘BGG 컬렉션·엑셀’</p>
+            </div>
           </div>
         )}
 
