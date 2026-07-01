@@ -1012,27 +1012,38 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         lastLoadTimeRef.current = Date.now(); // 캐시 시각 갱신
         setIsInitialLoad(false); isInitialLoadRef.current = false;
 
-        // 게임정보(추천인원/시간/난이도) 자동 보강: 예전에 담아 정보가 비어있는 게임을
-        // BGG 캐시에서 채워 카드에 표시한다. 논블로킹 + 기존 값은 덮지 않는다(fill-empty).
+        // 게임정보(추천인원/시간/난이도) 영구 마이그레이션: 정보가 비어있는 게임을 BGG에서
+        // 채워 컬렉션에 저장한다. 논블로킹 + 기존 값은 덮지 않음(fill-empty).
+        // BGG 조회는 서버가 요청당 30개씩 처리하므로, 남은 게 없을 때까지 루프한다.
+        // 저장까지 하므로 다음 로드부터는 보강 대상이 없어 재실행되지 않는다.
         (async () => {
           try {
-            const needIds = new Set<string>();
+            const bidOf = (g: any) => String(g?.bggId || g?.id || '').replace(/^bgg_/, '');
             const wants = (g: any) => !g?.recommendedPlayers || !g?.playTime || !g?.difficulty;
-            for (const g of [...owned, ...wishlist]) {
-              const bid = String(g?.bggId || g?.id || '').replace(/^bgg_/, '');
-              if (/^\d+$/.test(bid) && wants(g)) needIds.add(bid);
+            let pending = [...new Set(
+              [...owned, ...wishlist].filter((g) => /^\d+$/.test(bidOf(g)) && wants(g)).map(bidOf)
+            )];
+            if (pending.length === 0) return;
+
+            const infoAll: Record<string, any> = {};
+            for (let iter = 0; iter < 25 && pending.length > 0; iter++) {
+              const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/games/player-info`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${validToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bggIds: pending }),
+              });
+              if (!res.ok) break;
+              const { info, attempted } = await res.json();
+              Object.assign(infoAll, info || {});
+              const done = new Set<string>(Array.isArray(attempted) ? attempted : Object.keys(info || {}));
+              const next = pending.filter((id) => !done.has(id));
+              if (next.length === pending.length) break; // 진전 없음 → 무한루프 방지
+              pending = next;
             }
-            if (needIds.size === 0) return;
-            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/games/player-info`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${validToken}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bggIds: [...needIds] }),
-            });
-            if (!res.ok) return;
-            const { info } = await res.json();
-            if (!info || Object.keys(info).length === 0) return;
+            if (Object.keys(infoAll).length === 0) return;
+
             const merge = (g: any) => {
-              const inf = info[String(g?.bggId || g?.id || '').replace(/^bgg_/, '')];
+              const inf = infoAll[bidOf(g)];
               if (!inf) return g;
               const next = { ...g };
               let ch = false;
@@ -1045,8 +1056,11 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
             const mWishlist = wishlist.map(merge);
             const ownedChanged = mOwned.some((g: any, i: number) => g !== owned[i]);
             const wishChanged = mWishlist.some((g: any, i: number) => g !== wishlist[i]);
+            if (!ownedChanged && !wishChanged) return;
             if (ownedChanged) { setOwnedGames(mOwned); try { localStorage.setItem(LC_OWNED, JSON.stringify(mOwned)); } catch {} }
             if (wishChanged) { setWishlistGames(mWishlist); try { localStorage.setItem(LC_WISHLIST, JSON.stringify(mWishlist)); } catch {} }
+            // 영구 저장(한 번). 실패해도 표시는 이미 반영됨.
+            if (userId) { try { await saveToServer(mOwned, mWishlist, userId); } catch {} }
           } catch {}
         })();
 

@@ -1042,6 +1042,7 @@ app.post("/make-server-0b7d3bae/games/player-info", async (c) => {
     }
 
     // 2) 캐시 미스 → BGG 조회(요청당 최대 30개, 동시성 6), 캐시에 저장
+    const cacheHitIds = ids.filter((id) => detailById.has(id));
     const missing = ids.filter((id) => !detailById.has(id));
     const bggToken = Deno.env.get('BGG_API_TOKEN');
     const toFetch = bggToken ? missing.slice(0, 30) : [];
@@ -1058,7 +1059,10 @@ app.post("/make-server-0b7d3bae/games/player-info", async (c) => {
       const det = detailById.get(id);
       if (det) info[id] = detailToPlayerInfo(det);
     }
-    return c.json({ info, cached: ids.length - missing.length, fetched: toFetch.length, remaining: Math.max(0, missing.length - toFetch.length) });
+    // attempted = 이번 호출에서 처리 시도한 id(캐시 히트 + BGG 조회 시도).
+    // BGG에 데이터가 없어 info에 안 담긴 id도 attempted엔 포함 → 클라가 무한 재조회하지 않도록.
+    const attempted = [...new Set([...cacheHitIds, ...toFetch])];
+    return c.json({ info, attempted, cached: cacheHitIds.length, fetched: toFetch.length, remaining: Math.max(0, missing.length - toFetch.length) });
   } catch (e) {
     return c.json({ info: {}, error: String(e) }, 500);
   }
@@ -4367,25 +4371,59 @@ app.get("/make-server-0b7d3bae/community/posts/by-game/:gameId", async (c) => {
     const cached = await kv.get(cacheKey);
     if (cached) return c.json({ posts: cached });
 
-    const postsData = await postsAll();
-    const posts = postsData
-      .map((d: any) => d.value)
-      .filter((p: any) => {
-        if (!p || p.isDraft || p.isPrivate) return false;
-        const games = Array.isArray(p.linkedGames) ? p.linkedGames : (p.linkedGame ? [p.linkedGame] : []);
-        const normalizeId = (id?: string) => id ? id.replace(/^bgg_/, '') : '';
-        const normGameId = normalizeId(gameId);
-        return games.some((g: any) =>
-          normalizeId(g?.id) === normGameId ||
-          normalizeId(g?.bggId) === normGameId ||
-          g?.id === gameId ||
-          g?.bggId === gameId
-        );
-      })
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
+    const normalizeId = (id?: string) => id ? id.replace(/^bgg_/, '') : '';
+    const normGameId = normalizeId(gameId);
+    const matchGames = (games: any[]) => Array.isArray(games) && games.some((g: any) =>
+      normalizeId(g?.id) === normGameId ||
+      normalizeId(g?.bggId) === normGameId ||
+      g?.id === gameId ||
+      g?.bggId === gameId
+    );
 
-    await kv.set(cacheKey, posts, 180).catch(() => {});
+    // 1) 가벼운 스캔: 판별에 필요한 필드만 투영(댓글/본문 제외) → 전송량 최소화.
+    //    이 게임에 연결된 글의 key만 추린다. 실패 시 기존 전체 스캔으로 폴백.
+    let matchedKeys: string[] | null = [];
+    try {
+      const pageSize = 999;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase.from('kv_store_0b7d3bae')
+          .select('key, lg:value->linkedGames, lg1:value->linkedGame, dr:value->isDraft, pv:value->isPrivate')
+          .like('key', 'beta_post_%')
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data?.length) break;
+        for (const r of data as any[]) {
+          if (r.dr === true || r.pv === true) continue;
+          const games = Array.isArray(r.lg) ? r.lg : (r.lg1 ? [r.lg1] : []);
+          if (matchGames(games)) matchedKeys!.push(r.key);
+        }
+        if (data.length < pageSize) break;
+      }
+    } catch (e) {
+      console.error('by-game 투영 스캔 실패 → 전체 스캔 폴백:', e);
+      matchedKeys = null;
+    }
+
+    let posts: any[];
+    if (matchedKeys !== null) {
+      const full = matchedKeys.length ? (await kv.mget(matchedKeys)) : [];
+      posts = full.filter(Boolean)
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 50);
+    } else {
+      const postsData = await postsAll();
+      posts = postsData
+        .map((d: any) => d.value)
+        .filter((p: any) => {
+          if (!p || p.isDraft || p.isPrivate) return false;
+          const games = Array.isArray(p.linkedGames) ? p.linkedGames : (p.linkedGame ? [p.linkedGame] : []);
+          return matchGames(games);
+        })
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 50);
+    }
+
+    await kv.set(cacheKey, posts, 1800).catch(() => {}); // 게임피드 멤버십은 글 생성/수정/삭제 시 무효화됨
     return c.json({ posts });
   } catch (error) {
     return c.json({ posts: [], error: String(error) }, 500);
