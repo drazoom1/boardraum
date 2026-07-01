@@ -503,11 +503,25 @@ const CommentSection = memo(function CommentSection({ post, accessToken, userId,
   const internalRef = useRef<HTMLInputElement>(null);
   const resolvedRef = inputRef || internalRef;
 
+  // 피드는 성능을 위해 댓글을 빼고 개수(commentCount)만 보낸다.
+  // 댓글창이 열릴 때(=이 컴포넌트 마운트) 단건 조회로 실제 댓글을 로드한다.
+  useEffect(() => {
+    if ((post.comments || []).length > 0) return; // 이미 있으면(낙관적/임베드) 재조회 안 함
+    let alive = true;
+    fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/community/posts/${post.id}`,
+      { headers: { Authorization: `Bearer ${accessToken || publicAnonKey}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (alive && Array.isArray(d?.post?.comments)) setLocalComments(d.post.comments); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   // 다른 기기 실시간 댓글 반영 - 새 댓글만 추가, 기존 localComments 보존
   const prevCommentsRef = useRef<any[]>(post.comments || []);
   useEffect(() => {
     const prev = prevCommentsRef.current;
     const curr = post.comments || [];
+    if (curr.length === 0) { prevCommentsRef.current = curr; return; } // 피드 lean(빈 댓글)일 땐 로드된 댓글 건드리지 않음
     const prevIds = new Set(prev.map((c: any) => c.id));
     const currIds = new Set(curr.map((c: any) => c.id));
     // 새로 생긴 댓글 추가
@@ -2308,7 +2322,7 @@ const FeedCardInner = function FeedCard({ post, accessToken, userId, userName, m
             }}
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors">
             <MessageCircle className="w-4 h-4" />
-            <span>{comments.length || ''}</span>
+            <span>{((post as any).commentCount ?? comments.length) || ''}</span>
           </button>
           <button onClick={share} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors">
             <Share2 className="w-4 h-4" />
@@ -4316,14 +4330,16 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
   const optimisticAddComment = useCallback((postId: string, comment: any) => {
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
-      return { ...p, comments: [...(p.comments || []), comment] };
+      const base = (p as any).commentCount ?? (p.comments?.length || 0);
+      return { ...p, comments: [...(p.comments || []), comment], commentCount: base + 1 };
     }));
   }, []);
 
   const optimisticDeleteComment = useCallback((postId: string, commentId: string) => {
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
-      return { ...p, comments: (p.comments || []).filter(c => c.id !== commentId) };
+      const base = (p as any).commentCount ?? (p.comments?.length || 0);
+      return { ...p, comments: (p.comments || []).filter(c => c.id !== commentId), commentCount: Math.max(0, base - 1) };
     }));
   }, []);
 

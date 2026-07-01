@@ -4472,11 +4472,18 @@ app.get("/make-server-0b7d3bae/community/posts", async (c) => {
       }));
     } catch {}
 
-    // 캐시 저장 (백그라운드)
-    kv.set(cacheKey, { posts: postsEnriched, cachedAt: Date.now() }).catch(() => {});
+    // 댓글은 payload의 대부분(≈70%)을 차지 → 피드에선 개수만 전달하고 본문은 뺀다.
+    // 댓글은 글을 펼칠 때 단건 조회(GET /community/posts/:id)로 로드한다.
+    const leanPosts = postsEnriched.map((p: any) => {
+      const cnt = Array.isArray(p.comments) ? p.comments.length : 0;
+      return { ...p, comments: [], commentCount: cnt };
+    });
+
+    // 캐시 저장 (백그라운드) — lean 버전 저장
+    kv.set(cacheKey, { posts: leanPosts, cachedAt: Date.now() }).catch(() => {});
 
     // 응답 시 비공개 게시물 필터
-    const visiblePosts = postsEnriched.filter((p: any) => !p.isPrivate || p.userId === userId || isAdmin);
+    const visiblePosts = leanPosts.filter((p: any) => !p.isPrivate || p.userId === userId || isAdmin);
     return c.json({ posts: visiblePosts });
   } catch (error) {
     console.error('❌ [Community] Get community posts error:', error);

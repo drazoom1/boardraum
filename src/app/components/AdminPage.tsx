@@ -1130,7 +1130,7 @@ function AnalyticsSection({ accessToken }: { accessToken: string }) {
 
   // ── 계산된 통계 ──
   const totalLikes = recentPosts.reduce((s, p) => s + (Array.isArray(p.likes) ? p.likes.length : 0), 0);
-  const totalComments = recentPosts.reduce((s, p) => s + (Array.isArray(p.comments) ? p.comments.length : 0), 0);
+  const totalComments = recentPosts.reduce((s, p) => s + (p.commentCount ?? (Array.isArray(p.comments) ? p.comments.length : 0)), 0);
   const categoryDist = recentPosts.reduce((acc: Record<string, number>, p) => { const c = p.category || '기타'; acc[c] = (acc[c] || 0) + 1; return acc; }, {});
   const categoryData = Object.entries(categoryDist).map(([label, value]) => ({ label, value: value as number, color: CATEGORY_COLORS[label] || '#9ca3af' }));
   const dailyPosts = getDailyCounts(recentPosts, 'createdAt', 14);
@@ -1405,7 +1405,7 @@ function AnalyticsSection({ accessToken }: { accessToken: string }) {
                         <div className="flex items-center gap-3 mt-0.5">
                           <span className="text-xs text-gray-400">{p.userName}</span>
                           <span className="text-xs text-red-400 font-medium">♥ {Array.isArray(p.likes) ? p.likes.length : 0}</span>
-                          <span className="text-xs text-blue-400 font-medium">💬 {Array.isArray(p.comments) ? p.comments.length : 0}</span>
+                          <span className="text-xs text-blue-400 font-medium">💬 {p.commentCount ?? (Array.isArray(p.comments) ? p.comments.length : 0)}</span>
                         </div>
                       </div>
                     </div>
