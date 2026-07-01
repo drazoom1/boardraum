@@ -993,6 +993,77 @@ app.post("/make-server-0b7d3bae/bgg-details", async (c) => {
   }
 });
 
+// ── 보유/위시 카드용 게임정보(추천인원/시간/난이도) 배치 보강 ──────────────
+// 클라 AddGameDialog.formatPlayers/PlayTime/Difficulty와 동일한 포맷을 서버에서 재현한다.
+function fmtPlayersSrv(min?: number, max?: number, best?: string): string {
+  let base = '';
+  if (min && max) base = min === max ? `${min}명` : `${min}-${max}명`;
+  else if (min) base = `${min}명`;
+  else if (max) base = `${max}명`;
+  const b = (best || '').toString().trim().replace(/명$/, '');
+  if (b && base) return `${base} (추천 ${b}명)`;
+  if (b) return `${b}명`;
+  return base;
+}
+function fmtPlayTimeSrv(minPT?: number, maxPT?: number): string {
+  if (minPT && maxPT) return minPT === maxPT ? `${minPT}분` : `${minPT}-${maxPT}분`;
+  if (maxPT) return `${maxPT}분`;
+  if (minPT) return `${minPT}분`;
+  return '';
+}
+function fmtDifficultySrv(complexity?: number): string {
+  if (!complexity || complexity <= 0) return '';
+  const d = complexity < 2 ? '초급' : complexity < 3 ? '중급' : complexity < 4 ? '중상급' : '고급';
+  return `${d} (${complexity.toFixed(1)}/5)`;
+}
+function detailToPlayerInfo(det: any) {
+  return {
+    recommendedPlayers: fmtPlayersSrv(det?.minPlayers, det?.maxPlayers, det?.bestPlayerCount),
+    playTime: fmtPlayTimeSrv(det?.minPlayTime, det?.maxPlayTime),
+    difficulty: fmtDifficultySrv(det?.complexity),
+  };
+}
+
+// POST { bggIds: string[] } → { info: { [bggId]: { recommendedPlayers, playTime, difficulty } } }
+// 캐시(bgg_details_) 우선, 미스는 캡을 두고 BGG에서 보강(다음 호출엔 캐시로 빨라짐).
+app.post("/make-server-0b7d3bae/games/player-info", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const raw: any[] = Array.isArray(body?.bggIds) ? body.bggIds : [];
+    const ids = [...new Set(raw.map((x) => String(x).replace(/^bgg_/, '').trim()).filter((x) => /^\d+$/.test(x)))].slice(0, 500);
+    if (ids.length === 0) return c.json({ info: {} });
+
+    // 1) 캐시 조회 (in() URL 길이 제한 회피 위해 100개씩 청크)
+    const detailById = new Map<string, any>();
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100).map((id) => `bgg_details_${id}`);
+      const { data: rows } = await supabase.from('kv_store_0b7d3bae').select('key,value').in('key', chunk);
+      (rows || []).forEach((r: any) => detailById.set(String(r.key).replace('bgg_details_', ''), r.value));
+    }
+
+    // 2) 캐시 미스 → BGG 조회(요청당 최대 30개, 동시성 6), 캐시에 저장
+    const missing = ids.filter((id) => !detailById.has(id));
+    const bggToken = Deno.env.get('BGG_API_TOKEN');
+    const toFetch = bggToken ? missing.slice(0, 30) : [];
+    for (let i = 0; i < toFetch.length; i += 6) {
+      const batch = toFetch.slice(i, i + 6);
+      await Promise.all(batch.map(async (id) => {
+        const det = await fetchAndParseBggDetails(id, bggToken!);
+        if (det) { detailById.set(id, det); kv.set(`bgg_details_${id}`, det).catch(() => {}); }
+      }));
+    }
+
+    const info: Record<string, any> = {};
+    for (const id of ids) {
+      const det = detailById.get(id);
+      if (det) info[id] = detailToPlayerInfo(det);
+    }
+    return c.json({ info, cached: ids.length - missing.length, fetched: toFetch.length, remaining: Math.max(0, missing.length - toFetch.length) });
+  } catch (e) {
+    return c.json({ info: {}, error: String(e) }, 500);
+  }
+});
+
 // BGG 데이터 파싱 헬퍼 (migrate-all에서도 재사용)
 async function fetchAndParseBggDetails(id: string, bggToken: string): Promise<any | null> {
   try {
@@ -2339,8 +2410,13 @@ app.get("/make-server-0b7d3bae/data/load", async (c) => {
 });
 
 // Data: Get all registered games (from all users' owned and wishlist)
+const ALL_GAMES_CACHE_KEY = 'all_games_cache_v2';
 app.get("/make-server-0b7d3bae/data/all-games", async (c) => {
   try {
+    // 게임 카탈로그는 자주 안 바뀌므로 5분 캐시. 게임 등록/삭제 시 무효화한다.
+    const cached = await kv.get(ALL_GAMES_CACHE_KEY);
+    if (cached?.games) return c.json(cached);
+
     const normName = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '');
 
     // dedup 추적: bggId Set + 정규화 이름 Set
@@ -2397,16 +2473,17 @@ app.get("/make-server-0b7d3bae/data/all-games", async (c) => {
       }
     }
 
-    // imageUrl 없는 게임: BGG 캐시에서 보완
-    for (const game of allGames) {
-      if (!game.imageUrl && game.bggId) {
-        const cached = await kv.get(`bgg_details_${game.bggId}`) || await kv.get(`bgg_game_full_${game.bggId}`);
-        if (cached?.imageUrl) game.imageUrl = cached.imageUrl;
-        else if (cached?.image) game.imageUrl = cached.image;
-      }
-    }
+    // imageUrl 없는 게임: BGG 캐시에서 보완 (순차 N+1 → 병렬로 처리)
+    const needImage = allGames.filter((g) => !g.imageUrl && g.bggId);
+    await Promise.all(needImage.map(async (game) => {
+      const cached = await kv.get(`bgg_details_${game.bggId}`) || await kv.get(`bgg_game_full_${game.bggId}`);
+      if (cached?.imageUrl) game.imageUrl = cached.imageUrl;
+      else if (cached?.image) game.imageUrl = cached.image;
+    }));
 
-    return c.json({ games: allGames, count: allGames.length, timestamp: new Date().toISOString() });
+    const result = { games: allGames, count: allGames.length, timestamp: new Date().toISOString() };
+    await kv.set(ALL_GAMES_CACHE_KEY, result, 300).catch(() => {});
+    return c.json(result);
 
   } catch (error) {
     console.error('❌ [All Games] Error:', error);
@@ -4327,7 +4404,15 @@ app.get("/make-server-0b7d3bae/community/posts/by-user/:userId", async (c) => {
     const role = await getUserRole(user.id);
     const isAdmin = role === 'admin';
 
-    const postsData = await postsAll();
+    // 전체 글(수천 개)을 다 받아오지 않고, DB에서 userId로 바로 필터링해 해당 유저 글만 가져온다.
+    // 필터 쿼리 실패 시 기존 전체 스캔으로 폴백(느리지만 정상 동작 보장).
+    let postsData: Array<{ key: string; value: any }>;
+    try {
+      postsData = await kv.getByPrefixWhereField('beta_post_', 'userId', targetUserId);
+    } catch (e) {
+      console.error('by-user 필터 조회 실패 → 전체 스캔 폴백:', e);
+      postsData = await postsAll();
+    }
     const posts = postsData
       .map((d: any) => d.value)
       .filter((p: any) => {
@@ -12903,6 +12988,7 @@ app.put("/make-server-0b7d3bae/admin/site-games/:gameId", async (c) => {
     const existing = await kv.get(`site_game_${gameId}`);
     if (!existing) return c.json({ error: '게임을 찾을 수 없어요' }, 404);
     await kv.set(`site_game_${gameId}`, { ...existing, ...body, id: gameId });
+    kv.del(ALL_GAMES_CACHE_KEY).catch(() => {});
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
@@ -12914,6 +13000,7 @@ app.delete("/make-server-0b7d3bae/admin/site-games/:gameId", async (c) => {
   try {
     const gameId = c.req.param('gameId');
     await kv.del(`site_game_${gameId}`);
+    kv.del(ALL_GAMES_CACHE_KEY).catch(() => {});
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });
@@ -13196,6 +13283,7 @@ app.post("/make-server-0b7d3bae/site-games/register", async (c) => {
     // 이중쓰기: games 테이블에도 반영 (KV 최신값 기준)
     const finalGame = await kv.get(siteKey);
     if (finalGame) await upsertGameRow(finalGame);
+    kv.del(ALL_GAMES_CACHE_KEY).catch(() => {}); // 새 게임 즉시 반영
     return c.json({ success: true });
   } catch (e) { return c.json({ error: String(e) }, 500); }
 });

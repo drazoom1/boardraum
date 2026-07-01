@@ -102,3 +102,28 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
   const items = await getByPrefixWithKeys(prefix);
   return items.map((d) => d.value);
 };
+
+// prefix + JSONB 최상위 필드값으로 DB에서 직접 필터링해 조회한다.
+// 전체 스캔(모든 행을 함수로 가져와 JS에서 필터) 대신 매칭 행만 전송받아 전송량/파싱을 최소화한다.
+// (value->>field) 인덱스가 있으면 더 빨라지고, 없어도 서버측 필터라 전체 fetch보다 훨씬 저렴하다.
+export const getByPrefixWhereField = async (
+  prefix: string, field: string, value: string,
+): Promise<{ key: string, value: any }[]> => {
+  const supabase = client();
+  const pageSize = 999;
+  const all: { key: string, value: any }[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from("kv_store_0b7d3bae")
+      .select("key, value").like("key", prefix + "%")
+      .filter(`value->>${field}`, "eq", value)
+      .order("key", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+};

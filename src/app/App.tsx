@@ -1011,7 +1011,45 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
         setLastSyncTime(new Date());
         lastLoadTimeRef.current = Date.now(); // 캐시 시각 갱신
         setIsInitialLoad(false); isInitialLoadRef.current = false;
-        
+
+        // 게임정보(추천인원/시간/난이도) 자동 보강: 예전에 담아 정보가 비어있는 게임을
+        // BGG 캐시에서 채워 카드에 표시한다. 논블로킹 + 기존 값은 덮지 않는다(fill-empty).
+        (async () => {
+          try {
+            const needIds = new Set<string>();
+            const wants = (g: any) => !g?.recommendedPlayers || !g?.playTime || !g?.difficulty;
+            for (const g of [...owned, ...wishlist]) {
+              const bid = String(g?.bggId || g?.id || '').replace(/^bgg_/, '');
+              if (/^\d+$/.test(bid) && wants(g)) needIds.add(bid);
+            }
+            if (needIds.size === 0) return;
+            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/games/player-info`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${validToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bggIds: [...needIds] }),
+            });
+            if (!res.ok) return;
+            const { info } = await res.json();
+            if (!info || Object.keys(info).length === 0) return;
+            const merge = (g: any) => {
+              const inf = info[String(g?.bggId || g?.id || '').replace(/^bgg_/, '')];
+              if (!inf) return g;
+              const next = { ...g };
+              let ch = false;
+              if (!next.recommendedPlayers && inf.recommendedPlayers) { next.recommendedPlayers = inf.recommendedPlayers; ch = true; }
+              if (!next.playTime && inf.playTime) { next.playTime = inf.playTime; ch = true; }
+              if (!next.difficulty && inf.difficulty) { next.difficulty = inf.difficulty; ch = true; }
+              return ch ? next : g;
+            };
+            const mOwned = owned.map(merge);
+            const mWishlist = wishlist.map(merge);
+            const ownedChanged = mOwned.some((g: any, i: number) => g !== owned[i]);
+            const wishChanged = mWishlist.some((g: any, i: number) => g !== wishlist[i]);
+            if (ownedChanged) { setOwnedGames(mOwned); try { localStorage.setItem(LC_OWNED, JSON.stringify(mOwned)); } catch {} }
+            if (wishChanged) { setWishlistGames(mWishlist); try { localStorage.setItem(LC_WISHLIST, JSON.stringify(mWishlist)); } catch {} }
+          } catch {}
+        })();
+
         devLog('✅ [Load] Data synced successfully');
       } else {
         devError('❌ [Load] Failed:', response.status);
