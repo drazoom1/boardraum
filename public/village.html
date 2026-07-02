@@ -11,14 +11,14 @@
   #wrap { display:flex; align-items:center; justify-content:center; height:100%; }
   canvas#cv { image-rendering:pixelated; max-width:100vw; max-height:100vh; border-radius:6px; }
   #hud { position:fixed; top:10px; left:10px; display:flex; gap:8px; align-items:center; z-index:5; }
-  .chip { background:rgba(0,0,0,.55); color:#fff; padding:6px 12px; border-radius:20px; font-size:14px; font-weight:700; }
+  .chip { background:rgba(0,0,0,.55); color:#fff; padding:6px 12px; border-radius:20px; font-size:14px; font-weight:700; border:none; cursor:pointer; }
   a.chip { text-decoration:none; }
-  #homeLink { position:fixed; top:10px; right:10px; z-index:5; }
+  #topRight { position:fixed; top:10px; right:10px; z-index:5; display:flex; gap:8px; }
   #hint { position:fixed; bottom:110px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.65); color:#fff; padding:8px 16px; border-radius:12px; font-size:14px; display:none; z-index:5; }
   #dpad { position:fixed; left:14px; bottom:14px; display:grid; grid-template:repeat(3,52px)/repeat(3,52px); gap:2px; z-index:6; opacity:.85; }
   #dpad button, #btnE { background:rgba(255,255,255,.18); border:1.5px solid rgba(255,255,255,.35); color:#fff; border-radius:12px; font-size:20px; font-weight:800; -webkit-user-select:none; user-select:none; }
   #btnE { position:fixed; right:18px; bottom:34px; width:72px; height:72px; border-radius:50%; font-size:22px; background:rgba(255,210,80,.25); border-color:rgba(255,210,80,.6); z-index:6; }
-  #creator { position:fixed; inset:0; background:rgba(12,20,14,.88); display:flex; align-items:center; justify-content:center; z-index:10; }
+  #creator { position:fixed; inset:0; background:rgba(12,20,14,.88); display:none; align-items:center; justify-content:center; z-index:10; }
   #creator .card { background:#fff; border-radius:20px; padding:24px; width:360px; text-align:center; }
   #creator h1 { font-size:20px; margin-bottom:4px; }
   #creator p { font-size:13px; color:#888; margin-bottom:12px; }
@@ -30,6 +30,19 @@
   #charGrid canvas { image-rendering:pixelated; }
   #creator button.go { margin-top:12px; width:100%; background:#111; color:#fff; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:800; cursor:pointer; }
   #loading { position:fixed; inset:0; background:#1d2b20; color:#fff; display:flex; align-items:center; justify-content:center; z-index:20; font-weight:800; }
+  .modal { position:fixed; inset:0; background:rgba(12,20,14,.8); display:none; align-items:center; justify-content:center; z-index:11; }
+  .modal .mcard { background:#fff; border-radius:20px; width:min(560px,92vw); max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
+  .modal .mhead { display:flex; align-items:center; padding:16px 20px 12px; border-bottom:1px solid #eee; }
+  .modal .mhead h2 { font-size:17px; flex:1; }
+  .modal .mhead button { border:none; background:#f2f2f2; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer; }
+  .modal .mbody { overflow-y:auto; padding:16px 20px 20px; }
+  #colGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:12px; }
+  #colGrid .gi img, #colGrid .gi .ph { width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:10px; background:#eee; display:flex; align-items:center; justify-content:center; font-weight:800; color:#fff; font-size:12px; text-align:center; padding:4px; }
+  #colGrid .gi p { font-size:11px; font-weight:700; color:#444; margin-top:4px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .newsItem { display:block; padding:12px 14px; border:1.5px solid #eee; border-radius:12px; margin-bottom:8px; text-decoration:none; color:#222; }
+  .newsItem:hover { background:#f8f8f8; }
+  .newsItem b { display:block; font-size:14px; margin-bottom:2px; }
+  .newsItem span { font-size:12px; color:#999; }
   @media (hover:hover) and (pointer:fine) { #dpad,#btnE { display:none; } }
 </style>
 </head>
@@ -39,7 +52,10 @@
   <span class="chip">🪙 <span id="pts">0</span></span>
   <span class="chip" id="loc">🏕️ 보드마을</span>
 </div>
-<a id="homeLink" class="chip" href="/">🏠 보드라움</a>
+<div id="topRight">
+  <button class="chip" id="btnChar">🎨 캐릭터</button>
+  <a class="chip" href="/">🏠 보드라움</a>
+</div>
 <div id="hint"></div>
 <div id="dpad">
   <span></span><button data-k="ArrowUp">▲</button><span></span>
@@ -48,22 +64,36 @@
 </div>
 <button id="btnE">E</button>
 
-<div id="creator" style="display:none">
+<div id="creator">
   <div class="card">
-    <h1>🏕️ 보드마을에 오신 걸 환영해요!</h1>
-    <p>캐릭터를 고르고 마을을 돌아다녀 보세요.<br>남쪽 길로 내려가면 보드게임광장이 있어요!</p>
+    <h1>🎨 내 캐릭터</h1>
+    <p>캐릭터와 닉네임을 골라주세요.</p>
     <input id="nm" placeholder="닉네임" maxlength="8" value="여행자">
-    <div class="swlabel">내 캐릭터</div>
+    <div class="swlabel">캐릭터 선택</div>
     <div id="charGrid"></div>
-    <button class="go" id="go">마을 입장 🎲</button>
+    <button class="go" id="go">저장하고 입장 🎲</button>
+  </div>
+</div>
+<div id="colModal" class="modal">
+  <div class="mcard">
+    <div class="mhead"><h2 id="colTitle">🎲 내 컬렉션</h2><button onclick="document.getElementById('colModal').style.display='none'">✕</button></div>
+    <div class="mbody"><div id="colGrid"></div></div>
+  </div>
+</div>
+<div id="newsModal" class="modal">
+  <div class="mcard">
+    <div class="mhead"><h2 id="newsTitle">📢 소식</h2><button onclick="document.getElementById('newsModal').style.display='none'">✕</button></div>
+    <div class="mbody" id="newsBody">불러오는 중...</div>
   </div>
 </div>
 <div id="loading">🎲 보드마을 불러오는 중...</div>
 
 <script>
-const TILE=32, COLS=30, ROWS=22, W=COLS*TILE, H=ROWS*TILE;
+const TILE=32, VW=960, VH=704;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 ctx.imageSmoothingEnabled=false;
+const SB='https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae';
+const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHZudG11ZWFmaWVlc3NnbmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3MDczMjUsImV4cCI6MjA3MDI4MzMyNX0.KG4yuo02jACcVOlG7av3bMFmRcfHK6lzu0x78RMhz0c';
 
 // ── 저장 ──
 const store={ get:(k,d)=>{try{const v=localStorage.getItem('village_'+k);return v?JSON.parse(v):d}catch{return d}}, set:(k,v)=>{try{localStorage.setItem('village_'+k,JSON.stringify(v))}catch{}} };
@@ -71,10 +101,10 @@ let points=store.get('points',0);
 document.getElementById('pts').textContent=points;
 
 // ── 에셋 ──
-const NCHAR=9; // lz1~lz9 (스카우트6+우체부3)
+const NCHAR=9;
 const ME=['grass1','grass2','tuft1','tuft2','tuft3','tuft4','tuft5','dirtauto','dirt_fp1','dirt_fp2',
   'waterauto','water2','lily1','lily2','tent_blue','tentS_green','tentS_blue','sign_camping','store_blue','store_pink',
-  'signboard2','camper','fire1','fire2','btable','lamp','fount1','fount2','fbush1','fbush2','fbush3',
+  'camper','fire1','fire2','btable','lamp','fount1','fount2','fbush1','fbush2','fbush3',
   'lantern','ball1','picnic','tree1','tree2','tree4','stadium'];
 for(let i=1;i<=NCHAR;i++) ME.push('lz'+i);
 const IMGS={};
@@ -86,42 +116,37 @@ toLoad.forEach(k=>{ const im=new Image(); im.src='village-assets/'+k+'.png';
   im.onerror=()=>{ console.warn('load fail',k); if(++loadedN>=toLoad.length) init(); }; });
 
 let me=store.get('me',null);
-if(me && !(typeof me.char==='string' && me.char.startsWith('lz'))) me=null; // 구버전 무시
-let charSel=0;
+if(me && !(typeof me.char==='string' && me.char.startsWith('lz'))) me=null;
+let charSel=1;
 
-// ── LimeZu 캐릭터 (스트립: row0=idle 6x4방향, row1=walk 6x4방향, 프레임 16x32) ──
-const DIRO={down:0,up:6,left:12,right:18};
+// ── LimeZu 캐릭터 (row0=idle, row1=walk / 방향순서: right,up,left,down) ──
+const DIRO={right:0,up:6,left:12,down:18};
 function drawLZ(img,X,Y,dir,moving,t,s=2){
   if(!img) return;
   const row=moving?32:0;
   const f=moving?Math.floor(t/110)%6:Math.floor(t/260)%6;
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(X,Y+1,9*s/1.6,3*s/1.6,0,0,7); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(X,Y+1,11,3.6,0,0,7); ctx.fill();
   ctx.drawImage(img,(DIRO[dir]+f)*16,row,16,32, X-8*s, Y-32*s, 16*s, 32*s);
 }
 
-// ═══════════ 씬 데이터 ═══════════
+// ═══════════ 유틸 ═══════════
 const rng=(x,y)=>{ let h=(x*374761393+y*668265263)^(x*y*1274126177); h=(h^(h>>13))*1103515245; return (h^(h>>16))>>>0; };
-function newGrid(v){ const g=[]; for(let y=0;y<ROWS;y++){ g[y]=[]; for(let x=0;x<COLS;x++) g[y][x]=v; } return g; }
-const setRect=(arr,x,y,w,h,v)=>{ for(let j=y;j<y+h;j++) for(let i=x;i<x+w;i++){ if(j>=0&&j<ROWS&&i>=0&&i<COLS) arr[j][i]=v; } };
-
-const SC={}; // camp / road / festa
-let scene='camp';
-
-// ---------- 공용 베이크 헬퍼 ----------
+function newGrid(cols,rows,v){ const g=[]; for(let y=0;y<rows;y++){ g[y]=[]; for(let x=0;x<cols;x++) g[y][x]=v; } return g; }
+const setRect=(arr,x,y,w,h,v)=>{ for(let j=y;j<y+h;j++) for(let i=x;i<x+w;i++){ if(arr[j]&&arr[j][i]!==undefined) arr[j][i]=v; } };
 function T(c,img,tx,ty,X,Y){ if(img) c.drawImage(img,tx*16,ty*16,16,16,X,Y,TILE,TILE); }
-function roadPiece(map,x,y){
-  const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<ROWS&&tx>=0&&tx<COLS&&map[ty][tx]===1; };
+function roadPiece(map,cols,rows,x,y){
+  const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<rows&&tx>=0&&tx<cols&&map[ty][tx]===1; };
   const n=is(0,-1),s=is(0,1),e=is(1,0),w=is(-1,0);
   return [!w?0:(!e?3:((x%2)?1:2)), !n?0:(!s?3:((y%2)?1:2))];
 }
-function bakeGround(c,map,pond){
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+function bakeGround(c,map,cols,rows,pond){
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
     const r=rng(x,y);
     T(c,IMGS[r%3===0?'grass2':'grass1'],0,0,x*TILE,y*TILE);
     if(map[y][x]===0 && r%7===0) T(c,IMGS['tuft'+(1+r%5)],0,0,x*TILE,y*TILE);
   }
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(map[y][x]===1){
-    const [ci,ri]=roadPiece(map,x,y);
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]===1){
+    const [ci,ri]=roadPiece(map,cols,rows,x,y);
     T(c,IMGS.dirtauto,ci,ri,x*TILE,y*TILE);
     const r=rng(x*3,y*5);
     if(r%23===0) T(c,IMGS[r%2?'dirt_fp1':'dirt_fp2'],0,0,x*TILE,y*TILE);
@@ -148,34 +173,69 @@ function plaque(c,cx,cy,text,big=false){
   c.fillStyle='#5c3f22'; c.fillText(text,cx,cy);
 }
 
-// ---------- 캠핑존 ----------
+// ═══════════ 업체/부스 데이터 ═══════════
+const COMPANIES=[
+  { name:'코리아보드게임즈', color:'#3f7fce', kw:['코보게','코리아보드','스플렌더','치킨차차'],
+    greet:'스플렌더 확장 2종, 7/6 출시예요! 🎉', games:[{id:'148228',n:'스플렌더'},{id:'3570',n:'치킨차차'},{n:'골프 (신작)'}] },
+  { name:'보드피아', color:'#4fa54c', kw:['보드피아','덱커스'],
+    greet:'덱커스 라이브룰스가 업데이트됐어요! 🃏', games:[{id:'443306',n:'덱커스'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+  { name:'팝콘게임즈', color:'#e0a13f', kw:['팝콘'],
+    greet:'7월 소식지 나왔어요~ 🍿', games:[{n:'7월 소식지 📰'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+  { name:'히트게임즈', color:'#d95555', kw:['히트게임즈','히트'],
+    greet:'여름 신작 준비 중! 기대해주세요 🔥', games:[{n:'여름 신작 🔥'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+  { name:'옐로우스타', color:'#d9b23a', kw:['옐로우'],
+    greet:'카페 옐로우미플로 놀러오세요 ☕', games:[{n:'옐로우미플 ☕'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+  { name:'보드엠', color:'#8e6ad1', kw:['보드엠'],
+    greet:'보드게임 최저가 도전! 📦', games:[{n:'오늘의 특가 📦'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+  { name:'보드라움', color:'#26b7c9', kw:['보드라움','보드마을'],
+    greet:'보드마을에 오신 걸 환영해요! 🏕️', games:[{n:'보드마을 BETA 🏕️'},{n:'보드위키 📚'},{n:'포인트 이벤트 🪙'}] },
+  { name:'게스트 부스', color:'#7a8b99', kw:[],
+    greet:'다음 페스타 참가 업체를 기다려요!', games:[{n:'참가 문의 💌'},{n:'커밍순 🎁'},{n:'커밍순 🎁'}] },
+];
+// 대표작 커버 (백엔드 bgg-details 캐시에서)
+const gameCovers={};
+function fetchCover(id){
+  if(!id || gameCovers[id]!==undefined) return;
+  gameCovers[id]=null;
+  fetch(SB+'/bgg-details',{method:'POST',headers:{'Authorization':'Bearer '+ANON,'Content-Type':'application/json'},body:JSON.stringify({id})})
+    .then(r=>r.ok?r.json():null).then(d=>{ if(d&&d.imageUrl){ const im=new Image(); im.src=d.imageUrl; im.onload=()=>{gameCovers[id]=im;}; } }).catch(()=>{});
+}
+COMPANIES.forEach(cp=>cp.games.forEach(g=>fetchCover(g.id)));
+
+// ═══════════ 씬 ═══════════
+const SC={};
+let scene='camp';
+let cam={x:0,y:0};
+let boothCo=null; // 현재 부스 업체
+let festaReturn={x:0,y:0};
+
+// ---------- 캠핑존 (30x22) ----------
 function buildCamp(){
-  const map=newGrid(0), solid=newGrid(false);
+  const cols=30, rows=22, w=cols*TILE, h=rows*TILE;
+  const map=newGrid(cols,rows,0), solid=newGrid(cols,rows,false);
   setRect(map,2,11,26,3,1);
   setRect(map,14,2,2,9,1);
-  setRect(map,14,14,2,8,1); // 남쪽 출구까지
+  setRect(map,14,14,2,8,1);
   const pond={x:23,y:15,w:5,h:5};
   setRect(map,pond.x,pond.y,pond.w,pond.h,2); setRect(solid,pond.x,pond.y,pond.w,pond.h,true);
-  // 테두리 (남쪽 출구 gap: cols 13-16)
-  setRect(solid,0,0,COLS,2,true);
-  setRect(solid,0,ROWS-2,COLS,2,true); setRect(solid,13,ROWS-2,4,2,false);
-  setRect(solid,0,0,2,ROWS,true); setRect(solid,COLS-2,0,2,ROWS,true);
-  // 캠핑카 + 캠핑장
-  setRect(solid,3,6,6,4,true);           // camper
-  setRect(solid,3,2,4,3,true);           // tent
-  setRect(solid,9,2,2,2,true);           // small tent
-  setRect(solid,10,4,2,2,true);          // table
-  solid[9][12]=true;                     // lamp
+  setRect(solid,0,0,cols,2,true);
+  setRect(solid,0,rows-2,cols,2,true); setRect(solid,13,rows-2,4,2,false);
+  setRect(solid,0,0,2,rows,true); setRect(solid,cols-2,0,2,rows,true);
+  setRect(solid,3,6,6,4,true);
+  setRect(solid,3,2,4,3,true);
+  setRect(solid,9,2,2,2,true);
+  setRect(solid,10,4,2,2,true);
+  solid[9][12]=true;
   const TREES=[[11,3,'tree1'],[25,4,'tree4'],[26,13,'tree2'],[11,16,'tree1'],[20,14,'tree2']];
   TREES.forEach(([x,y])=>{ solid[y][x]=true; });
-  const bake=document.createElement('canvas'); bake.width=W; bake.height=H;
+  const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
   const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
-  bakeGround(c,map,pond);
+  bakeGround(c,map,cols,rows,pond);
   const sp=[];
   const add=(key,px,py)=>{ const img=IMGS[key]; if(img) sp.push({key,px,py,base:py+img.height*2}); };
-  for(let x=-1;x<COLS;x+=2){ add(rng(x,0)%4===0?'tree2':'tree1', x*TILE, -70); }
-  for(let x=-1;x<COLS;x+=2){ if(x>=12&&x<=16) continue; add(rng(x,9)%5===0?'tree4':'tree1', x*TILE, H-100); }
-  for(let y=1;y<ROWS-2;y+=2){ add(rng(0,y)%4===0?'tree2':'tree1', -40, y*TILE-40); add(rng(9,y)%4===0?'tree4':'tree1', W-88, y*TILE-40); }
+  for(let x=-1;x<cols;x+=2){ add(rng(x,0)%4===0?'tree2':'tree1', x*TILE, -70); }
+  for(let x=-1;x<cols;x+=2){ if(x>=12&&x<=16) continue; add(rng(x,9)%5===0?'tree4':'tree1', x*TILE, h-100); }
+  for(let y=1;y<rows-2;y+=2){ add(rng(0,y)%4===0?'tree2':'tree1', -40, y*TILE-40); add(rng(9,y)%4===0?'tree4':'tree1', w-88, y*TILE-40); }
   TREES.forEach(([x,y,k])=>add(k, x*TILE+16-64, y*TILE+32-120));
   add('tent_blue', 3*TILE, 1*TILE);
   add('tentS_green', 9*TILE, 2*TILE);
@@ -192,57 +252,53 @@ function buildCamp(){
   if(camperImg) sp.push({key:'camper', px:3*TILE, py:10*TILE-camperImg.height*2, base:10*TILE, shadow:true});
   drawSprites(c,sp);
   if(camperImg) plaque(c, 3*TILE+camperImg.width, 10*TILE-camperImg.height*2-12, '내 집');
-  // 남쪽 출구 화살표
   c.fillStyle='rgba(0,0,0,.4)'; c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
-  c.fillText('⬇ 보드게임광장 가는 길', 15*TILE, (ROWS-2)*TILE-6);
-  SC.camp={ map, solid, bake, pond,
+  c.fillText('⬇ 보드게임광장 가는 길', 15*TILE, (rows-2)*TILE-6);
+  SC.camp={ cols,rows,w,h,map,solid,bake,pond,
     interact:[ {x:6*TILE,y:10.3*TILE,r:56,label:'내 집',act:'home'},
                {x:11.5*TILE,y:10*TILE,r:50,label:'캠핑 표지판',act:'bubble',text:'🏕️ 보드라움 캠핑장 — 남쪽 길로 가면 광장이에요!'} ],
-    npcs:[],
-    coins:'coins_camp_v1', coinPos:[[4,12],[9,12],[13,12],[18,12],[23,12],[14,4],[15,7],[14,16],[15,19]],
+    npcs:[], coins:'coins_camp_v1', coinPos:[[4,12],[9,12],[13,12],[18,12],[23,12],[14,4],[15,7],[14,16],[15,19]],
     fire:{x:10.3*TILE,y:6.8*TILE}, loc:'🏕️ 보드마을 캠핑존' };
 }
-// ---------- 광장 앞 길 ----------
+// ---------- 광장 가는 길 (30x22) ----------
 const DESIGNERS=[
   { name:'우베 로젠버그', img:'lz7', x:18*TILE, y:16*TILE, dir:'down',
     lines:['아그리콜라, 카베르나… 농사 게임은 제 인생이죠 🌾','패치워크 한 판 어때요? 2인 게임의 정수랍니다','요즘도 새 퍼즐 게임을 스케치하고 있어요'] },
   { name:'라이너 크니치아', img:'lz8', x:24.5*TILE, y:9.5*TILE, dir:'down',
     lines:['수학자 출신이라 점수 계산엔 자신 있습니다 ✏️','모던아트, 티그리스… 경매 게임 좋아하세요?','게임의 재미는 규칙이 아니라 "결정"에 있어요'] },
-  { name:'맷 리콕', img:'lz9', x:8*TILE, y:16.5*TILE? 16.5*TILE:0, dir:'down',
+  { name:'맷 리콕', img:'lz9', x:8*TILE, y:16.5*TILE, dir:'down',
     lines:['팬데믹! 함께 이기고 함께 지는 게 진짜죠 🤝','금단의 섬은 가족과 하기 딱 좋아요','협력게임 디자인, 생각보다 훨씬 어렵답니다'] },
   { name:'볼프강 바르쉬', img:'lz4', x:2.5*TILE, y:10*TILE, dir:'right',
     lines:['콰크스의 돌팔이 약장수, 해보셨나요? 💊','간츠 쇤 클레버! 정말 영리하죠?','주사위 굴러가는 소리가 세상에서 제일 좋아요'] },
 ];
 function buildRoad(){
-  const map=newGrid(0), solid=newGrid(false);
-  setRect(map,26,0,2,12,1);   // 북쪽 진입로(캠핑존에서)
-  setRect(map,2,11,26,3,1);   // 광장 대로
-  // 테두리 (북쪽 출구 gap: cols 25-28)
-  setRect(solid,0,0,COLS,2,true); setRect(solid,25,0,4,2,false);
-  setRect(solid,0,ROWS-2,COLS,2,true);
-  setRect(solid,0,0,2,ROWS,true); setRect(solid,COLS-2,0,2,ROWS,true);
-  // 경기장 / 상점 / 분수
-  setRect(solid,5,1,18,11,true);   // stadium (rows 1-11)
-  setRect(solid,3,14,5,5,true);    // 도서관
-  setRect(solid,9,14,5,5,true);    // 마켓
-  setRect(solid,23,15,2,2,true);   // 분수
-  solid[15][16]=true;              // lamp
+  const cols=30, rows=22, w=cols*TILE, h=rows*TILE;
+  const map=newGrid(cols,rows,0), solid=newGrid(cols,rows,false);
+  setRect(map,26,0,2,12,1);
+  setRect(map,2,11,26,3,1);
+  setRect(solid,0,0,cols,2,true); setRect(solid,25,0,4,2,false);
+  setRect(solid,0,rows-2,cols,2,true);
+  setRect(solid,0,0,2,rows,true); setRect(solid,cols-2,0,2,rows,true);
+  setRect(solid,5,1,18,11,true);
+  setRect(solid,3,14,5,5,true);
+  setRect(solid,9,14,5,5,true);
+  setRect(solid,23,15,2,2,true);
+  solid[15][16]=true;
   const TREES=[[2,6,'tree1'],[2,17,'tree2'],[26,14,'tree1'],[27,17,'tree4'],[20,19,'tree2']];
   TREES.forEach(([x,y])=>{ solid[y][x]=true; });
-  const bake=document.createElement('canvas'); bake.width=W; bake.height=H;
+  const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
   const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
-  bakeGround(c,map,null);
+  bakeGround(c,map,cols,rows,null);
   const sp=[];
   const add=(key,px,py)=>{ const img=IMGS[key]; if(img) sp.push({key,px,py,base:py+img.height*2}); };
-  for(let x=-1;x<COLS;x+=2){ if(x>=24&&x<=28) continue; add(rng(x,0)%4===0?'tree2':'tree1', x*TILE, -70); }
-  for(let x=-1;x<COLS;x+=2){ add(rng(x,9)%5===0?'tree4':'tree1', x*TILE, H-100); }
-  for(let y=1;y<ROWS-2;y+=2){ add(rng(0,y)%4===0?'tree2':'tree1', -40, y*TILE-40); add(rng(9,y)%4===0?'tree4':'tree1', W-88, y*TILE-40); }
+  for(let x=-1;x<cols;x+=2){ if(x>=24&&x<=28) continue; add(rng(x,0)%4===0?'tree2':'tree1', x*TILE, -70); }
+  for(let x=-1;x<cols;x+=2){ add(rng(x,9)%5===0?'tree4':'tree1', x*TILE, h-100); }
+  for(let y=1;y<rows-2;y+=2){ add(rng(0,y)%4===0?'tree2':'tree1', -40, y*TILE-40); add(rng(9,y)%4===0?'tree4':'tree1', w-88, y*TILE-40); }
   TREES.forEach(([x,y,k])=>add(k, x*TILE+16-64, y*TILE+32-120));
   add('fbush1', 1.2*TILE, 12.5*TILE);
   add('fbush2', 24*TILE, 12.4*TILE);
   add('fbush3', 8.2*TILE, 12.4*TILE);
   add('lamp', 16*TILE-16, 16*TILE-128);
-  // 건물 스프라이트
   const stImg=IMGS.stadium;
   if(stImg) sp.push({key:'stadium', px:5*TILE, py:12*TILE-stImg.height*2, base:12*TILE, shadow:true});
   const lib=IMGS.store_blue, mkt=IMGS.store_pink;
@@ -254,99 +310,204 @@ function buildRoad(){
   if(mkt) plaque(c, 9*TILE+mkt.width, 19*TILE-mkt.height*2-10, '보드마켓');
   c.fillStyle='rgba(0,0,0,.4)'; c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
   c.fillText('⬆ 캠핑존', 27*TILE, 1.2*TILE);
-  SC.road={ map, solid, bake, pond:null,
+  SC.road={ cols,rows,w,h,map,solid,bake,pond:null,
     interact:[ {x:14.2*TILE,y:12.3*TILE,r:60,label:'보드게임 페스타 입장',act:'festa'},
                {x:5.5*TILE,y:19.3*TILE,r:56,label:'보드위키 도서관',act:'bubble',text:'📚 보드위키로 연결 예정이에요!'},
                {x:11.5*TILE,y:19.3*TILE,r:56,label:'보드마켓',act:'bubble',text:'🚧 보드마켓 — 공사중! 곧 열려요'} ],
-    npcs:DESIGNERS,
-    coins:'coins_road_v1', coinPos:[[27,4],[26,8],[6,12],[12,13],[20,12],[25,13]],
+    npcs:DESIGNERS, coins:'coins_road_v1', coinPos:[[27,4],[26,8],[6,12],[12,13],[20,12],[25,13]],
     fount:{x:23,y:15}, loc:'🌲 광장 가는 길' };
 }
-// ---------- 페스타 (경기장 내부) ----------
-const BOOTHS=[
-  { name:'코리아보드게임즈', canopy:'tentS_blue',  x:4,  y:6,  text:'스플렌더 확장 2종, 7/6 출시! 실크로드 vs 저물지 않는 태양 🎉' },
-  { name:'보드피아',        canopy:'tentS_green', x:13, y:6,  text:'덱커스 라이브룰스 업데이트! 1인 협력게임 좋아하세요? 🃏' },
-  { name:'팝콘게임즈',      canopy:'tentS_blue',  x:22, y:6,  text:'7월 소식지 나왔어요~ 여름 신작 라인업 기대해주세요! 🍿' },
-  { name:'히트게임즈',      canopy:'tentS_green', x:4,  y:12, text:'이번 여름 신작 준비 중입니다 🔥 인스타 팔로우 부탁해요!' },
-  { name:'옐로우스타',      canopy:'tentS_blue',  x:13, y:12, text:'카페 옐로우미플에 놀러오세요 ☕ 보드게임 수백 종 보유!' },
-  { name:'보드엠',          canopy:'tentS_green', x:22, y:12, text:'보드게임 최저가 도전! 오늘 재입고 소식 확인하세요 📦' },
-];
+// ---------- 페스타 (44x26, 카메라 스크롤) ----------
+function drawBoothStruct(c,bx,by,co){
+  // bx,by: 타일 기준. 부스 8타일 폭 x 5타일 깊이
+  const px=bx*TILE, py=by*TILE, bw=8*TILE, col=co.color;
+  // 뒷벽 패널
+  c.fillStyle='#4a3a2a'; c.fillRect(px-4,py-4,bw+8,2*TILE+8);
+  c.fillStyle=col; c.fillRect(px,py,bw,2*TILE);
+  c.fillStyle='rgba(255,255,255,.16)'; c.fillRect(px,py,bw,10);
+  c.fillStyle='rgba(0,0,0,.14)'; c.fillRect(px,py+2*TILE-10,bw,10);
+  // 포스터
+  c.fillStyle='#fff'; c.fillRect(px+14,py+12,44,34);
+  c.fillStyle=col; c.font='bold 20px Pretendard,sans-serif'; c.textAlign='center';
+  c.fillText('🎲', px+36, py+37);
+  c.fillStyle='#fff'; c.fillRect(px+bw-58,py+12,44,34);
+  c.fillStyle=col; c.fillText('🃏', px+bw-36, py+37);
+  // 사이드 기둥
+  c.fillStyle='#7d5530'; c.fillRect(px-6,py-4,10,4.6*TILE); c.fillRect(px+bw-4,py-4,10,4.6*TILE);
+  c.fillStyle='#8f6540'; c.fillRect(px-6,py-4,4,4.6*TILE); c.fillRect(px+bw-4,py-4,4,4.6*TILE);
+  // 카운터 (테이블)
+  const tb=IMGS.btable;
+  if(tb){ c.drawImage(tb,px+8,py+2.4*TILE,64,64); c.drawImage(tb,px+bw/2-32,py+2.4*TILE,64,64); c.drawImage(tb,px+bw-72,py+2.4*TILE,64,64); }
+  // 차양 (스트라이프+스캘럽)
+  const ay=py+2.1*TILE;
+  for(let i=0;i<bw/16;i++){ c.fillStyle=i%2?col:'#f5efe2'; c.fillRect(px+i*16,ay,16,26); }
+  c.fillStyle='rgba(0,0,0,.12)'; c.fillRect(px,ay+20,bw,6);
+  for(let i=0;i<bw/16;i++){ c.fillStyle=i%2?col:'#f5efe2'; c.beginPath(); c.arc(px+i*16+8,ay+26,8,0,Math.PI); c.fill(); }
+  // 간판 (기둥 위)
+  c.font='bold 15px Pretendard,sans-serif';
+  const lw=c.measureText(co.name).width;
+  c.fillStyle='#5c3f22'; c.fillRect(px+bw/2-lw/2-14,py-40,lw+28,30);
+  c.fillStyle='#f5e9d0'; c.fillRect(px+bw/2-lw/2-10,py-36,lw+20,22);
+  c.fillStyle='#5c3f22'; c.textAlign='center'; c.fillText(co.name, px+bw/2, py-20);
+}
 function buildFesta(){
-  const map=newGrid(0), solid=newGrid(false);
-  setRect(solid,0,0,COLS,4,true);           // 무대/벽
-  setRect(solid,0,ROWS-2,COLS,2,true);
-  setRect(solid,0,0,2,ROWS,true); setRect(solid,COLS-2,0,2,ROWS,true);
-  BOOTHS.forEach(b=>setRect(solid,b.x,b.y,3,3,true));
-  const bake=document.createElement('canvas'); bake.width=W; bake.height=H;
+  const cols=44, rows=26, w=cols*TILE, h=rows*TILE;
+  const map=newGrid(cols,rows,0), solid=newGrid(cols,rows,false);
+  setRect(solid,0,0,cols,4,true);
+  setRect(solid,0,rows-2,cols,2,true);
+  setRect(solid,0,0,2,rows,true); setRect(solid,cols-2,0,2,rows,true);
+  const boothPos=[]; // [bx,by,co]
+  COMPANIES.forEach((co,i)=>{
+    const bx=3+(i%4)*10, by=i<4?6:15;
+    boothPos.push([bx,by,co]);
+    setRect(solid,bx,by,8,4,true);
+  });
+  const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
   const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
-  // 바닥
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
     c.fillStyle=(x+y)%2?'#e9ddc4':'#e2d4b8'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
     c.fillStyle='rgba(120,90,50,.08)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
   }
-  // 중앙 카펫
-  c.fillStyle='#b8433f'; c.fillRect(13*TILE,4*TILE,4*TILE,16*TILE);
-  c.fillStyle='#cc5a52'; c.fillRect(13*TILE+8,4*TILE,4*TILE-16,16*TILE);
-  c.fillStyle='#b8433f'; c.fillRect(2*TILE,9.5*TILE,26*TILE,2*TILE);
-  c.fillStyle='#cc5a52'; c.fillRect(2*TILE,9.5*TILE+6,26*TILE,2*TILE-12);
-  // 무대(상단 벽)
-  c.fillStyle='#5c4a38'; c.fillRect(0,0,W,4*TILE);
-  c.fillStyle='#4a3a2a'; c.fillRect(0,4*TILE-10,W,10);
-  c.fillStyle='#6e5a44'; for(let x=0;x<W;x+=40) c.fillRect(x,6,3,4*TILE-20);
-  // 현수막
-  c.font='bold 26px Pretendard,sans-serif'; c.textAlign='center';
+  // 카펫
+  c.fillStyle='#b8433f'; c.fillRect(20*TILE,4*TILE,4*TILE,(rows-4)*TILE);
+  c.fillStyle='#cc5a52'; c.fillRect(20*TILE+8,4*TILE,4*TILE-16,(rows-4)*TILE);
+  c.fillStyle='#b8433f'; c.fillRect(2*TILE,11.5*TILE,(cols-4)*TILE,2*TILE);
+  c.fillStyle='#cc5a52'; c.fillRect(2*TILE,11.5*TILE+6,(cols-4)*TILE,2*TILE-12);
+  // 무대/벽
+  c.fillStyle='#5c4a38'; c.fillRect(0,0,w,4*TILE);
+  c.fillStyle='#4a3a2a'; c.fillRect(0,4*TILE-10,w,10);
+  c.fillStyle='#6e5a44'; for(let x=0;x<w;x+=40) c.fillRect(x,6,3,4*TILE-20);
+  c.font='bold 30px Pretendard,sans-serif'; c.textAlign='center';
   const bt='🎲 보드게임 페스타 🎲';
-  const bw=c.measureText(bt).width;
-  c.fillStyle='#8a2f2b'; c.fillRect(W/2-bw/2-26,26,bw+52,54);
-  c.fillStyle='#f5e9d0'; c.fillRect(W/2-bw/2-20,32,bw+40,42);
-  c.fillStyle='#8a2f2b'; c.fillText(bt, W/2, 61);
-  // 만국기
-  for(let x=0;x<W;x+=26){ const cols=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
-    c.fillStyle=cols[(x/26)%5|0]; c.beginPath(); c.moveTo(x,4*TILE-8); c.lineTo(x+26,4*TILE-8); c.lineTo(x+13,4*TILE+12); c.closePath(); c.fill(); }
-  // 부스
-  BOOTHS.forEach(b=>{
-    const px=b.x*TILE, py=b.y*TILE;
-    const cn=IMGS[b.canopy];
-    c.fillStyle='rgba(0,0,0,.15)'; c.beginPath(); c.ellipse(px+48,py+92,55,10,0,0,7); c.fill();
-    if(cn) c.drawImage(cn,px+16,py-14,64,50);
-    const tb=IMGS.btable; if(tb) c.drawImage(tb,px+16,py+40,64,64);
-    plaque(c, px+48, py-22, b.name);
-  });
-  // 출구 매트
-  c.fillStyle='#a83c3c'; c.fillRect(13.5*TILE,(ROWS-2)*TILE-16,3*TILE,44);
-  c.fillStyle='#c94f4f'; c.fillRect(13.5*TILE+6,(ROWS-2)*TILE-10,3*TILE-12,32);
+  const bw2=c.measureText(bt).width;
+  c.fillStyle='#8a2f2b'; c.fillRect(w/2-bw2/2-30,24,bw2+60,60);
+  c.fillStyle='#f5e9d0'; c.fillRect(w/2-bw2/2-24,30,bw2+48,48);
+  c.fillStyle='#8a2f2b'; c.fillText(bt, w/2, 64);
+  for(let x=0;x<w;x+=26){ const colsF=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
+    c.fillStyle=colsF[(x/26)%5|0]; c.beginPath(); c.moveTo(x,4*TILE-8); c.lineTo(x+26,4*TILE-8); c.lineTo(x+13,4*TILE+12); c.closePath(); c.fill(); }
+  // 부스들
+  boothPos.forEach(([bx,by,co])=>drawBoothStruct(c,bx,by,co));
+  // 출구
+  c.fillStyle='#a83c3c'; c.fillRect((cols/2-1.5)*TILE,(rows-2)*TILE-16,3*TILE,44);
+  c.fillStyle='#c94f4f'; c.fillRect((cols/2-1.5)*TILE+6,(rows-2)*TILE-10,3*TILE-12,32);
   c.fillStyle='#fff'; c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
-  c.fillText('밖으로 ⬇', 15*TILE, (ROWS-2)*TILE+10);
-  const npcs=BOOTHS.map((b,i)=>({ name:b.name, img:'lz'+(1+(i%6)), x:b.x*TILE+48, y:b.y*TILE+38, dir:'down', lines:[b.text,'구경 오셔서 감사해요! 🙏'] }));
-  SC.festa={ map, solid, bake, pond:null,
-    interact:[ {x:15*TILE,y:(ROWS-1.4)*TILE,r:56,label:'밖으로 나가기',act:'exitFesta'} ],
-    npcs,
-    coins:'coins_festa_v1', coinPos:[[9,10],[20,10],[15,16],[7,17]],
-    loc:'🎪 보드게임 페스타' };
+  c.fillText('밖으로 ⬇', cols/2*TILE, (rows-2)*TILE+10);
+  const npcs=boothPos.map(([bx,by,co],i)=>({ name:co.name, img:'lz'+(1+(i%NCHAR)), x:bx*TILE+4*TILE, y:by*TILE+2*TILE+2, dir:'down', hideTag:true, lines:[co.greet] }));
+  const interact=boothPos.map(([bx,by,co])=>({ x:bx*TILE+4*TILE, y:(by+4.6)*TILE, r:70, label:co.name+' 부스 구경', act:'booth', co }));
+  interact.push({x:cols/2*TILE, y:(rows-1.4)*TILE, r:56, label:'밖으로 나가기', act:'exitFesta'});
+  SC.festa={ cols,rows,w,h,map,solid,bake,pond:null, interact, npcs,
+    coins:'coins_festa_v2', coinPos:[[13,13],[30,13],[22,9],[22,18],[8,12],[36,12]], loc:'🎪 보드게임 페스타' };
+}
+// ---------- 부스 내부 (30x20) ----------
+function buildBooth(co){
+  const cols=30, rows=20, w=cols*TILE, h=rows*TILE;
+  const map=newGrid(cols,rows,0), solid=newGrid(cols,rows,false);
+  setRect(solid,0,0,cols,5,true);
+  setRect(solid,0,rows-2,cols,2,true);
+  setRect(solid,0,0,2,rows,true); setRect(solid,cols-2,0,2,rows,true);
+  [[6,8],[13,8],[20,8]].forEach(([x,y])=>setRect(solid,x,y,4,3,true)); // 전시대
+  setRect(solid,26,8,2,3,true); // 게시판
+  const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
+  const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
+    c.fillStyle=(x+y)%2?'#ece2cc':'#e5d9bf'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+  }
+  // 컬러 카펫
+  c.fillStyle=co.color; c.globalAlpha=.25; c.fillRect(3*TILE,6*TILE,(cols-6)*TILE,9*TILE); c.globalAlpha=1;
+  // 벽 + 대형 간판
+  c.fillStyle='#4a3a2a'; c.fillRect(0,0,w,5*TILE);
+  c.fillStyle=co.color; c.fillRect(0,0,w,4*TILE);
+  c.fillStyle='rgba(255,255,255,.14)'; c.fillRect(0,0,w,12);
+  c.font='bold 30px Pretendard,sans-serif'; c.textAlign='center';
+  const tw=c.measureText(co.name).width;
+  c.fillStyle='rgba(0,0,0,.25)'; c.fillRect(w/2-tw/2-28,32,tw+56,60);
+  c.fillStyle='#fff'; c.fillText(co.name, w/2, 72);
+  c.font='bold 14px Pretendard,sans-serif'; c.fillStyle='rgba(255,255,255,.8)';
+  c.fillText('— 대표작 전시 —', w/2, 100);
+  // 전시대 (커버는 dyn에서)
+  [[6,8],[13,8],[20,8]].forEach(([x,y])=>{
+    const px=x*TILE, py=y*TILE;
+    c.fillStyle='rgba(0,0,0,.15)'; c.beginPath(); c.ellipse(px+64,py+100,66,10,0,0,7); c.fill();
+    c.fillStyle='#7d5530'; c.fillRect(px,py+56,128,40);
+    c.fillStyle='#8f6540'; c.fillRect(px,py+56,128,8);
+    c.fillStyle='#5c3f22'; c.fillRect(px+8,py+92,112,8);
+  });
+  // 게시판 (뉴스)
+  const gx=26*TILE, gy=8*TILE;
+  c.fillStyle='#7d5530'; c.fillRect(gx+6,gy+20,6,72); c.fillStyle='#9a6b3d'; c.fillRect(gx-8,gy-6,80,60);
+  c.fillStyle='#7d5530'; c.fillRect(gx-8,gy-6,80,6);
+  c.fillStyle='#f5e9d0'; c.fillRect(gx-2,gy+2,68,44);
+  c.fillStyle='#c94f4f'; c.fillRect(gx+2,gy+6,28,8);
+  c.fillStyle='#999'; c.fillRect(gx+2,gy+20,58,4); c.fillRect(gx+2,gy+28,44,4);
+  c.font='bold 12px Pretendard,sans-serif'; c.fillStyle='#5c3f22'; c.fillText('📢 소식', gx+32, gy+62);
+  // 출구
+  c.fillStyle='#a83c3c'; c.fillRect((cols/2-1.5)*TILE,(rows-2)*TILE-16,3*TILE,44);
+  c.fillStyle='#c94f4f'; c.fillRect((cols/2-1.5)*TILE+6,(rows-2)*TILE-10,3*TILE-12,32);
+  c.fillStyle='#fff'; c.font='bold 13px Pretendard,sans-serif'; c.fillText('페스타로 ⬇', cols/2*TILE, (rows-2)*TILE+10);
+  const disp=[[6,8],[13,8],[20,8]].map(([x,y],i)=>({x:x*TILE+64, y:(y+3.6)*TILE, r:60, label:(co.games[i]?co.games[i].n:'전시'), act:'bubble', text:'🎲 '+(co.games[i]?co.games[i].n:'')+(co.games[i]&&co.games[i].id?' — 보드위키에서 검색해보세요!':'')}));
+  SC.booth={ cols,rows,w,h,map,solid,bake,pond:null,
+    interact:[...disp,
+      {x:26*TILE+32, y:12*TILE, r:64, label:co.name+' 소식 보기', act:'news', co},
+      {x:cols/2*TILE, y:(rows-1.3)*TILE, r:56, label:'페스타로 나가기', act:'exitBooth'}],
+    npcs:[{name:co.name,img:'lz'+(1+(COMPANIES.indexOf(co)%NCHAR)),x:3.5*TILE,y:8.5*TILE,dir:'right',hideTag:true,lines:[co.greet,'천천히 구경하세요~ 🙌']}],
+    coins:null, coinPos:[], loc:'🎪 '+co.name+' 부스', co };
 }
 
-// ── 책장 (내 집) ──
-let shelfGames=[];
+// ── 마이 컬렉션 ──
+let fullGames=[];
 try{
   for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
-    if(k && k.startsWith('boardraum_owned_') && !k.endsWith('anon')){ const arr=JSON.parse(localStorage.getItem(k)); if(Array.isArray(arr)&&arr.length){ shelfGames=arr.slice(0,16); break; } } }
+    if(k && k.startsWith('boardraum_owned_') && !k.endsWith('anon')){ const arr=JSON.parse(localStorage.getItem(k)); if(Array.isArray(arr)&&arr.length){ fullGames=arr; break; } } }
 }catch{}
-if(!shelfGames.length){
-  shelfGames=[
-    {koreanName:'스플렌더', imageUrl:'https://cf.geekdo-images.com/vNFe4JkhKAERzi4T0Ntwpw__original/img/rqcUdtu_N4v-SpI96XVmpYHnJww=/0x0/filters:format(png)/pic8234167.png'},
-    {koreanName:'치킨차차', imageUrl:'https://cf.geekdo-images.com/ZxGfy7AR2mjrKVDiDVJoBw__original/img/vmsm-xQFLSoTtM4cgm0WIVO_dZ0=/0x0/filters:format(jpeg)/pic406697.jpg'},
-    {koreanName:'아크 노바'},{koreanName:'테라포밍 마스'},{koreanName:'윙스팬'},{koreanName:'푸에르토리코'},
-    {koreanName:'글룸헤이븐'},{koreanName:'카탄'},{koreanName:'스컬킹'},{koreanName:'다빈치코드'},
-  ];
+function openCollection(){
+  const m=document.getElementById('colModal');
+  document.getElementById('colTitle').textContent='🎲 '+(me?me.name:'나')+'의 컬렉션 ('+fullGames.length+')';
+  const g=document.getElementById('colGrid'); g.innerHTML='';
+  if(!fullGames.length){ g.innerHTML='<p style="grid-column:1/-1;color:#888;text-align:center;padding:30px 0">아직 담은 게임이 없어요.<br>보드라움 마이리스트에서 게임을 담아보세요!</p>'; }
+  fullGames.forEach(gm=>{
+    const d=document.createElement('div'); d.className='gi';
+    const nm=(gm.koreanName||gm.name||'게임');
+    if(gm.imageUrl){ const im=document.createElement('img'); im.src=gm.imageUrl; im.loading='lazy'; d.appendChild(im); }
+    else { const ph=document.createElement('div'); ph.className='ph'; ph.style.background=`hsl(${(nm.length*47)%360},50%,55%)`; ph.textContent=nm.slice(0,6); d.appendChild(ph); }
+    const p=document.createElement('p'); p.textContent=nm; d.appendChild(p);
+    g.appendChild(d);
+  });
+  m.style.display='flex';
 }
-const coverImgs={};
-shelfGames.forEach((g,i)=>{ if(g.imageUrl){ const im=new Image(); im.src=g.imageUrl; im.onload=()=>coverImgs[i]=im; } });
+// ── 업체 뉴스 모달 ──
+let newsCache=null;
+async function openNews(co){
+  const m=document.getElementById('newsModal');
+  document.getElementById('newsTitle').textContent='📢 '+co.name+' 소식';
+  const body=document.getElementById('newsBody'); body.innerHTML='불러오는 중...';
+  m.style.display='flex';
+  try{
+    if(!newsCache){
+      const r=await fetch(SB+'/community/posts',{headers:{'Authorization':'Bearer '+ANON}});
+      const d=await r.json(); newsCache=(d.posts||[]).filter(p=>p.category==='소식');
+    }
+    const hits=newsCache.filter(p=>{ const s=(p.title||'')+(p.content||''); return co.kw.some(k=>s.includes(k)); }).slice(0,6);
+    if(!hits.length){ body.innerHTML='<p style="color:#888;text-align:center;padding:24px 0">아직 등록된 소식이 없어요 🙏</p>'; return; }
+    body.innerHTML='';
+    hits.forEach(p=>{
+      const a=document.createElement('a'); a.className='newsItem'; a.href='/post/'+p.id;
+      const dt=new Date(p.createdAt); const ds=`${dt.getMonth()+1}/${dt.getDate()}`;
+      a.innerHTML='<b></b><span></span>';
+      a.querySelector('b').textContent=p.title||'(제목 없음)';
+      a.querySelector('span').textContent=ds+' · 보드라움 소식';
+      body.appendChild(a);
+    });
+  }catch(e){ body.innerHTML='<p style="color:#c00">소식을 불러오지 못했어요.</p>'; }
+}
 
 // ── 플레이어/입력 ──
-const player={ x:14.5*TILE+16, y:8*TILE, dir:'down', frame:0, ft:0, moving:false };
+const player={ x:14.5*TILE+16, y:8*TILE, dir:'down', moving:false };
 const keys={};
 const typing=e=>e.target&&['INPUT','TEXTAREA'].includes(e.target.tagName);
-addEventListener('keydown',e=>{ if(typing(e)) return; keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E'||e.key==='Enter') doAction(); });
+const modalOpen=()=>['colModal','newsModal','creator'].some(id=>document.getElementById(id).style.display==='flex');
+addEventListener('keydown',e=>{ if(typing(e)) return;
+  if(modalOpen()){ if(e.key==='Escape'){ ['colModal','newsModal'].forEach(id=>document.getElementById(id).style.display='none'); } return; }
+  keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E'||e.key==='Enter') doAction(); });
 addEventListener('keyup',e=>{ if(typing(e)) return; keys[e.key]=false; });
 addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; });
 document.querySelectorAll('#dpad button').forEach(b=>{ const k=b.dataset.k;
@@ -354,12 +515,12 @@ document.querySelectorAll('#dpad button').forEach(b=>{ const k=b.dataset.k;
   b.addEventListener('touchend',e=>{e.preventDefault();keys[k]=false;},{passive:false}); });
 document.getElementById('btnE').addEventListener('touchstart',e=>{e.preventDefault();doAction();},{passive:false});
 document.getElementById('btnE').addEventListener('click',()=>doAction());
+document.getElementById('btnChar').addEventListener('click',()=>{ openCreator(); });
 
-let bubble=null; // {x,y,text,until}
-function sayAt(x,y,t,ms=3200){ bubble={x,y,text:t, until:performance.now()+ms}; }
+let bubble=null;
+function sayAt(x,y,t,ms=3400){ bubble={x,y,text:t, until:performance.now()+ms}; }
 function say(t,ms=2600){ sayAt(player.x,player.y-72,t,ms); }
 
-// 코인 로드
 let coins=[];
 function loadCoins(){
   const s=SC[scene]; if(!s||!s.coins){ coins=[]; return; }
@@ -370,14 +531,14 @@ function saveCoins(){ const s=SC[scene]; if(s&&s.coins) store.set(s.coins,coins)
 function switchScene(name, px, py, dir){
   scene=name; player.x=px; player.y=py; player.dir=dir||'down'; bubble=null;
   document.getElementById('loc').textContent = name==='home' ? '🚐 내 캠핑카' : SC[name].loc;
-  if(name!=='home') loadCoins();
+  if(name!=='home') loadCoins(); else coins=[];
 }
 
 function nearPrompt(){
   if(scene==='home'){
-    const py=Math.floor(player.y/TILE);
-    if(py>=18) return {label:'마을로 나가기',act:'exitHome'};
-    if(py<=13) return {label:'책장 구경',act:'shelf'};
+    // 책장 (상단 중앙) / 출구 (하단)
+    if(player.y>=18*TILE) return {label:'마을로 나가기',act:'exitHome'};
+    if(Math.hypot(player.x-15*TILE, player.y-9.4*TILE)<80) return {label:'내 컬렉션 보기',act:'collection'};
     return null;
   }
   const s=SC[scene]; if(!s) return null;
@@ -386,82 +547,108 @@ function nearPrompt(){
   return null;
 }
 function doAction(){
+  if(modalOpen()) return;
   const p=nearPrompt(); if(!p) return;
-  if(p.act==='home'){ switchScene('home',480,612,'up'); say((me?me.name:'나')+'의 아늑한 캠핑카 🛋️'); }
+  if(p.act==='home'){ switchScene('home',15*TILE,17*TILE,'up'); say((me?me.name:'나')+'의 아늑한 캠핑카 🛋️'); }
   else if(p.act==='exitHome'){ switchScene('camp',6*TILE,10.8*TILE,'down'); }
-  else if(p.act==='festa'){ switchScene('festa',15*TILE,(ROWS-3)*TILE,'up'); say('🎪 보드게임 페스타에 오신 걸 환영해요!'); }
+  else if(p.act==='festa'){ switchScene('festa',22*TILE,23*TILE,'up'); say('🎪 보드게임 페스타에 오신 걸 환영해요!'); }
   else if(p.act==='exitFesta'){ switchScene('road',14.2*TILE,13*TILE,'down'); }
+  else if(p.act==='booth'){ festaReturn={x:p.x, y:p.y+20}; boothCo=p.co; buildBooth(p.co); switchScene('booth',15*TILE,16*TILE,'up'); }
+  else if(p.act==='exitBooth'){ switchScene('festa',festaReturn.x,festaReturn.y,'down'); }
+  else if(p.act==='collection'){ openCollection(); }
+  else if(p.act==='news'){ openNews(p.co); }
   else if(p.act==='bubble'){ say(p.text); }
-  else if(p.act==='shelf'){ say('🎲 내 보드게임 '+shelfGames.length+'개 전시 중! 뿌듯하다~'); }
   else if(p.act==='talk'){ const n=p.npc; n.li=(n.li||0);
-    sayAt(n.x, n.y-78, n.lines[n.li%n.lines.length]); n.li++; }
+    sayAt(n.x, n.y-(n.hideTag?70:78), n.lines[n.li%n.lines.length]); n.li++; }
 }
 
-// ── 내 집 (캠핑카 내부) ──
+// ── 내 집 (아늑한 캠핑카 내부, 30x22 고정) ──
 function drawHome(t){
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-    ctx.fillStyle=(x+y)%2?'#d9b98a':'#d2b083'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
-    ctx.fillStyle='rgba(120,80,40,.12)'; ctx.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
+  const cols=30, rows=22, w=VW, h=VH;
+  // 바닥 (따뜻한 우드)
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
+    ctx.fillStyle=y%2?'#d8b488':'#d1ac7e'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+    ctx.fillStyle='rgba(120,80,40,.10)'; ctx.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
+    if(rng(x+70,y+70)%9===0){ ctx.fillStyle='rgba(120,80,40,.15)'; ctx.fillRect(x*TILE+8,y*TILE+10,10,2); }
   }
-  ctx.fillStyle='#a4794f'; ctx.fillRect(0,0,W,70);
-  ctx.fillStyle='#93683f'; for(let x=0;x<W;x+=26){ ctx.fillRect(x,8,2,54); }
-  ctx.fillStyle='#c9a06b'; ctx.fillRect(0,0,W,6);
-  ctx.fillStyle='#f2e6cf'; ctx.fillRect(0,70,W,20);
-  ctx.fillStyle='#d8c6a4'; ctx.fillRect(0,86,W,4);
-  const win=(wx)=>{ ctx.fillStyle='#6e4527'; ctx.fillRect(wx-4,14,84,48);
-    ctx.fillStyle='#bfe3f5'; ctx.fillRect(wx,18,76,40);
-    ctx.fillStyle='#e8f6ff'; ctx.fillRect(wx,18,34,18);
-    ctx.fillStyle='#6e4527'; ctx.fillRect(wx+36,18,4,40); ctx.fillRect(wx,36,76,3); };
-  win(60); win(816);
-  const SH_X=100, SH_W=760, PER=8, BW=82, BH=106;
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(SH_X-20,392,SH_W+44,10);
-  ctx.fillStyle='#4a2f18'; ctx.fillRect(SH_X-22,92,SH_W+44,304);
-  ctx.fillStyle='#5a3a20'; ctx.fillRect(SH_X-16,98,SH_W+32,292);
-  ctx.fillStyle='#3a2412'; ctx.fillRect(SH_X-10,104,SH_W+20,280);
-  ctx.fillStyle='#6e4527'; ctx.fillRect(SH_X-26,86,SH_W+52,10);
-  for(let r=0;r<2;r++){
-    const sy=112+r*140;
-    for(let i=0;i<PER;i++){
-      const gi=r*PER+i; if(gi>=shelfGames.length) break;
-      const g=shelfGames[gi], sx=SH_X+i*(BW+13);
-      ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(sx+3,sy+BH-3,BW,5);
-      if(coverImgs[gi]){ ctx.drawImage(coverImgs[gi],sx,sy,BW,BH);
-        ctx.fillStyle='rgba(255,255,255,.10)'; ctx.fillRect(sx,sy,BW,10);
-        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.strokeRect(sx,sy,BW,BH); }
-      else {
-        const hue=(gi*47)%360;
-        ctx.fillStyle=`hsl(${hue},55%,50%)`; ctx.fillRect(sx,sy,BW,BH);
-        ctx.fillStyle=`hsl(${hue},55%,38%)`; ctx.fillRect(sx,sy,BW,26); ctx.fillRect(sx,sy,6,BH);
-        ctx.fillStyle=`hsl(${hue},60%,62%)`; ctx.fillRect(sx+6,sy+26,BW-6,4);
-        ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
-        const nm=(g.koreanName||g.name||'게임').slice(0,7); ctx.fillText(nm,sx+BW/2,sy+BH/2+8);
-      }
+  // 벽
+  ctx.fillStyle='#b98f62'; ctx.fillRect(0,0,w,150);
+  ctx.fillStyle='#a87f52'; for(let x=0;x<w;x+=34){ ctx.fillRect(x,6,2,138); }
+  ctx.fillStyle='#8a6238'; ctx.fillRect(0,144,w,10);
+  // 앨범/조명 스트링
+  for(let x=30;x<w-20;x+=52){ ctx.strokeStyle='rgba(90,60,30,.5)'; ctx.beginPath(); ctx.moveTo(x,16); ctx.quadraticCurveTo(x+26,30,x+52,16); ctx.stroke();
+    const glow=0.5+Math.sin(t/600+x)*0.3;
+    ctx.fillStyle=`rgba(255,220,130,${glow})`; ctx.beginPath(); ctx.arc(x+26,30,4,0,7); ctx.fill(); }
+  // 창문 + 커튼
+  const win=(wx)=>{ ctx.fillStyle='#6e4527'; ctx.fillRect(wx-5,42,106,66);
+    ctx.fillStyle='#a8d8ef'; ctx.fillRect(wx,47,96,56);
+    ctx.fillStyle='#cdeaf7'; ctx.fillRect(wx,47,42,24);
+    ctx.fillStyle='#6e4527'; ctx.fillRect(wx+46,47,4,56);
+    ctx.fillStyle='#c95561'; ctx.fillRect(wx-8,38,18,72); ctx.fillRect(wx+86,38,18,72);
+    ctx.fillStyle='#b8433f'; ctx.fillRect(wx-8,38,18,8); ctx.fillRect(wx+86,38,18,8); };
+  win(70); win(790);
+  // 침대 (좌측)
+  ctx.fillStyle='rgba(0,0,0,.18)'; ctx.fillRect(56,236,180,26);
+  ctx.fillStyle='#7d5530'; ctx.fillRect(50,160,180,96);
+  ctx.fillStyle='#f2e6cf'; ctx.fillRect(58,166,164,84);
+  ctx.fillStyle='#fff'; ctx.fillRect(58,166,50,40);
+  ctx.fillStyle='#4fa5b8'; ctx.fillRect(108,172,114,78);
+  ctx.fillStyle='#3d8a9c'; for(let i=0;i<4;i++) ctx.fillRect(108,186+i*16,114,4);
+  // 주방 (우측)
+  ctx.fillStyle='#8a6238'; ctx.fillRect(690,160,220,60);
+  ctx.fillStyle='#9c744a'; ctx.fillRect(690,160,220,10);
+  ctx.fillStyle='#666'; ctx.fillRect(710,172,44,34); ctx.fillStyle='#888'; ctx.fillRect(714,176,36,26);
+  ctx.fillStyle='#e8e8e8'; ctx.fillRect(776,170,52,38); ctx.fillStyle='#bbb'; ctx.beginPath(); ctx.arc(802,189,13,0,7); ctx.fill();
+  ctx.fillStyle='#c94f4f'; ctx.fillRect(846,176,28,30); ctx.fillStyle='#8a2f2b'; ctx.fillRect(846,176,28,8);
+  // 화분
+  const plant=(px2,py2)=>{ ctx.fillStyle='#b85c3f'; ctx.fillRect(px2,py2,26,20);
+    ctx.fillStyle='#4fa54c'; ctx.beginPath(); ctx.arc(px2+13,py2-8,14,0,7); ctx.fill();
+    ctx.fillStyle='#5db95a'; ctx.beginPath(); ctx.arc(px2+6,py2-14,8,0,7); ctx.arc(px2+20,py2-13,8,0,7); ctx.fill(); };
+  plant(20,214); plant(916,214);
+  // ── 책장 (중앙 상단, 심플) ──
+  const shX=380, shY=158, shW=200, shH=116;
+  ctx.fillStyle='rgba(0,0,0,.2)'; ctx.fillRect(shX+6,shY+shH,shW,10);
+  ctx.fillStyle='#5c3f22'; ctx.fillRect(shX-8,shY-8,shW+16,shH+16);
+  ctx.fillStyle='#3a2412'; ctx.fillRect(shX,shY,shW,shH);
+  for(let r2=0;r2<2;r2++){
+    const rowY=shY+8+r2*54;
+    for(let i=0;i<9;i++){
+      const hgt=34+((i*13+r2*7)%10), hue=(i*41+r2*90)%360;
+      ctx.fillStyle=`hsl(${hue},48%,${48+(i%3)*6}%)`;
+      ctx.fillRect(shX+8+i*21, rowY+(44-hgt), 17, hgt);
+      ctx.fillStyle='rgba(255,255,255,.25)'; ctx.fillRect(shX+8+i*21, rowY+(44-hgt), 17, 4);
     }
-    ctx.fillStyle='#7a5230'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,12);
-    ctx.fillStyle='#8f6540'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,3);
+    ctx.fillStyle='#5c3f22'; ctx.fillRect(shX,rowY+46,shW,8);
   }
-  const ttl='🎲 '+(me?me.name:'나')+'의 컬렉션 ('+shelfGames.length+'개)';
-  plaque(ctx, W/2, 37, ttl, true);
-  ctx.fillStyle='#c95561'; ctx.fillRect(330,430,300,170);
-  ctx.fillStyle='#e2707a'; ctx.fillRect(342,442,276,146);
-  ctx.fillStyle='#eb98a0'; ctx.fillRect(360,460,240,110);
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(480,560,74,14,0,0,7); ctx.fill();
-  ctx.fillStyle='#5e3a1e'; ctx.fillRect(420,548,14,22); ctx.fillRect(526,548,14,22);
-  ctx.fillStyle='#7a4a26'; ctx.fillRect(408,478,144,76);
-  ctx.fillStyle='#8f5c33'; ctx.fillRect(408,478,144,8);
-  ctx.fillStyle='#5da03f'; ctx.fillRect(424,494,112,52);
-  ctx.fillStyle='#4c8a33'; for(let i=0;i<4;i++){ ctx.fillRect(424+i*28,494,2,52); ctx.fillRect(424,494+i*14,112,2); }
-  ctx.fillStyle='#f4d35e'; ctx.fillRect(434,504,12,12); ctx.fillStyle='#e05656'; ctx.fillRect(462,518,12,12); ctx.fillStyle='#3f9cde'; ctx.fillRect(496,500,12,12);
-  ctx.fillStyle='#fff'; ctx.fillRect(514,524,11,11); ctx.fillStyle='#222';
-  [[517,527],[521,531],[517,531],[521,527],[519,529]].forEach(([px,py])=>ctx.fillRect(px,py,2,2));
+  plaque(ctx, shX+shW/2, shY-16, '🎲 내 컬렉션 — E');
+  // 러그+테이블
+  ctx.fillStyle='#c95561'; ctx.fillRect(350,400,260,150);
+  ctx.fillStyle='#e2707a'; ctx.fillRect(362,412,236,126);
+  ctx.fillStyle='#eb98a0'; ctx.fillRect(380,430,200,90);
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(480,520,66,12,0,0,7); ctx.fill();
+  ctx.fillStyle='#5e3a1e'; ctx.fillRect(424,508,12,20); ctx.fillRect(524,508,12,20);
+  ctx.fillStyle='#7a4a26'; ctx.fillRect(412,446,136,68);
+  ctx.fillStyle='#8f5c33'; ctx.fillRect(412,446,136,8);
+  ctx.fillStyle='#5da03f'; ctx.fillRect(428,460,104,46);
+  ctx.fillStyle='#f4d35e'; ctx.fillRect(438,468,11,11); ctx.fillStyle='#e05656'; ctx.fillRect(464,480,11,11); ctx.fillStyle='#3f9cde'; ctx.fillRect(494,466,11,11);
+  ctx.fillStyle='#fff'; ctx.fillRect(512,486,10,10); ctx.fillStyle='#222';
+  [[515,489],[519,493],[515,493],[519,489]].forEach(([px2,py2])=>ctx.fillRect(px2,py2,2,2));
+  // 출구
   ctx.fillStyle='#a83c3c'; ctx.fillRect(432,636,96,48);
   ctx.fillStyle='#c94f4f'; ctx.fillRect(438,642,84,36);
   ctx.fillStyle='#fff'; ctx.font='bold 13px Pretendard,sans-serif'; ctx.textAlign='center'; ctx.fillText('나가기 ⬇', 480, 664);
+}
+function homeSolid(x,y){
+  if(y<260) return true;                       // 벽+가구 라인
+  if(x>400&&x<560&&y>436&&y<532) return true;  // 테이블
+  if(x<40||x>VW-40||y>VH-8) return true;
+  return false;
 }
 
 // ── 동적 요소 ──
 const smoke=[]; let smokeT=0;
 const butterflies=[{x:320,y:230,p:0},{x:660,y:480,p:2}];
+function P2(key,px,py){ const img=IMGS[key]; if(img) ctx.drawImage(img,px,py,img.width*2,img.height*2); }
 function drawSceneDyn(t,dt){
   const s=SC[scene];
   ctx.drawImage(s.bake,0,0);
@@ -478,58 +665,70 @@ function drawSceneDyn(t,dt){
     [[24.2,16.4,'lily1'],[26.2,18.2,'lily2'],[25.3,15.4,'lily1']].forEach(([lx,ly,k],i)=>{
       const bob=Math.sin(t/900+i*2)*1.5;
       const img=IMGS[k]; if(img) ctx.drawImage(img, lx*TILE, ly*TILE+bob, 32,32); });
-    for(let i=0;i<3;i++){ const rr=rng(i*7,Math.floor(t/700)+i);
-      const sx=(s.pond.x+(rr%s.pond.w))*TILE+(rr>>4)%20, sy=(s.pond.y+((rr>>2)%s.pond.h))*TILE+((rr>>6)%20);
-      ctx.fillStyle='rgba(255,255,255,.6)'; ctx.fillRect(sx,sy,3,2); }
   }
   if(scene==='road' && s.fount){
     P2((Math.floor(t/450)%2)?'fount1':'fount2', s.fount.x*TILE, (s.fount.y-1)*TILE);
   }
-  // 코인
+  if(scene==='booth' && s.co){
+    // 전시대 커버
+    [[6,8],[13,8],[20,8]].forEach(([x,y],i)=>{
+      const g=s.co.games[i]; if(!g) return;
+      const px=x*TILE+64, py=y*TILE+52;
+      const cw=84, ch=104;
+      const im=g.id?gameCovers[g.id]:null;
+      if(im){ ctx.drawImage(im,px-cw/2,py-ch,cw,ch);
+        ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(px-cw/2,py-ch,cw,10);
+        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.strokeRect(px-cw/2,py-ch,cw,ch); }
+      else { const hue=(i*77+s.co.name.length*31)%360;
+        ctx.fillStyle=`hsl(${hue},50%,52%)`; ctx.fillRect(px-cw/2,py-ch,cw,ch);
+        ctx.fillStyle=`hsl(${hue},50%,40%)`; ctx.fillRect(px-cw/2,py-ch,cw,24);
+        ctx.fillStyle='#fff'; ctx.font='bold 12px Pretendard,sans-serif'; ctx.textAlign='center';
+        ctx.fillText(g.n.slice(0,8), px, py-ch/2+6); }
+      plaque(ctx, px, py+26, g.n);
+    });
+  }
   coins.forEach(cn=>{ if(cn.got) return; const X=cn.x*TILE+16, Y=cn.y*TILE+14+Math.sin(t/300+cn.x)*3;
     ctx.fillStyle='rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(X,cn.y*TILE+27,6,2,0,0,7); ctx.fill();
     if(IMGS.coin) ctx.drawImage(IMGS.coin,X-7,Y-7,14,14); });
-  // NPC (이름표 + 스프라이트)
   s.npcs.forEach(n=>{
-    const img=IMGS[n.img];
-    drawLZ(img,n.x,n.y,n.dir||'down',false,t+ (n.x*7));
-    if(scene!=='festa'){ // 페스타는 부스 명패가 있어 머리 위 이름표 생략
+    drawLZ(IMGS[n.img],n.x,n.y,n.dir||'down',false,t+(n.x*7));
+    if(!n.hideTag){
       ctx.font='bold 10px Pretendard,sans-serif'; ctx.textAlign='center';
       const tw=ctx.measureText(n.name).width;
       ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(n.x-tw/2-5,n.y-76,tw+10,14);
       ctx.fillStyle='#ffe9a8'; ctx.fillText(n.name,n.x,n.y-65);
     }
   });
-  // 나비 (야외만)
-  if(scene!=='festa') butterflies.forEach(bf=>{ bf.p+=dt;
-    const bx=bf.x+Math.sin(bf.p*0.7)*60+Math.sin(bf.p*2.3)*14, by=bf.y+Math.cos(bf.p*0.9)*40;
-    const wing=Math.sin(bf.p*18)*3;
-    ctx.fillStyle='#fff'; ctx.fillRect(bx-3-wing,by-2,3+wing,4); ctx.fillRect(bx+1,by-2,3+wing,4);
-    ctx.fillStyle='#f4d35e'; ctx.fillRect(bx-2-wing,by-1,2,2); ctx.fillRect(bx+2,by-1,2,2);
-    ctx.fillStyle='#2b2019'; ctx.fillRect(bx-0.5,by-2.5,1.5,5); });
-  // 구름 그림자 (야외만)
-  if(scene!=='festa'){
+  if(scene==='camp'||scene==='road'){
+    butterflies.forEach(bf=>{ bf.p+=dt;
+      const bx=bf.x+Math.sin(bf.p*0.7)*60+Math.sin(bf.p*2.3)*14, by=bf.y+Math.cos(bf.p*0.9)*40;
+      const wing=Math.sin(bf.p*18)*3;
+      ctx.fillStyle='#fff'; ctx.fillRect(bx-3-wing,by-2,3+wing,4); ctx.fillRect(bx+1,by-2,3+wing,4);
+      ctx.fillStyle='#f4d35e'; ctx.fillRect(bx-2-wing,by-1,2,2); ctx.fillRect(bx+2,by-1,2,2);
+      ctx.fillStyle='#2b2019'; ctx.fillRect(bx-0.5,by-2.5,1.5,5); });
     const cs=(t/40)%1400-200;
     ctx.fillStyle='rgba(20,45,25,.10)';
     ctx.beginPath(); ctx.ellipse(cs,180,130,45,0,0,7); ctx.ellipse(cs+90,210,90,35,0,0,7); ctx.fill();
     ctx.beginPath(); ctx.ellipse(1100-cs*0.7,520,110,40,0,0,7); ctx.fill();
   }
 }
-function P2(key,px,py){ const img=IMGS[key]; if(img) ctx.drawImage(img,px,py,img.width*2,img.height*2); }
 
 // ── 충돌/루프 ──
 function isSolid(x,y){
+  if(scene==='home') return homeSolid(x,y);
+  const s=SC[scene];
   const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
-  if(scene==='home'){ if(ty<13) return true; if(x>396&&x<564&&y>466&&y<566) return true; if(tx<0||ty<0||tx>=COLS||ty>=ROWS) return true; return false; }
-  if(tx<0||ty<0||tx>=COLS||ty>=ROWS) return false; // 씬 전환용 가장자리 허용
-  return SC[scene].solid[ty][tx];
+  if(tx<0||ty<0||tx>=s.cols||ty>=s.rows) return false;
+  return s.solid[ty][tx];
 }
 let last=performance.now();
 function loop(now){
   const dt=Math.min(50, now-last)/1000; last=now;
   let dx=0,dy=0;
-  if(keys['ArrowLeft']||keys['a']) dx=-1; if(keys['ArrowRight']||keys['d']) dx=1;
-  if(keys['ArrowUp']||keys['w']) dy=-1; if(keys['ArrowDown']||keys['s']) dy=1;
+  if(!modalOpen()){
+    if(keys['ArrowLeft']||keys['a']) dx=-1; if(keys['ArrowRight']||keys['d']) dx=1;
+    if(keys['ArrowUp']||keys['w']) dy=-1; if(keys['ArrowDown']||keys['s']) dy=1;
+  }
   player.moving=!!(dx||dy);
   if(dx||dy){
     const sp=155*dt, nx=player.x+dx*sp, ny=player.y+dy*sp;
@@ -537,33 +736,46 @@ function loop(now){
     if(!isSolid(player.x,ny-4)&&!isSolid(player.x,ny+8)) player.y=ny;
     player.dir=dy<0?'up':dy>0?'down':dx<0?'left':'right';
   }
-  // 씬 전환 (가장자리)
-  if(scene==='camp' && player.y>H-14 && player.x>13*TILE && player.x<17*TILE){ switchScene('road',27*TILE,1.6*TILE,'down'); }
-  else if(scene==='road' && player.y<10 && player.x>25*TILE && player.x<29*TILE){ switchScene('camp',15*TILE,(ROWS-1.4)*TILE,'up'); }
-  player.x=Math.max(12,Math.min(W-12,player.x)); player.y=Math.max(2,Math.min(H-4,player.y));
+  const sw=scene==='home'?VW:SC[scene].w, sh=scene==='home'?VH:SC[scene].h;
+  if(scene==='camp' && player.y>sh-14 && player.x>13*TILE && player.x<17*TILE){ switchScene('road',27*TILE,1.6*TILE,'down'); }
+  else if(scene==='road' && player.y<10 && player.x>25*TILE && player.x<29*TILE){ switchScene('camp',15*TILE,(SC.camp.rows-1.4)*TILE,'up'); }
+  player.x=Math.max(12,Math.min(sw-12,player.x)); player.y=Math.max(2,Math.min(sh-4,player.y));
   if(scene!=='home') coins.forEach(cn=>{ if(!cn.got && Math.hypot(cn.x*TILE+16-player.x, cn.y*TILE+16-player.y)<20){ cn.got=true; points+=10; saveCoins(); say('+10 포인트! 🪙',900); } });
+  // 카메라
+  cam.x=Math.max(0,Math.min(sw-VW, player.x-VW/2));
+  cam.y=Math.max(0,Math.min(sh-VH, player.y-VH/2));
 
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0,0,VW,VH);
+  ctx.save(); ctx.translate(-cam.x,-cam.y);
   if(scene==='home') drawHome(now); else drawSceneDyn(now,dt);
-  const myImg=IMGS['lz'+(me?me.char.replace('lz',''):'1')]||IMGS.lz1;
+  const myImg=IMGS[me?me.char:'lz1']||IMGS.lz1;
   drawLZ(myImg,player.x,player.y,player.dir,player.moving,now);
   if(me){ ctx.fillStyle='rgba(0,0,0,.5)'; ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
     const tw=ctx.measureText(me.name).width; ctx.fillRect(player.x-tw/2-6,player.y-86,tw+12,16);
     ctx.fillStyle='#fff'; ctx.fillText(me.name,player.x,player.y-74); }
   if(bubble && now<bubble.until){
     ctx.font='bold 13px Pretendard,sans-serif';
-    const tw=Math.min(ctx.measureText(bubble.text).width, 420);
-    const bx=Math.max(10,Math.min(W-tw-30,bubble.x-tw/2-10)), by=bubble.y-26;
+    const tw=Math.min(ctx.measureText(bubble.text).width, 430);
+    const bx=Math.max(cam.x+10,Math.min(cam.x+VW-tw-30,bubble.x-tw/2-10)), by=bubble.y-26;
     ctx.fillStyle='#fff'; ctx.beginPath(); ctx.roundRect(bx,by,tw+20,26,8); ctx.fill();
     ctx.beginPath(); ctx.moveTo(bubble.x-5,by+26); ctx.lineTo(bubble.x+5,by+26); ctx.lineTo(bubble.x,by+33); ctx.fill();
-    ctx.fillStyle='#222'; ctx.textAlign='left'; ctx.fillText(bubble.text,bx+10,by+18,420);
+    ctx.fillStyle='#222'; ctx.textAlign='left'; ctx.fillText(bubble.text,bx+10,by+18,430);
   }
-  const p=nearPrompt(); const hint=document.getElementById('hint');
+  ctx.restore();
+  const p=modalOpen()?null:nearPrompt(); const hint=document.getElementById('hint');
   if(p){ hint.style.display='block'; hint.textContent='E — '+p.label; } else hint.style.display='none';
   requestAnimationFrame(loop);
 }
 
 // ── 초기화 ──
+function openCreator(){
+  const c=document.getElementById('creator');
+  document.getElementById('nm').value=me?me.name:'여행자';
+  const cur=me?parseInt(me.char.replace('lz',''))||1:1;
+  charSel=cur;
+  c.querySelectorAll('.cbtn').forEach((b,i)=>b.classList.toggle('sel',i+1===cur));
+  c.style.display='flex';
+}
 function init(){
   document.getElementById('loading').style.display='none';
   buildCamp(); buildRoad(); buildFesta();
@@ -574,19 +786,18 @@ function init(){
     const cc=document.createElement('canvas'); cc.width=48; cc.height=58;
     btn.appendChild(cc); grid.appendChild(btn);
     const g=cc.getContext('2d'); g.imageSmoothingEnabled=false;
-    const img=IMGS['lz'+i]; if(img) g.drawImage(img,0,0,16,32,8,2,32,56);
+    const img=IMGS['lz'+i]; if(img) g.drawImage(img,DIRO.down*16,0,16,32,8,2,32,56);
     ((idx)=>{ btn.onclick=()=>{ grid.querySelectorAll('.cbtn').forEach(x=>x.classList.remove('sel')); btn.classList.add('sel'); charSel=idx; }; })(i);
   }
-  charSel=1;
   document.getElementById('go').onclick=()=>{
     me={ name:(document.getElementById('nm').value||'여행자').slice(0,8), char:'lz'+charSel };
     store.set('me',me); document.getElementById('creator').style.display='none';
   };
-  if(!me) document.getElementById('creator').style.display='flex';
+  if(!me) openCreator();
   requestAnimationFrame(loop);
 }
 // 디버그/테스트용 핸들 (프로토타입)
-window.__v={ player, keys, doAction, switchScene, get scene(){return scene}, get points(){return points} };
+window.__v={ player, keys, doAction, switchScene, get scene(){return scene}, get points(){return points}, get cam(){return cam} };
 </script>
 </body>
 </html>
