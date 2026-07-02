@@ -115,6 +115,7 @@
     <button class="edt sel" data-t="land">🟩 육지</button><button class="edt" data-t="sea">🌊 바다</button>
     <button class="edt" data-t="road">🟫 길</button><button class="edt" data-t="pond">💧 물</button>
     <button class="edt" data-t="stone">⬜ 돌길</button>
+    <button class="edt" data-t="wall">🧱 벽</button><button class="edt" data-t="floor">🪵 마루</button>
     <button class="edt" data-t="grass">🧹 잔디</button><button class="edt" data-t="del">🗑️ 삭제</button>
   </div>
   <div class="edh2">구조물 (선택 후 클릭=이동/배치, 🗑️로 삭제)</div>
@@ -125,6 +126,11 @@
     <button class="edt" data-t="deco">🎨 내부꾸미기</button>
   </div>
   <div class="edh2">소품 (클릭 후 맵에 배치)</div>
+  <div class="edrow" id="edCats">
+    <button class="edt sel" data-c="all">전체</button><button class="edt" data-c="nature">🌳 자연</button>
+    <button class="edt" data-c="farm">🚜 마을</button><button class="edt" data-c="furn">🪑 가구</button>
+    <button class="edt" data-c="city">🏙️ 도시</button><button class="edt" data-c="deco">✨ 데코</button>
+  </div>
   <div id="edProps"></div>
   <div class="edrow"><button id="edSave" class="edbtn">💾 저장</button><button id="edReset" class="edbtn" style="background:#933">↩️ 초기화</button></div>
 </div>
@@ -182,10 +188,13 @@ const SL=['grass','grassauto','gdec1','gdec2','gdec3','gdec4','gdec5','gdec6','s
   ...SLC.map(c=>'slc_'+c)];
 const ME=['camper','btable','tentS_blue','tentS_green'];
 const IMGS={};
-const toLoad=[...SL.map(k=>'sl/'+k),...ME.map(k=>'me/'+k),'coin'];
+const ME2=['lz_bench1','lz_bench2','lz_bench3','lz_trash','lz_hydrant','lz_angel','lz_statue','lz_busstop',
+ 'lz_foodcart1','lz_foodcart2','lz_umbrB','lz_umbrG','lz_barrel1','lz_barrel2','lz_crate1','lz_crate2',
+ 'lz_lantern','lz_pot1','lz_pot2','lz_bartable','lz_fountain','lz_lamp1','lz_lamp2','lz_lamp3','lz_fire','lz_btable2'];
+const toLoad=[...SL.map(k=>'sl/'+k),...ME.map(k=>'me/'+k),...ME2.map(k=>'me2/'+k),'coin'];
 let loadedN=0;
 toLoad.forEach(k=>{ const im=new Image(); im.src='village-assets/'+k+'.png';
-  const key=k.replace('sl/','').replace('me/','').replace('eg/','');
+  const key=k.replace('sl/','').replace('me2/','').replace('me/','').replace('eg/','');
   im.onload=()=>{ IMGS[key]=im; if(++loadedN>=toLoad.length) init(); };
   im.onerror=()=>{ console.warn('load fail',k); if(++loadedN>=toLoad.length) init(); }; });
 
@@ -294,6 +303,10 @@ function bakeGround(c,map,cols,rows,island){
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
     if(map[y][x]===1){ const [ci,ri]=soilPiece(map,cols,rows,x,y); T(c,IMGS.soilauto,ci,ri,x*TILE,y*TILE); }
     else if(map[y][x]===3){ T(c,IMGS.stonetile,0,0,x*TILE,y*TILE); }
+    else if(map[y][x]===5){ c.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+      c.fillStyle='rgba(120,80,40,.12)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2); }
+    else if(map[y][x]===4){ c.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+      T(c,IMGS.wallM,0,0,x*TILE,y*TILE); }
   }
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]===2){
     const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<rows&&tx>=0&&tx<cols&&map[ty][tx]===2; };
@@ -442,8 +455,19 @@ const PROP_DEF={
   bedY:{s:1},bedG:{s:1},bedP:{s:1},plantA:{s:0},plantB:{s:0},rugT:{s:0},rugP:{s:0},rugS1:{s:0},rugS2:{s:0},
   wobj1:{s:0},wobj2:{s:0},wobj3:{s:0},wobj4:{s:0},wobj5:{s:0},wobj6:{s:0},
 };
-for(let i=1;i<=54;i++) PROP_DEF['deco'+i]={s:0};
-PROP_DEF.bookshelf={s:1};
+for(let i=1;i<=54;i++) PROP_DEF['deco'+i]={s:0,cat:'deco'};
+PROP_DEF.bookshelf={s:1,cat:'furn'};
+['lz_bench1','lz_bench2','lz_bench3','lz_trash','lz_hydrant','lz_angel','lz_statue','lz_busstop','lz_foodcart1','lz_foodcart2',
+ 'lz_umbrB','lz_umbrG','lz_barrel1','lz_barrel2','lz_crate1','lz_crate2','lz_lantern','lz_pot1','lz_pot2','lz_bartable',
+ 'lz_fountain','lz_lamp1','lz_lamp2','lz_lamp3','lz_fire','lz_btable2'].forEach(k=>PROP_DEF[k]={s:1,cat:'city'});
+PROP_DEF.lz_lantern.s=0; PROP_DEF.lz_fire.s=0;
+// 카테고리 태깅
+const CAT_OF=k=>{
+  const d=PROP_DEF[k]; if(d&&d.cat) return d.cat;
+  if(/^(tree|bush|stump|log|flower|mush|sapling|bigtree)/.test(k)) return 'nature';
+  if(/^(bed|dresser|nstand|btable$|chair|clock|frame|rug|plant|chest|basket|workst)/.test(k)) return 'furn';
+  return 'farm';
+};
 const SCENE_DEF={
   camp:{ cols:30, rows:22, seed:1.3, loc:'🏡 보드마을 캠핑존',
     structs:[{k:'home',x:3,y:4,furn:[{k:'bedP',fx:1,fy:0.6},{k:'bookshelf',fx:3,fy:0.5},{k:'rugT',fx:1.6,fy:2.6}]},{k:'board',x:11,y:9}],
@@ -532,6 +556,7 @@ function buildScene(name){
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) solid[y][x]=!land[y][x];
   // 물칸(연못 내부)
   const waterInner=[];
+  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(ground[y][x]===4){ solid[y][x]=true; }
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(ground[y][x]===2){
     solid[y][x]=true;
     const g2=(tx,ty)=>ty>=0&&ty<rows&&tx>=0&&tx<cols&&ground[ty][tx]===2;
@@ -643,6 +668,8 @@ function edApply(e){
   else if(t==='sea'){ d.land[ty][tx]=false; d.ground[ty][tx]=0; }
   else if(t==='road'){ d.ground[ty][tx]=1; d.land[ty][tx]=true; }
   else if(t==='stone'){ d.ground[ty][tx]=3; d.land[ty][tx]=true; }
+  else if(t==='wall'){ d.ground[ty][tx]=4; d.land[ty][tx]=true; }
+  else if(t==='floor'){ d.ground[ty][tx]=5; d.land[ty][tx]=true; }
   else if(t==='pond'){ d.ground[ty][tx]=2; d.land[ty][tx]=true; }
   else if(t==='grass'){ d.ground[ty][tx]=0; }
   else if(t==='prop'){ if(!editor.drag){ d.props.push({k:editor.key,x:tx,y:ty}); } }
@@ -792,6 +819,12 @@ function edInit(){
   if(!new URLSearchParams(location.search).has('edit')) return;
   document.getElementById('btnEdit').style.display='inline-block';
   const pal=document.getElementById('edProps');
+  document.querySelectorAll('#edCats .edt').forEach(cb=>{
+    cb.onclick=()=>{ const cat=cb.dataset.c;
+      document.querySelectorAll('#edCats .edt').forEach(x=>x.classList.remove('sel')); cb.classList.add('sel');
+      pal.querySelectorAll('.edp').forEach(p=>{ p.style.display=(cat==='all'||CAT_OF(p.dataset.k)===cat)?'flex':'none'; });
+    };
+  });
   Object.keys(PROP_DEF).forEach(k=>{
     const b=document.createElement('div'); b.className='edp'; b.dataset.k=k; b.title=k;
     const cc=document.createElement('canvas'); cc.width=36; cc.height=36; b.appendChild(cc);
@@ -801,7 +834,7 @@ function edInit(){
       document.querySelectorAll('.edp,.edt,.eds').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); };
     pal.appendChild(b);
   });
-  document.querySelectorAll('.edt').forEach(b=>{
+  document.querySelectorAll('#edPanel .edt[data-t]').forEach(b=>{
     b.onclick=()=>{ editor.tool=b.dataset.t;
       document.querySelectorAll('.edp,.edt,.eds').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); };
   });
