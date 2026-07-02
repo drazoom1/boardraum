@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>보드마을 — 보드라움</title>
+<!-- Graphics: "Ninja Adventure" asset pack by Pixel-boy & AAA (itch.io) — CC0 1.0 (public domain) -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#1d2b20; font-family:'Pretendard',-apple-system,sans-serif; overflow:hidden; touch-action:none; }
+  #wrap { display:flex; align-items:center; justify-content:center; height:100%; }
+  canvas#cv { image-rendering:pixelated; max-width:100vw; max-height:100vh; border-radius:6px; }
+  #hud { position:fixed; top:10px; left:10px; display:flex; gap:8px; align-items:center; z-index:5; }
+  .chip { background:rgba(0,0,0,.55); color:#fff; padding:6px 12px; border-radius:20px; font-size:14px; font-weight:700; }
+  #hint { position:fixed; bottom:110px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.65); color:#fff; padding:8px 16px; border-radius:12px; font-size:14px; display:none; z-index:5; }
+  #dpad { position:fixed; left:14px; bottom:14px; display:grid; grid-template:repeat(3,52px)/repeat(3,52px); gap:2px; z-index:6; opacity:.85; }
+  #dpad button, #btnE { background:rgba(255,255,255,.18); border:1.5px solid rgba(255,255,255,.35); color:#fff; border-radius:12px; font-size:20px; font-weight:800; -webkit-user-select:none; user-select:none; }
+  #btnE { position:fixed; right:18px; bottom:34px; width:72px; height:72px; border-radius:50%; font-size:22px; background:rgba(255,210,80,.25); border-color:rgba(255,210,80,.6); z-index:6; }
+  #creator { position:fixed; inset:0; background:rgba(12,20,14,.88); display:flex; align-items:center; justify-content:center; z-index:10; }
+  #creator .card { background:#fff; border-radius:20px; padding:24px; width:340px; text-align:center; }
+  #creator h1 { font-size:20px; margin-bottom:4px; }
+  #creator p { font-size:13px; color:#888; margin-bottom:12px; }
+  #creator input { width:100%; border:1.5px solid #ddd; border-radius:10px; padding:10px; font-size:15px; text-align:center; margin-bottom:12px; }
+  .swlabel { font-size:12px; color:#666; font-weight:700; margin-bottom:6px; }
+  #charGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:4px; }
+  #charGrid .cbtn { border:2.5px solid #eee; border-radius:12px; padding:6px 0 2px; cursor:pointer; background:#fafafa; }
+  #charGrid .cbtn.sel { border-color:#111; background:#fff6e0; }
+  #charGrid canvas { image-rendering:pixelated; }
+  #creator button.go { margin-top:12px; width:100%; background:#111; color:#fff; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:800; cursor:pointer; }
+  #loading { position:fixed; inset:0; background:#1d2b20; color:#fff; display:flex; align-items:center; justify-content:center; z-index:20; font-weight:800; }
+  @media (hover:hover) and (pointer:fine) { #dpad,#btnE { display:none; } }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="960" height="704"></canvas></div>
+<div id="hud">
+  <span class="chip">🪙 <span id="pts">0</span></span>
+  <span class="chip" id="loc">🏘️ 보드마을</span>
+</div>
+<div id="hint"></div>
+<div id="dpad">
+  <span></span><button data-k="ArrowUp">▲</button><span></span>
+  <button data-k="ArrowLeft">◀</button><span></span><button data-k="ArrowRight">▶</button>
+  <span></span><button data-k="ArrowDown">▼</button><span></span>
+</div>
+<button id="btnE">E</button>
+
+<div id="creator" style="display:none">
+  <div class="card">
+    <h1>🏘️ 보드마을에 오신 걸 환영해요!</h1>
+    <p>캐릭터를 고르고 마을을 돌아다니며<br>코인을 모으고, 내 집 책장을 구경하세요.</p>
+    <input id="nm" placeholder="닉네임" maxlength="8" value="여행자">
+    <div class="swlabel">내 캐릭터</div>
+    <div id="charGrid"></div>
+    <button class="go" id="go">마을 입장 🎲</button>
+  </div>
+</div>
+<div id="loading">🎲 보드마을 불러오는 중...</div>
+
+<script>
+const TILE=32, COLS=30, ROWS=22, W=COLS*TILE, H=ROWS*TILE;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+
+// ── 저장 ──
+const store={ get:(k,d)=>{try{const v=localStorage.getItem('village_'+k);return v?JSON.parse(v):d}catch{return d}}, set:(k,v)=>{try{localStorage.setItem('village_'+k,JSON.stringify(v))}catch{}} };
+let points=store.get('points',0);
+document.getElementById('pts').textContent=points;
+
+// ── 에셋 로드 (Ninja Adventure pack, CC0) ──
+const CHARS=['Boy','Princess','Villager','Woman','Knight','Monk','Eskimo','Villager2'];
+const IMGS={};
+const toLoad=['tf','tn','th','tw','tif','coin','npc',...CHARS.map(c=>'char_'+c)];
+let loadedN=0, failed={};
+toLoad.forEach(k=>{ const im=new Image(); im.src='village-assets/'+k+'.png';
+  im.onload=()=>{ IMGS[k]=im; if(++loadedN>=toLoad.length) init(); };
+  im.onerror=()=>{ failed[k]=1; if(++loadedN>=toLoad.length) init(); }; });
+
+// ── 캐릭터 선택 ──
+let me=store.get('me',null);
+if(me && !me.char) me=null; // 구버전(색상 방식) 저장 무시
+let charSel=0;
+
+// ── 맵 ──  0잔디 1길 2물 3나무
+const map=[], solid=[];
+for(let y=0;y<ROWS;y++){ map[y]=[]; solid[y]=[]; for(let x=0;x<COLS;x++){ map[y][x]=0; solid[y][x]=false; } }
+const rng=(x,y)=>{ let h=(x*374761393+y*668265263)^(x*y*1274126177); h=(h^(h>>13))*1103515245; return (h^(h>>16))>>>0; };
+for(let x=2;x<28;x++) map[11][x]=1;               // 동서대로
+for(let y=3;y<20;y++) map[y][14]=1;               // 남북대로
+for(let y=8;y<11;y++) map[y][5]=1;                // 내 집 진입로
+for(let y=7;y<11;y++) map[y][19]=1;               // 도서관 진입로
+map[17][5]=1;                                     // 마켓 앞
+for(let x=5;x<15;x++) map[18][x]=1;               // 남쪽 골목
+const POND={x:23,y:15,w:5,h:5};
+for(let y=POND.y;y<POND.y+POND.h;y++) for(let x=POND.x;x<POND.x+POND.w;x++){ map[y][x]=2; solid[y][x]=true; }
+for(let x=0;x<COLS;x++){ [0,ROWS-1].forEach(y=>{ if(rng(x,y)%3!==0){ map[y][x]=3; solid[y][x]=true; } }); }
+for(let y=0;y<ROWS;y++){ [0,COLS-1].forEach(x=>{ if(rng(x,y)%3!==0){ map[y][x]=3; solid[y][x]=true; } }); }
+[[3,3],[11,4],[17,15],[10,16],[25,9],[2,14],[27,3],[17,17],[22,13],[9,14],[26,7]].forEach(([x,y])=>{ if(map[y][x]===0){ map[y][x]=3; solid[y][x]=true; } });
+
+// ── 건물 (TilesetHouse 프리팹, 16px→2x) ──
+const buildings=[
+  { tx:0, ty:0, tw:4, th:3, x:4,  y:5,  label:'내 집',        door:1, action:'home', smoke:true },
+  { tx:12,ty:0, tw:4, th:3, x:18, y:4,  label:'보드위키 도서관', door:1, action:'wiki' },
+  { tx:16,ty:0, tw:3, th:3, x:4,  y:14, label:'보드마켓',      door:1, action:'market', wip:true },
+];
+buildings.forEach(b=>{ for(let y=b.y;y<b.y+b.th;y++) for(let x=b.x;x<b.x+b.tw;x++){ if(y<ROWS&&x<COLS){ solid[y][x]=true; map[y][x]=0; } } });
+const board={ x:16, y:9 };
+solid[board.y][board.x]=true;
+
+let coins=store.get('coins_v3', [[8,11],[11,11],[17,11],[24,11],[14,5],[14,8],[14,15],[5,9],[19,8],[9,18],[12,18],[26,12]].map(([x,y])=>({x,y,got:false})));
+function saveCoins(){ store.set('coins_v3',coins); store.set('points',points); document.getElementById('pts').textContent=points; }
+
+// ── 책장 게임 ──
+let shelfGames=[];
+try{
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+    if(k && k.startsWith('boardraum_owned_') && !k.endsWith('anon')){ const arr=JSON.parse(localStorage.getItem(k)); if(Array.isArray(arr)&&arr.length){ shelfGames=arr.slice(0,16); break; } } }
+}catch{}
+if(!shelfGames.length){
+  shelfGames=[
+    {koreanName:'스플렌더', imageUrl:'https://cf.geekdo-images.com/vNFe4JkhKAERzi4T0Ntwpw__original/img/rqcUdtu_N4v-SpI96XVmpYHnJww=/0x0/filters:format(png)/pic8234167.png'},
+    {koreanName:'치킨차차', imageUrl:'https://cf.geekdo-images.com/ZxGfy7AR2mjrKVDiDVJoBw__original/img/vmsm-xQFLSoTtM4cgm0WIVO_dZ0=/0x0/filters:format(jpeg)/pic406697.jpg'},
+    {koreanName:'아크 노바'},{koreanName:'테라포밍 마스'},{koreanName:'윙스팬'},{koreanName:'푸에르토리코'},
+    {koreanName:'글룸헤이븐'},{koreanName:'카탄'},{koreanName:'스컬킹'},{koreanName:'다빈치코드'},
+  ];
+}
+const coverImgs={};
+shelfGames.forEach((g,i)=>{ if(g.imageUrl){ const im=new Image(); im.src=g.imageUrl; im.onload=()=>coverImgs[i]=im; } });
+
+// ── 입력 ──
+let scene='village';
+const player={ x:14*TILE+16, y:12*TILE+16, dir:'down', frame:0, ft:0, moving:false };
+const keys={};
+const typing=e=>e.target&&['INPUT','TEXTAREA'].includes(e.target.tagName);
+addEventListener('keydown',e=>{ if(typing(e)) return; keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E'||e.key==='Enter') doAction(); });
+addEventListener('keyup',e=>{ if(typing(e)) return; keys[e.key]=false; });
+addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; });
+document.querySelectorAll('#dpad button').forEach(b=>{ const k=b.dataset.k;
+  b.addEventListener('touchstart',e=>{e.preventDefault();keys[k]=true;},{passive:false});
+  b.addEventListener('touchend',e=>{e.preventDefault();keys[k]=false;},{passive:false}); });
+document.getElementById('btnE').addEventListener('touchstart',e=>{e.preventDefault();doAction();},{passive:false});
+document.getElementById('btnE').addEventListener('click',()=>doAction());
+
+const chicken={ x:17*TILE, y:13*TILE, tx:17*TILE, ty:13*TILE, t:0, dir:'down', frame:0, ft:0 };
+let bubble=null;
+function say(t,ms=2600){ bubble={text:t, until:performance.now()+ms}; }
+
+function doorCenter(b){ return [ (b.x+b.door)*TILE+16, (b.y+b.th-1)*TILE+16 ]; }
+function nearPrompt(){
+  const py=Math.floor(player.y/TILE);
+  if(scene==='village'){
+    for(const b of buildings){ const [dcx,dcy]=doorCenter(b);
+      if(Math.hypot(player.x-dcx, player.y-dcy)<56) return b; }
+    const bcx=board.x*TILE+16, bcy=board.y*TILE+16;
+    if(Math.hypot(player.x-bcx, player.y-bcy)<56) return {action:'board',label:'마을 게시판'};
+  } else if(scene==='home'){
+    if(py>=18) return {action:'exit',label:'마을로 나가기'};
+    if(py<=13) return {action:'shelf',label:'책장 구경'};
+  }
+  return null;
+}
+function doAction(){
+  const p=nearPrompt(); if(!p) return;
+  if(p.action==='home'){ scene='home'; player.x=480; player.y=612; player.dir='up'; document.getElementById('loc').textContent='🏠 내 집'; say((me?me.name:'나')+'의 아늑한 집 🛋️'); }
+  else if(p.action==='exit'){ scene='village'; player.x=5*TILE+16; player.y=9*TILE+16; player.dir='down'; document.getElementById('loc').textContent='🏘️ 보드마을'; }
+  else if(p.action==='wiki'){ say('📚 보드위키 도서관! (보드라움 위키로 연결 예정)'); }
+  else if(p.action==='market'){ say('🚧 보드마켓 — 공사중이에요! 곧 열려요'); }
+  else if(p.action==='board'){ say('📢 코보게 7월 신작 소식이 올라왔어요!'); }
+  else if(p.action==='shelf'){ say('🎲 내 보드게임 '+shelfGames.length+'개 전시 중! 뿌듯하다~'); }
+}
+
+// ── 타일 헬퍼 ──
+function T(c,img,tx,ty,X,Y){ c.drawImage(img,tx*16,ty*16,16,16,X,Y,TILE,TILE); }
+function TS(c,img,tx,ty,tw,th,X,Y,s=2){ c.drawImage(img,tx*16,ty*16,tw*16,th*16,X,Y,tw*16*s,th*16*s); }
+// 4방향 스프라이트 (Walk.png: 열=방향 down/up/left/right, 행=프레임)
+function drawActor(c,img,X,Y,dir,frame,s=2){
+  if(!img) return;
+  const fw=img.width/4, fh=img.height/4;
+  const col={down:0,up:1,left:2,right:3}[dir]||0;
+  c.fillStyle='rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(X,Y+1,fw*s*0.32,fh*s*0.10,0,0,7); c.fill();
+  c.drawImage(img,col*fw,(frame%4)*fh,fw,fh, X-fw*s/2, Y-fh*s, fw*s, fh*s);
+}
+
+// ── 마을 베이크 ──
+const bake=document.createElement('canvas'); bake.width=W; bake.height=H;
+const b2=bake.getContext('2d'); b2.imageSmoothingEnabled=false;
+const GRASS_DECOR=[[2,11],[3,11],[1,12],[2,12],[3,12],[4,12]];
+function pathTile(x,y){
+  const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<ROWS&&tx>=0&&tx<COLS&&map[ty][tx]===1; };
+  const n=is(0,-1),s=is(0,1),e=is(1,0),w=is(-1,0);
+  const cnt=n+s+e+w;
+  if(cnt===0) return [3,10];
+  if(n&&s&&!e&&!w) return [3,8];
+  if(!n&&s&&!e&&!w) return [3,7];
+  if(n&&!s&&!e&&!w) return [3,9];
+  if(!n&&!s&&e&&w) return [1,10];
+  if(!n&&!s&&e&&!w) return [0,10];
+  if(!n&&!s&&!e&&w) return [2,10];
+  return [1,8]; // 교차/코너 → 중앙 흙
+}
+function bakeVillage(){
+  const c=b2, tf=IMGS.tf, tn=IMGS.tn, th=IMGS.th, tw=IMGS.tw;
+  // 잔디 + 데코
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    T(c,tf,0,12,x*TILE,y*TILE);
+    const r=rng(x,y);
+    if(map[y][x]===0 && r%8===0){ const d=GRASS_DECOR[r%GRASS_DECOR.length]; T(c,tf,d[0],d[1],x*TILE,y*TILE); }
+    if(map[y][x]===0 && r%37===0){ T(c,tf,1,11,x*TILE,y*TILE); } // 흙 자국
+  }
+  // 길 (오토타일)
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(map[y][x]===1){
+    const [px,py]=pathTile(x,y); T(c,tf,px,py,x*TILE,y*TILE);
+  }
+  // 연못 (물 오토타일: 코너 (4,6)/(7,6)/(4,9)/(7,9), 엣지, 중앙은 순수 물 (11,4))
+  for(let y=POND.y;y<POND.y+POND.h;y++) for(let x=POND.x;x<POND.x+POND.w;x++){
+    const L=x===POND.x, R=x===POND.x+POND.w-1, Tp=y===POND.y, B=y===POND.y+POND.h-1;
+    let sx=11, sy=4; // 중앙(순수 물)
+    if(Tp&&L){sx=4;sy=6;} else if(Tp&&R){sx=7;sy=6;} else if(B&&L){sx=4;sy=9;} else if(B&&R){sx=7;sy=9;}
+    else if(Tp){sx=5;sy=6;} else if(B){sx=5;sy=9;} else if(L){sx=4;sy=7;} else if(R){sx=7;sy=7;}
+    T(c,tw,sx,sy,x*TILE,y*TILE);
+  }
+  // 나무/꽃/수풀
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    const r=rng(x,y);
+    if(map[y][x]===0 && !solid[y][x] && r%29===0){ T(c,tn,0,10,x*TILE,y*TILE); }       // 수풀
+    if(map[y][x]===0 && !solid[y][x] && r%41===0){ T(c,tn,r%2?0:1,11,x*TILE,y*TILE); } // 해바라기
+  }
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(map[y][x]===3){
+    const r=rng(x,y), X=x*TILE, Y=y*TILE;
+    if(r%9===0){ TS(c,tn,16,2,3,3,X-TILE,Y-2*TILE); }        // 큰 나무 3x3
+    else if(r%6===0){ TS(c,tn,14,0,2,2,X-TILE/2,Y-TILE); }   // 분홍 나무 2x2
+    else { TS(c,tn,16,0,2,2,X-TILE/2,Y-TILE); }              // 초록 나무 2x2
+  }
+  // 건물 프리팹
+  buildings.forEach(b=>{
+    c.fillStyle='rgba(0,0,0,.18)'; c.beginPath();
+    c.ellipse(b.x*TILE+b.tw*TILE/2, (b.y+b.th)*TILE-4, b.tw*TILE/2, 8, 0,0,7); c.fill();
+    TS(c,th,b.tx,b.ty,b.tw,b.th,b.x*TILE,b.y*TILE);
+    // 간판
+    c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
+    const lw=c.measureText(b.label).width, lx=b.x*TILE+b.tw*TILE/2, ly=b.y*TILE-14;
+    c.fillStyle='#5c3f22'; c.fillRect(lx-lw/2-10,ly-16,lw+20,22);
+    c.fillStyle='#f5e9d0'; c.fillRect(lx-lw/2-8,ly-14,lw+16,18);
+    c.fillStyle='#5c3f22'; c.fillText(b.label,lx,ly);
+    if(b.wip){ const [dx,dy]=doorCenter(b);
+      c.fillStyle='#f4d35e'; c.fillRect(dx-21,dy+2,42,9);
+      c.fillStyle='#222'; for(let i=0;i<5;i++) c.fillRect(dx-21+i*10,dy+2,5,9);
+      c.fillStyle='#fff'; c.font='bold 8px sans-serif'; c.fillText('공사중',dx,dy+9); }
+  });
+  // 게시판
+  const bx=board.x*TILE, by=board.y*TILE;
+  c.fillStyle='rgba(0,0,0,.18)'; c.beginPath(); c.ellipse(bx+16,by+31,15,3.5,0,0,7); c.fill();
+  c.fillStyle='#7d5530'; c.fillRect(bx+5,by+8,5,24); c.fillRect(bx+22,by+8,5,24);
+  c.fillStyle='#9a6b3d'; c.fillRect(bx-2,by-4,36,22);
+  c.fillStyle='#7d5530'; c.fillRect(bx-2,by-4,36,3);
+  c.fillStyle='#f5e9d0'; c.fillRect(bx+2,by,28,14);
+  c.fillStyle='#c94f4f'; c.fillRect(bx+4,by+2,12,4);
+  c.fillStyle='#999'; c.fillRect(bx+4,by+8,22,2); c.fillRect(bx+4,by+11,16,1.5);
+}
+
+// ── 동적 요소 ──
+const smoke=[]; let smokeT=0;
+const butterflies=[{x:300,y:250,p:0},{x:700,y:500,p:2}];
+function drawVillageDyn(t,dt){
+  ctx.drawImage(bake,0,0);
+  // 물 반짝임 + 수련잎
+  for(let i=0;i<3;i++){ const rr=rng(i*7,Math.floor(t/700)+i);
+    const sx=(POND.x+ (rr%POND.w))*TILE+ (rr>>4)%20, sy=(POND.y+((rr>>2)%POND.h))*TILE+((rr>>6)%20);
+    ctx.fillStyle='rgba(255,255,255,.7)'; ctx.fillRect(sx,sy,3,2); }
+  [[24.2,16.2],[26.4,18.1]].forEach(([lx,ly],i)=>{ const bob=Math.sin(t/900+i*2)*1.5;
+    ctx.fillStyle='#3d8a3c'; ctx.beginPath(); ctx.ellipse(lx*TILE,ly*TILE+bob,9,6,0,0,7); ctx.fill();
+    ctx.fillStyle='#4fa34a'; ctx.beginPath(); ctx.ellipse(lx*TILE-2,ly*TILE-1+bob,5,3,0,0,7); ctx.fill();
+    if(i===0){ ctx.fillStyle='#ef6b9a'; ctx.fillRect(lx*TILE+2,ly*TILE-5+bob,4,4); ctx.fillStyle='#f4d35e'; ctx.fillRect(lx*TILE+3,ly*TILE-4+bob,2,2); } });
+  // 굴뚝 연기 (내 집 지붕)
+  smokeT-=dt; if(smokeT<=0){ smokeT=0.6; const hb=buildings[0];
+    smoke.push({x:hb.x*TILE+hb.tw*TILE-26, y:hb.y*TILE+2, r:3, a:0.45, vx:(Math.random()-0.3)*6, vy:-13-Math.random()*5}); }
+  for(let i=smoke.length-1;i>=0;i--){ const s=smoke[i];
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.r+=dt*5; s.a-=dt*0.15;
+    if(s.a<=0){ smoke.splice(i,1); continue; }
+    ctx.fillStyle=`rgba(240,240,240,${s.a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+  // 코인
+  coins.forEach(cn=>{ if(cn.got) return; const X=cn.x*TILE+16, Y=cn.y*TILE+14+Math.sin(t/300+cn.x)*3;
+    ctx.fillStyle='rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(X,cn.y*TILE+27,6,2,0,0,7); ctx.fill();
+    if(IMGS.coin) ctx.drawImage(IMGS.coin,X-7,Y-7,14,14); // 7x7 원본 → 2배
+    else { ctx.fillStyle='#f4c430'; ctx.beginPath(); ctx.arc(X,Y,7,0,7); ctx.fill(); } });
+  // 나비
+  butterflies.forEach(bf=>{ bf.p+=dt;
+    const bx=bf.x+Math.sin(bf.p*0.7)*60+Math.sin(bf.p*2.3)*14, by=bf.y+Math.cos(bf.p*0.9)*40;
+    const wing=Math.sin(bf.p*18)*3;
+    ctx.fillStyle='#fff'; ctx.fillRect(bx-3-wing,by-2,3+wing,4); ctx.fillRect(bx+1,by-2,3+wing,4);
+    ctx.fillStyle='#f4d35e'; ctx.fillRect(bx-2-wing,by-1,2,2); ctx.fillRect(bx+2,by-1,2,2);
+    ctx.fillStyle='#2b2019'; ctx.fillRect(bx-0.5,by-2.5,1.5,5); });
+  // 닭 NPC
+  drawActor(ctx,IMGS.npc,chicken.x,chicken.y,chicken.dir,Math.floor(chicken.frame));
+  // 구름 그림자
+  const cs=(t/40)%1400-200;
+  ctx.fillStyle='rgba(20,45,25,.10)';
+  ctx.beginPath(); ctx.ellipse(cs,180,130,45,0,0,7); ctx.ellipse(cs+90,210,90,35,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(1100-cs*0.7,520,110,40,0,0,7); ctx.fill();
+}
+
+function drawHome(t){
+  const tif=IMGS.tif;
+  // 마루 (인테리어 우드 타일)
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    if(tif) T(ctx,tif,2,13,x*TILE,y*TILE);
+    else { ctx.fillStyle=(x+y)%2?'#d9b98a':'#d2b083'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE); }
+  }
+  // 벽
+  ctx.fillStyle='#a4794f'; ctx.fillRect(0,0,W,70);
+  ctx.fillStyle='#93683f'; for(let x=0;x<W;x+=26){ ctx.fillRect(x,8,2,54); }
+  ctx.fillStyle='#c9a06b'; ctx.fillRect(0,0,W,6);
+  ctx.fillStyle='#f2e6cf'; ctx.fillRect(0,70,W,20);
+  ctx.fillStyle='#d8c6a4'; ctx.fillRect(0,86,W,4);
+  const win=(wx)=>{ ctx.fillStyle='#6e4527'; ctx.fillRect(wx-4,14,84,48);
+    ctx.fillStyle='#bfe3f5'; ctx.fillRect(wx,18,76,40);
+    ctx.fillStyle='#e8f6ff'; ctx.fillRect(wx,18,34,18);
+    ctx.fillStyle='#6e4527'; ctx.fillRect(wx+36,18,4,40); ctx.fillRect(wx,36,76,3); };
+  win(60); win(816);
+  ctx.fillStyle='rgba(255,240,190,.10)';
+  ctx.beginPath(); ctx.moveTo(60,62); ctx.lineTo(140,62); ctx.lineTo(230,240); ctx.lineTo(90,240); ctx.closePath(); ctx.fill();
+  // 책장
+  const SH_X=100, SH_W=760, PER=8, BW=82, BH=106;
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(SH_X-20,392,SH_W+44,10);
+  ctx.fillStyle='#4a2f18'; ctx.fillRect(SH_X-22,92,SH_W+44,304);
+  ctx.fillStyle='#5a3a20'; ctx.fillRect(SH_X-16,98,SH_W+32,292);
+  ctx.fillStyle='#3a2412'; ctx.fillRect(SH_X-10,104,SH_W+20,280);
+  ctx.fillStyle='#6e4527'; ctx.fillRect(SH_X-26,86,SH_W+52,10);
+  for(let r=0;r<2;r++){
+    const sy=112+r*140;
+    for(let i=0;i<PER;i++){
+      const gi=r*PER+i; if(gi>=shelfGames.length) break;
+      const g=shelfGames[gi], sx=SH_X+i*(BW+13);
+      ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(sx+3,sy+BH-3,BW,5);
+      if(coverImgs[gi]){ ctx.drawImage(coverImgs[gi],sx,sy,BW,BH);
+        ctx.fillStyle='rgba(255,255,255,.10)'; ctx.fillRect(sx,sy,BW,10);
+        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.strokeRect(sx,sy,BW,BH); }
+      else {
+        const hue=(gi*47)%360;
+        ctx.fillStyle=`hsl(${hue},55%,50%)`; ctx.fillRect(sx,sy,BW,BH);
+        ctx.fillStyle=`hsl(${hue},55%,38%)`; ctx.fillRect(sx,sy,BW,26); ctx.fillRect(sx,sy,6,BH);
+        ctx.fillStyle=`hsl(${hue},60%,62%)`; ctx.fillRect(sx+6,sy+26,BW-6,4);
+        ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
+        const nm=(g.koreanName||g.name||'게임').slice(0,7); ctx.fillText(nm,sx+BW/2,sy+BH/2+8);
+        ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(sx+BW/2-10,sy+BH/2+14,20,2);
+      }
+    }
+    ctx.fillStyle='#7a5230'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,12);
+    ctx.fillStyle='#8f6540'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,3);
+  }
+  // 명패
+  const ttl='🎲 '+(me?me.name:'나')+'의 컬렉션 ('+shelfGames.length+'개)';
+  ctx.font='bold 14px Pretendard,sans-serif'; ctx.textAlign='center';
+  const ttw=ctx.measureText(ttl).width;
+  ctx.fillStyle='#5c3f22'; ctx.fillRect(W/2-ttw/2-16,16,ttw+32,32);
+  ctx.fillStyle='#f5e9d0'; ctx.fillRect(W/2-ttw/2-12,20,ttw+24,24);
+  ctx.fillStyle='#5c3f22'; ctx.fillText(ttl, W/2, 37);
+  // 러그+테이블
+  ctx.fillStyle='#c95561'; ctx.fillRect(330,430,300,170);
+  ctx.fillStyle='#e2707a'; ctx.fillRect(342,442,276,146);
+  ctx.fillStyle='#eb98a0'; ctx.fillRect(360,460,240,110);
+  ctx.fillStyle='#c95561'; for(let i=0;i<12;i++){ ctx.fillRect(348+i*22,448,8,3); ctx.fillRect(348+i*22,580,8,3); }
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(480,560,74,14,0,0,7); ctx.fill();
+  ctx.fillStyle='#5e3a1e'; ctx.fillRect(420,548,14,22); ctx.fillRect(526,548,14,22);
+  ctx.fillStyle='#7a4a26'; ctx.fillRect(408,478,144,76);
+  ctx.fillStyle='#8f5c33'; ctx.fillRect(408,478,144,8);
+  ctx.fillStyle='#5da03f'; ctx.fillRect(424,494,112,52);
+  ctx.fillStyle='#4c8a33'; for(let i=0;i<4;i++){ ctx.fillRect(424+i*28,494,2,52); ctx.fillRect(424,494+i*14,112,2); }
+  ctx.fillStyle='#f4d35e'; ctx.fillRect(434,504,12,12); ctx.fillStyle='#e05656'; ctx.fillRect(462,518,12,12); ctx.fillStyle='#3f9cde'; ctx.fillRect(496,500,12,12);
+  ctx.fillStyle='#fff'; ctx.fillRect(514,524,11,11); ctx.fillStyle='#222';
+  [[517,527],[521,531],[517,531],[521,527],[519,529]].forEach(([px,py])=>ctx.fillRect(px,py,2,2));
+  // 출구 매트
+  ctx.fillStyle='#a83c3c'; ctx.fillRect(432,636,96,48);
+  ctx.fillStyle='#c94f4f'; ctx.fillRect(438,642,84,36);
+  ctx.fillStyle='#fff'; ctx.font='bold 13px Pretendard,sans-serif'; ctx.fillText('나가기 ⬇', 480, 664);
+}
+
+// ── 충돌/루프 ──
+function isSolid(x,y){
+  const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
+  if(tx<0||ty<0||tx>=COLS||ty>=ROWS) return true;
+  if(scene==='village') return solid[ty][tx];
+  if(scene==='home'){ if(ty<13) return true; if(x>396&&x<564&&y>466&&y<566) return true; return false; }
+  return false;
+}
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(50, now-last)/1000; last=now;
+  let dx=0,dy=0;
+  if(keys['ArrowLeft']||keys['a']) dx=-1; if(keys['ArrowRight']||keys['d']) dx=1;
+  if(keys['ArrowUp']||keys['w']) dy=-1; if(keys['ArrowDown']||keys['s']) dy=1;
+  player.moving=!!(dx||dy);
+  if(dx||dy){
+    const sp=150*dt, nx=player.x+dx*sp, ny=player.y+dy*sp;
+    if(!isSolid(nx-8,player.y)&&!isSolid(nx+8,player.y)) player.x=nx;
+    if(!isSolid(player.x,ny-4)&&!isSolid(player.x,ny+8)) player.y=ny;
+    player.dir=dy<0?'up':dy>0?'down':dx<0?'left':'right';
+    player.ft+=dt; if(player.ft>0.13){ player.ft=0; player.frame=(player.frame+1)%4; }
+  } else player.frame=0;
+  player.x=Math.max(10,Math.min(W-10,player.x)); player.y=Math.max(20,Math.min(H-6,player.y));
+  if(scene==='village') coins.forEach(cn=>{ if(!cn.got && Math.hypot(cn.x*TILE+16-player.x, cn.y*TILE+16-player.y)<20){ cn.got=true; points+=10; saveCoins(); say('+10 포인트! 🪙',900); } });
+  // 닭
+  chicken.t-=dt;
+  if(chicken.t<=0){ chicken.t=2+Math.random()*3; chicken.tx=(15+Math.random()*7)*TILE; chicken.ty=(12.5+Math.random()*4)*TILE; }
+  const cdx=chicken.tx-chicken.x, cdy=chicken.ty-chicken.y;
+  if(Math.hypot(cdx,cdy)>3){ chicken.x+=cdx*dt*0.8; chicken.y+=cdy*dt*0.8;
+    chicken.dir=Math.abs(cdx)>Math.abs(cdy)?(cdx<0?'left':'right'):(cdy<0?'up':'down');
+    chicken.frame+=dt*7; } else chicken.frame=0;
+
+  ctx.clearRect(0,0,W,H);
+  if(scene==='village') drawVillageDyn(now,dt); else drawHome(now);
+  const myImg=IMGS['char_'+(me?me.char:'Boy')]||IMGS['char_Boy'];
+  drawActor(ctx,myImg,player.x,player.y,player.dir,player.moving?player.frame:0,2.2);
+  if(me){ ctx.fillStyle='rgba(0,0,0,.5)'; ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
+    const tw=ctx.measureText(me.name).width; ctx.fillRect(player.x-tw/2-6,player.y-56,tw+12,16);
+    ctx.fillStyle='#fff'; ctx.fillText(me.name,player.x,player.y-44); }
+  if(bubble && now<bubble.until){
+    ctx.font='bold 13px Pretendard,sans-serif'; const tw=ctx.measureText(bubble.text).width;
+    const bx=Math.max(10,Math.min(W-tw-30,player.x-tw/2-10)), by=player.y-90;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.roundRect(bx,by,tw+20,26,8); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(player.x-5,by+26); ctx.lineTo(player.x+5,by+26); ctx.lineTo(player.x,by+33); ctx.fill();
+    ctx.fillStyle='#222'; ctx.textAlign='left'; ctx.fillText(bubble.text,bx+10,by+18);
+  }
+  const p=nearPrompt(); const hint=document.getElementById('hint');
+  if(p){ hint.style.display='block'; hint.textContent='E — '+(p.label||p.action); } else hint.style.display='none';
+  requestAnimationFrame(loop);
+}
+
+// ── 초기화 ──
+function init(){
+  document.getElementById('loading').style.display='none';
+  bakeVillage();
+  // 캐릭터 선택 그리드
+  const grid=document.getElementById('charGrid');
+  CHARS.forEach((ch,i)=>{
+    const btn=document.createElement('div'); btn.className='cbtn'+(i===0?' sel':'');
+    const cc=document.createElement('canvas'); cc.width=48; cc.height=52;
+    btn.appendChild(cc); grid.appendChild(btn);
+    const g=cc.getContext('2d'); g.imageSmoothingEnabled=false;
+    const img=IMGS['char_'+ch]; if(img) g.drawImage(img,0,0,img.width/4,img.height/4,8,10,32,32*(img.height/img.width));
+    btn.onclick=()=>{ grid.querySelectorAll('.cbtn').forEach(x=>x.classList.remove('sel')); btn.classList.add('sel'); charSel=i; };
+  });
+  document.getElementById('go').onclick=()=>{
+    me={ name:(document.getElementById('nm').value||'여행자').slice(0,8), char:CHARS[charSel] };
+    store.set('me',me); document.getElementById('creator').style.display='none';
+  };
+  if(!me) document.getElementById('creator').style.display='flex';
+  requestAnimationFrame(loop);
+}
+// 디버그/테스트용 핸들 (프로토타입)
+window.__v={ player, keys, doAction, get scene(){return scene}, set scene(s){scene=s}, get points(){return points} };
+</script>
+</body>
+</html>

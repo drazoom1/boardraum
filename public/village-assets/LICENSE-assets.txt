@@ -1,0 +1,3 @@
+Graphics: "Ninja Adventure" asset pack by Pixel-boy & AAA
+Source: https://pixel-boy.itch.io/ninja-adventure-asset-pack
+License: CC0 1.0 Universal (public domain)
