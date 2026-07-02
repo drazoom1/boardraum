@@ -8,8 +8,8 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { height:100%; background:#7fccc8; font-family:'Pretendard',-apple-system,sans-serif; overflow:hidden; touch-action:none; }
-  #wrap { display:flex; align-items:center; justify-content:center; height:100%; }
-  canvas#cv { image-rendering:pixelated; max-width:100vw; max-height:100vh; }
+  #wrap { position:fixed; inset:0; }
+  canvas#cv { image-rendering:pixelated; width:100%; height:100%; display:block; }
   #chatBar { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); display:none; gap:6px; z-index:7; width:min(420px,80vw); }
   #chatBar input { flex:1; border:2px solid rgba(0,0,0,.3); border-radius:12px; padding:10px 14px; font-size:14px; outline:none; }
   #chatBar button { border:none; background:#111; color:#fff; border-radius:12px; padding:0 16px; font-weight:800; cursor:pointer; }
@@ -100,9 +100,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-const TILE=32, VW=960, VH=704;
+const TILE=32; let VW=960, VH=704;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
-ctx.imageSmoothingEnabled=false;
+function fitCanvas(){ VW=Math.min(window.innerWidth,1600); VH=Math.min(window.innerHeight,1000); cv.width=VW; cv.height=VH; ctx.imageSmoothingEnabled=false; }
+fitCanvas(); addEventListener('resize',fitCanvas);
 const SB='https://wwpvntmueafieessgnbu.supabase.co/functions/v1/make-server-0b7d3bae';
 const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHZudG11ZWFmaWVlc3NnbmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3MDczMjUsImV4cCI6MjA3MDI4MzMyNX0.KG4yuo02jACcVOlG7av3bMFmRcfHK6lzu0x78RMhz0c';
 
@@ -118,7 +119,7 @@ const SL=['grass','grassauto','gdec1','gdec2','gdec3','gdec4','gdec5','gdec6','s
   'treeA','treeB','treeC','treeD','bigtree','bush1','bush2','stump','log',
   'flower1','flower2','flower3','flower4','mush1','mush2','mush3',
   'sign1','sign2','well','picnic','boat','chicken','cowrow','coop',
-  'houseA','houseLib','houseMkt','hall',...SLC.map(c=>'slc_'+c)];
+  'houseA','houseLib','houseMkt','hall','dgn_uwe','dgn_knizia','dgn_leacock','dgn_warsch',...SLC.map(c=>'slc_'+c)];
 const ME=['camper','btable','tentS_blue','tentS_green'];
 const EGG_PIECES=['pawn','rook','knight','bishop','queen','king'];
 const EGGS=[];
@@ -196,31 +197,43 @@ function soilPiece(map,cols,rows,x,y){
   if(!n&&!s) return [!w?0:(!e?2:1), 3];
   return [!w?0:(!e?2:1), !n?0:(!s?2:1)];
 }
-// 섬 마스크: 유기적(울퉁불퉁) 모양 + 출구 corridors(육지 다리) + 길/연못 보정
-function makeIsland(cols,rows,exits,map,seed){
-  const m=newGrid(cols,rows,false);
-  const cx=cols/2, cy=rows/2, s=seed||1;
+// 섬 마스크: 유기적 블롭 + 스무딩(부드러운 해안) + 보호칸(길·연못·구조물·출구)
+function makeIsland(cols,rows,exits,map,seed,patches){
+  const m=newGrid(cols,rows,false), prot=newGrid(cols,rows,false);
+  const cx=cols/2, cy=rows/2, sd=seed||1;
   for(let y=1;y<rows-1;y++) for(let x=1;x<cols-1;x++){
     const nx=(x-cx)/(cols/2-1.2), ny=(y-cy)/(rows/2-1.2);
     const ang=Math.atan2(ny,nx);
-    const wob=0.80+0.13*Math.sin(ang*3+s*2.1)+0.09*Math.sin(ang*5+s*4.7)+0.05*Math.sin(ang*9+s*7.3);
+    const wob=0.86+0.10*Math.sin(ang*2+sd*2.1)+0.06*Math.sin(ang*3+sd*4.7);
     if(nx*nx+ny*ny<=wob*wob) m[y][x]=true;
   }
+  const mark=(x,y)=>{ if(y>0&&y<rows-1&&x>0&&x<cols-1){ m[y][x]=true; prot[y][x]=true; } };
+  (patches||[]).forEach(([px,py,pw,ph])=>{ for(let y=py;y<py+ph;y++) for(let x=px;x<px+pw;x++) mark(x,y); });
+  if(map) for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]!==0)
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++) mark(x+dx,y+dy);
   (exits||[]).forEach(ex=>{
+    for(let x=ex.x1;x<=ex.x2;x++){
+      if(ex.side==='bottom'){ for(let y=Math.floor(rows*0.6);y<rows;y++){ m[y]&&(m[y][x]=true); prot[y]&&(prot[y][x]=true); } }
+      else { for(let y=0;y<Math.ceil(rows*0.4);y++){ m[y]&&(m[y][x]=true); prot[y]&&(prot[y][x]=true); } }
+    }
+  });
+  // 스무딩 2회: 8이웃 5개 이상이 육지면 육지 (보호칸은 항상 육지)
+  for(let it=0;it<2;it++){
+    const n2=newGrid(cols,rows,false);
+    for(let y=1;y<rows-1;y++) for(let x=1;x<cols-1;x++){
+      if(prot[y][x]){ n2[y][x]=true; continue; }
+      let cnt=0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(dx||dy){ if(m[y+dy][x+dx]) cnt++; } }
+      n2[y][x]= m[y][x] ? cnt>=4 : cnt>=6;
+    }
+    for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) m[y][x]=n2[y][x];
+  }
+  (exits||[]).forEach(ex=>{ // 스무딩 후 출구 재보장
     for(let x=ex.x1;x<=ex.x2;x++){
       if(ex.side==='bottom'){ for(let y=Math.floor(rows*0.6);y<rows;y++) m[y][x]=true; }
       else { for(let y=0;y<Math.ceil(rows*0.4);y++) m[y][x]=true; }
     }
   });
-  // 길·연못이 물 위에 뜨지 않게: 해당 칸 + 주변 1칸 육지 보정
-  if(map){
-    for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]!==0){
-      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-        const ty=y+dy,tx=x+dx;
-        if(ty>0&&ty<rows-0&&tx>0&&tx<cols-0&&ty<rows&&tx<cols&&m[ty]) m[ty][tx]=true;
-      }
-    }
-  }
   return m;
 }
 function bakeGround(c,map,cols,rows,island){
@@ -265,6 +278,31 @@ function drawSprites(c,sp){
     if(s.shadow){ c.fillStyle='rgba(0,0,0,.15)'; c.beginPath();
       c.ellipse(s.px+img.width, s.base-4, img.width*0.9, 8, 0,0,7); c.fill(); }
     c.drawImage(img, s.px, s.py, img.width*2, img.height*2); });
+}
+function roomSolid(solid,rx,ry,rw,rh,doorXs){
+  for(let x=rx;x<rx+rw;x++){ solid[ry][x]=true; if(!doorXs.includes(x)) solid[ry+rh-1][x]=true; }
+  for(let y=ry;y<ry+rh;y++){ solid[y][rx]=true; solid[y][rx+rw-1]=true; }
+}
+function roomDraw(c,rx,ry,rw,rh,doorXs,fA,fB){
+  for(let y=ry;y<ry+rh;y++) for(let x=rx;x<rx+rw;x++){
+    c.fillStyle=(x+y)%2?fA:fB; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+    c.fillStyle='rgba(120,80,40,.12)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
+  }
+  for(let x=rx;x<rx+rw;x++){
+    T(c,IMGS.wallM,0,0,x*TILE,ry*TILE);
+    if(!doorXs.includes(x)) T(c,IMGS.wallM,0,0,x*TILE,(ry+rh-1)*TILE);
+  }
+  for(let y=ry;y<ry+rh;y++){ T(c,IMGS.wallL,0,0,rx*TILE,y*TILE); T(c,IMGS.wallR,0,0,(rx+rw-1)*TILE,y*TILE); }
+  c.fillStyle='#c95561'; c.fillRect(doorXs[0]*TILE+4,(ry+rh-1)*TILE+6,doorXs.length*TILE-8,20);
+}
+function miniShelf(c,shx,shy){
+  c.fillStyle='#5c3f22'; c.fillRect(shx-4,shy-4,72,60);
+  c.fillStyle='#3a2412'; c.fillRect(shx,shy,64,52);
+  for(let r2=0;r2<2;r2++) for(let i=0;i<5;i++){
+    const hgt=14+((i*7+r2*5)%6), hue=(i*53+r2*80+shx)%360;
+    c.fillStyle=`hsl(${hue},48%,52%)`; c.fillRect(shx+4+i*12, shy+4+r2*24+(18-hgt), 9, hgt);
+  }
+  c.fillStyle='#5c3f22'; c.fillRect(shx,shy+22,64,4); c.fillRect(shx,shy+48,64,4);
 }
 function plaque(c,cx,cy,text,big=false){
   c.font=(big?'bold 15px':'bold 13px')+' Pretendard,sans-serif'; c.textAlign='center';
@@ -319,8 +357,8 @@ function buildCamp(){
   const pond={x:20,y:14,w:6,h:6};
   setRect(map,pond.x,pond.y,pond.w,pond.h,2);
   // 섬 (남쪽 출구 다리, 유기적 모양 + 구조물 육지 보정)
-  const island=makeIsland(cols,rows,[{side:'bottom',x1:13,x2:16}],map,1.3);
-  [[2,3,8,7],[8,1,5,5],[11,2,4,4],[10,8,4,4],[17,16,4,4],[23,1,4,4]].forEach(([px,py,pw,ph])=>setRect(island,px,py,pw,ph,true));
+  const island=makeIsland(cols,rows,[{side:'bottom',x1:13,x2:16}],map,1.3,
+    [[2,3,8,7],[8,1,5,5],[11,2,4,4],[10,8,4,4],[17,16,4,4],[23,1,4,4]]);
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) solid[y][x]=!island[y][x];
   setRect(solid,pond.x,pond.y,pond.w,pond.h,true);
   // 내 집: 지붕 없는 오픈탑 룸 (벽 테두리 + 입구, 안에 침대·책장)
@@ -397,13 +435,13 @@ function buildCamp(){
 }
 // ---------- 광장 가는 길 (30x22) ----------
 const DESIGNERS=[
-  { name:'우베 로젠버그', img:'slc_mint', x:25*TILE, y:12*TILE, dir:'down',
+  { name:'우베 로젠버그', img:'dgn_uwe', x:25*TILE, y:12*TILE, dir:'down', wander:{x1:23*TILE,y1:9*TILE,x2:27*TILE,y2:13*TILE},
     lines:['아그리콜라, 카베르나… 농사 게임은 제 인생이죠 🌾','패치워크 한 판 어때요? 2인 게임의 정수랍니다','요즘도 새 퍼즐 게임을 스케치하고 있어요'] },
-  { name:'라이너 크니치아', img:'slc_sky', x:24.5*TILE, y:6*TILE, dir:'down',
+  { name:'라이너 크니치아', img:'dgn_knizia', x:24.5*TILE, y:6*TILE, dir:'down', wander:{x1:22*TILE,y1:4*TILE,x2:26*TILE,y2:7*TILE},
     lines:['수학자 출신이라 점수 계산엔 자신 있습니다 ✏️','모던아트, 티그리스… 경매 게임 좋아하세요?','게임의 재미는 규칙이 아니라 "결정"에 있어요'] },
-  { name:'맷 리콕', img:'slc_pink', x:10*TILE, y:17.5*TILE, dir:'down',
+  { name:'맷 리콕', img:'dgn_leacock', x:11*TILE, y:18*TILE, dir:'down', wander:{x1:10*TILE,y1:17*TILE,x2:16*TILE,y2:19*TILE},
     lines:['팬데믹! 함께 이기고 함께 지는 게 진짜죠 🤝','금단의 섬은 가족과 하기 딱 좋아요','협력게임 디자인, 생각보다 훨씬 어렵답니다'] },
-  { name:'볼프강 바르쉬', img:'slc_lav', x:3*TILE, y:8*TILE, dir:'right',
+  { name:'볼프강 바르쉬', img:'dgn_warsch', x:3*TILE, y:8*TILE, dir:'right', wander:{x1:2*TILE,y1:6*TILE,x2:7*TILE,y2:10*TILE},
     lines:['콰크스의 돌팔이 약장수, 해보셨나요? 💊','간츠 쇤 클레버! 정말 영리하죠?','주사위 굴러가는 소리가 세상에서 제일 좋아요'] },
 ];
 function buildRoad(){
@@ -414,14 +452,13 @@ function buildRoad(){
   setRect(map,14,11,2,3,1);
   const pond=null;
   // 섬 (북쪽 출구 다리, 유기적 모양 + 구조물 육지 보정)
-  const island=makeIsland(cols,rows,[{side:'top',x1:25,x2:28}],map,2.7);
-  [[8,5,14,4],[3,13,8,6],[17,13,8,6],[12,14,4,4],[15,11,4,3],[2,4,6,3]].forEach(([px,py,pw,ph])=>setRect(island,px,py,pw,ph,true));
+  const island=makeIsland(cols,rows,[{side:'top',x1:25,x2:28}],map,2.7,
+    [[8,1,14,8],[3,12,8,7],[17,12,8,7],[12,14,4,4],[15,11,4,3],[2,4,6,3]]);
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) solid[y][x]=!island[y][x];
-  // 광장 게이트 (심플 입구: 기둥 2 + 울타리 날개, 진입 시 페스타 로딩)
-  setRect(solid,12,6,1,2,true); setRect(solid,17,6,1,2,true);   // 기둥
-  setRect(solid,9,7,3,1,true); setRect(solid,18,7,3,1,true);    // 울타리 날개
-  setRect(solid,4,14,6,4,true);    // 도서관
-  setRect(solid,18,14,6,4,true);   // 마켓
+  // 오픈탑 건물 3동 (벽 둘레 + 문)
+  roomSolid(solid,9,2,12,6,[14,15]);    // 보드게임광장 (안에 들어가면 페스타 로딩)
+  roomSolid(solid,4,13,6,5,[6,7]);      // 도서관
+  roomSolid(solid,18,13,6,5,[20,21]);   // 마켓
   setRect(solid,13,15,2,2,true);   // 우물
   const TREES=[[3,5,'treeB'],[6,5,'treeC'],[3,17,'treeD'],[26,12,'treeB'],[26,17,'treeC'],[12,19,'treeD']];
   TREES.forEach(([x,y])=>{ for(let dy=-2;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const ty=y+dy,tx=x+dx; if(island[ty]&&island[ty][tx]!==undefined){island[ty][tx]=true; solid[ty][tx]=false;}} solid[y][x]=true; });
@@ -438,28 +475,28 @@ function buildRoad(){
   add('well', 13*TILE, 15*TILE-16);
   add('sign1', 16.4*TILE, 11.6*TILE);
   add('stump', 11*TILE, 18.4*TILE);
-  const lib=IMGS.houseLib, mkt=IMGS.houseMkt;
-  if(lib) sp.push({key:'houseLib', px:4*TILE, py:18*TILE-lib.height*2, base:18*TILE, shadow:true});
-  if(mkt) sp.push({key:'houseMkt', px:18*TILE, py:18*TILE-mkt.height*2, base:18*TILE, shadow:true});
   drawSprites(c,sp);
-  // ── 광장 게이트 ──
-  T(c,IMGS.fenV_t,0,0,12*TILE,6*TILE); T(c,IMGS.fenV_b,0,0,12*TILE,7*TILE);
-  T(c,IMGS.fenV_t,0,0,17*TILE,6*TILE); T(c,IMGS.fenV_b,0,0,17*TILE,7*TILE);
-  for(let x=9;x<12;x++) T(c,IMGS[x===9?'fenH_l':'fenH_m'],0,0,x*TILE,7*TILE);
-  for(let x=18;x<21;x++) T(c,IMGS[x===20?'fenH_r':'fenH_m'],0,0,x*TILE,7*TILE);
-  // 만국기 아치
-  for(let i=0;i<10;i++){ const gx=12.4*TILE+i*16, gy=6*TILE-10+Math.sin(i/9*Math.PI)*-14;
-    const colsF=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
-    c.fillStyle=colsF[i%5]; c.beginPath(); c.moveTo(gx,gy); c.lineTo(gx+12,gy); c.lineTo(gx+6,gy+12); c.closePath(); c.fill(); }
-  plaque(c, 15*TILE, 5.4*TILE, '🎲 보드게임광장', true);
-  // 입구 흙바닥
-  for(let x=13;x<17;x++){ T(c,IMGS.soilauto,x===13?0:(x===16?2:1),3,x*TILE,7*TILE); }
-  if(lib) plaque(c, 4*TILE+lib.width, 18*TILE-lib.height*2-10, '보드위키 도서관');
-  if(mkt) plaque(c, 18*TILE+mkt.width, 18*TILE-mkt.height*2-10, '보드마켓');
+  // ── 보드게임광장 (오픈탑 대형 홀) ──
+  roomDraw(c,9,2,12,6,[14,15],'#e9ddc4','#e2d4b8');
+  c.fillStyle='#cc5a52'; c.fillRect(13.6*TILE,3*TILE,2.8*TILE,4.6*TILE); // 카펫
+  const tb0=IMGS.btable;
+  if(tb0){ c.drawImage(tb0,10.4*TILE,3.4*TILE,64,64); c.drawImage(tb0,17.6*TILE,3.4*TILE,64,64); }
+  for(let i=0;i<11;i++){ const gx=9.6*TILE+i*32, colsF=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
+    c.fillStyle=colsF[i%5]; c.beginPath(); c.moveTo(gx,2*TILE+8); c.lineTo(gx+14,2*TILE+8); c.lineTo(gx+7,2*TILE+22); c.closePath(); c.fill(); }
+  plaque(c, 15*TILE, 1.6*TILE, '🎲 보드게임광장', true);
+  // ── 도서관 (오픈탑) ──
+  roomDraw(c,4,13,6,5,[6,7],'#e6d9bd','#dfd0b1');
+  miniShelf(c,4.6*TILE,13.8*TILE); miniShelf(c,7.2*TILE,13.8*TILE);
+  plaque(c, 7*TILE, 12.6*TILE, '보드위키 도서관');
+  // ── 마켓 (오픈탑) ──
+  roomDraw(c,18,13,6,5,[20,21],'#e6d9bd','#dfd0b1');
+  const dr0=IMGS.dresser; if(dr0){ c.drawImage(dr0,18.7*TILE,13.6*TILE,32,64); c.drawImage(dr0,22.2*TILE,13.6*TILE,32,64); }
+  if(tb0) c.drawImage(tb0,20.2*TILE,13.6*TILE,64,64);
+  plaque(c, 21*TILE, 12.6*TILE, '보드마켓 (공사중)');
   c.fillStyle='rgba(0,0,0,.4)'; c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
   c.fillText('⬆ 캠핑존', 27*TILE, 1.2*TILE);
   SC.road={ cols,rows,w,h,map,solid,bake,pond,island,
-    interact:[ {x:15*TILE,y:7.6*TILE,r:64,label:'보드게임 페스타 입장',act:'festa'},
+    interact:[ {x:15*TILE,y:7.4*TILE,r:56,label:'보드게임 페스타 입장',act:'festa'},
                {x:7*TILE,y:18.3*TILE,r:56,label:'보드위키 도서관',act:'bubble',text:'📚 보드위키로 연결 예정이에요!'},
                {x:21*TILE,y:18.3*TILE,r:56,label:'보드마켓',act:'bubble',text:'🚧 보드마켓 — 공사중! 곧 열려요'},
                {x:17*TILE,y:12.6*TILE,r:50,label:'마을 게시판',act:'board'} ],
@@ -805,14 +842,19 @@ function doAction(){
 const butterflies=[{x:320,y:230,p:0},{x:660,y:480,p:2}];
 function drawSceneDyn(t,dt){
   const s=SC[scene];
-  // 섬 씬: 바다(애니 물)를 먼저 깔고 그 위에 섬 베이크
-  if(s.island){
-    const wf=IMGS.wframes;
-    if(wf){ const fr=Math.floor(t/380)%4;
-      for(let y=0;y<s.rows;y++) for(let x=0;x<s.cols;x++){
-        if(!s.island[y][x]) ctx.drawImage(wf,fr*16,0,16,16,x*TILE,y*TILE,TILE,TILE);
+  // 바다: 화면에 보이는 모든 영역(씬 밖 포함)에 물 타일
+  {
+    const wf=IMGS.wframes, fr=Math.floor(t/380)%4;
+    const x0=Math.floor(cam.x/TILE)-1, x1=Math.ceil((cam.x+VW)/TILE)+1;
+    const y0=Math.floor(cam.y/TILE)-1, y1=Math.ceil((cam.y+VH)/TILE)+1;
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+      const inScene=x>=0&&y>=0&&x<s.cols&&y<s.rows;
+      const isLand=inScene&&(!s.island||s.island[y][x]);
+      if(!isLand){
+        if(wf) ctx.drawImage(wf,fr*16,0,16,16,x*TILE,y*TILE,TILE,TILE);
+        else { ctx.fillStyle='#79c2c2'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE); }
       }
-    } else { ctx.fillStyle='#79c2c2'; ctx.fillRect(0,0,s.w,s.h); }
+    }
   }
   ctx.drawImage(s.bake,0,0);
   // 연못 물 (애니 4프레임)
@@ -850,7 +892,7 @@ function drawSceneDyn(t,dt){
   });
   // NPC
   s.npcs.forEach(n=>{
-    drawChar(n.img,n.x,n.y,n.dir||'down',false,t+(n.x*7));
+    drawChar(n.img,n.x,n.y,n.dir||'down',!!n.moving,t+(n.x*7));
     if(!n.hideTag) drawTag(n.name,n.x,n.y,n.img,'#ffe9a8');
   });
   drawOthers(t,dt);
@@ -893,6 +935,7 @@ function loop(now){
   const sw=SC[scene].w, sh=SC[scene].h;
   if(scene==='camp' && player.y>sh-14 && player.x>13*TILE && player.x<17*TILE){ switchScene('road',27*TILE,1.6*TILE,'down'); }
   else if(scene==='road' && player.y<10 && player.x>25*TILE && player.x<29*TILE){ switchScene('camp',15*TILE,(SC.camp.rows-1.4)*TILE,'up'); }
+  else if(scene==='road' && player.x>10*TILE && player.x<20*TILE && player.y>3*TILE && player.y<6.5*TILE){ switchScene('festa',22*TILE,23*TILE,'up'); say('🎪 보드게임 페스타에 오신 걸 환영해요!'); }
   player.x=Math.max(12,Math.min(sw-12,player.x)); player.y=Math.max(2,Math.min(sh-4,player.y));
   coins.forEach(cn=>{ if(!cn.got && Math.hypot(cn.x*TILE+16-player.x, cn.y*TILE+16-player.y)<20){ cn.got=true; points+=10; saveCoins(); say('+10 포인트! 🪙',900); } });
   // 동물 배회
@@ -910,8 +953,24 @@ function loop(now){
     });
   }
   trackNow();
-  cam.x=Math.max(0,Math.min(sw-VW, player.x-VW/2));
-  cam.y=Math.max(0,Math.min(sh-VH, player.y-VH/2));
+  // 작가/NPC 배회
+  const sN=SC[scene];
+  if(sN&&sN.npcs) sN.npcs.forEach(n=>{
+    if(!n.wander) return;
+    n._t=(n._t||0)-dt;
+    if(n._t<=0){ n._t=3+Math.random()*4;
+      n._tx=n.wander.x1+Math.random()*(n.wander.x2-n.wander.x1);
+      n._ty=n.wander.y1+Math.random()*(n.wander.y2-n.wander.y1); }
+    if(n._tx!==undefined){
+      const ddx=n._tx-n.x, ddy=n._ty-n.y;
+      if(Math.hypot(ddx,ddy)>4){ n.x+=ddx*dt*0.5; n.y+=ddy*dt*0.5;
+        n.dir=Math.abs(ddx)>Math.abs(ddy)?(ddx<0?'left':'right'):(ddy<0?'up':'down');
+        n.moving=true; }
+      else n.moving=false;
+    }
+  });
+  cam.x = sw>VW ? Math.max(0,Math.min(sw-VW, player.x-VW/2)) : (sw-VW)/2;
+  cam.y = sh>VH ? Math.max(0,Math.min(sh-VH, player.y-VH/2)) : (sh-VH)/2;
 
   ctx.clearRect(0,0,VW,VH);
   ctx.save(); ctx.translate(-cam.x,-cam.y);
