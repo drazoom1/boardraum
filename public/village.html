@@ -305,8 +305,14 @@ function bakeGround(c,map,cols,rows,island){
     else if(map[y][x]===3){ T(c,IMGS.stonetile,0,0,x*TILE,y*TILE); }
     else if(map[y][x]===5){ c.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
       c.fillStyle='rgba(120,80,40,.12)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2); }
-    else if(map[y][x]===4){ c.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
-      T(c,IMGS.wallM,0,0,x*TILE,y*TILE); }
+    else if(map[y][x]===4){
+      c.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+      // 이웃 벽 방향 자동 판별: 가로 연결=얼굴면, 세로 전용=측면
+      const isW=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<rows&&tx>=0&&tx<cols&&map[ty][tx]===4; };
+      const n=isW(0,-1),s2=isW(0,1),e=isW(1,0),w2=isW(-1,0);
+      if((n||s2)&&!e&&!w2){ T(c,IMGS.wallL,0,0,x*TILE,y*TILE); }   // 세로 벽
+      else { T(c,IMGS.wallM,0,0,x*TILE,y*TILE); }                   // 가로/코너/단독
+    }
   }
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]===2){
     const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<rows&&tx>=0&&tx<cols&&map[ty][tx]===2; };
