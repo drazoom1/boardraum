@@ -1835,16 +1835,13 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               {sidebarExpanded && <span className="font-semibold text-gray-600">글쓰기</span>}
             </button>
 
-            {/* 카트 = 방출 마켓 */}
-            <button onClick={() => setActiveTab('market')}
-              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} relative rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`} title="보드마켓">
+            {/* 카트 자리 = 보드마을 (픽셀 마을 게임) */}
+            <button onClick={() => { window.location.href = '/village.html'; }}
+              className={`${sidebarExpanded ? 'w-full flex items-center gap-3 px-3 py-2.5' : 'w-12 h-12 flex items-center justify-center'} relative rounded-xl hover:bg-gray-100`} title="보드마을">
               <span className="relative flex items-center justify-center flex-shrink-0">
-                <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-8 h-8 object-contain" />
-                {hasActiveAuction && activeTab !== 'market' && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
-                )}
+                <img src={icon_cart_off} className="w-8 h-8 object-contain" />
               </span>
-              {sidebarExpanded && <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>보드마켓</span>}
+              {sidebarExpanded && <span className="font-semibold text-gray-600">보드마을</span>}
             </button>
 
             {/* 사람 = 마이페이지 */}
@@ -2078,10 +2075,10 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
                     <img src={icon_plus_off} className="w-7 h-7 object-contain" />
                     <span className="font-semibold text-gray-600">글쓰기</span>
                   </button>
-                  <button onClick={() => { setActiveTab('market'); setShowMobileNav(false); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'market' ? 'bg-gray-100' : ''}`}>
-                    <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-7 h-7 object-contain" />
-                    <span className={`font-semibold ${activeTab === 'market' ? 'text-gray-900' : 'text-gray-600'}`}>보드마켓</span>
+                  <button onClick={() => { window.location.href = '/village.html'; }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100">
+                    <img src={icon_cart_off} className="w-7 h-7 object-contain" />
+                    <span className="font-semibold text-gray-600">보드마을</span>
                   </button>
                   <button onClick={() => { setShowMobileNav(false); requireAuth(() => { setViewingUserId(null); setActiveTab('mypage'); }); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 ${activeTab === 'mypage' && !viewingUserId ? 'bg-gray-100' : ''}`}>
@@ -2118,12 +2115,9 @@ function MainApp({ initialGameId, initialPostId }: { initialGameId?: string; ini
               <button onClick={() => requireAuth(() => setShowPlusMenu(true))} className="flex flex-col items-center gap-1">
                 <img src={icon_plus_off} className="w-11 h-11 object-contain" />
               </button>
-              {/* 카트=방출마켓 */}
-              <button onClick={() => setActiveTab('market')} className="flex flex-col items-center gap-1 relative">
-                <img src={activeTab === 'market' ? icon_cart_on : icon_cart_off} className="w-11 h-11 object-contain" />
-                {hasActiveAuction && activeTab !== 'market' && (
-                  <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">N</span>
-                )}
+              {/* 카트 자리 = 보드마을 */}
+              <button onClick={() => { window.location.href = '/village.html'; }} className="flex flex-col items-center gap-1 relative">
+                <img src={icon_cart_off} className="w-11 h-11 object-contain" />
               </button>
               {/* 사람=마이페이지 */}
               <button onClick={() => requireAuth(() => {
