@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>보드마을 — 보드라움</title>
-<!-- Graphics: "Ninja Adventure" asset pack by Pixel-boy & AAA (itch.io) — CC0 1.0 (public domain) -->
+<!-- Graphics: "Modern Exteriors" by LimeZu (itch.io, 구매 라이선스) + "Ninja Adventure" by Pixel-boy (CC0) -->
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { height:100%; background:#1d2b20; font-family:'Pretendard',-apple-system,sans-serif; overflow:hidden; touch-action:none; }
@@ -35,7 +35,7 @@
 <div id="wrap"><canvas id="cv" width="960" height="704"></canvas></div>
 <div id="hud">
   <span class="chip">🪙 <span id="pts">0</span></span>
-  <span class="chip" id="loc">🏘️ 보드마을</span>
+  <span class="chip" id="loc">🏕️ 보드마을</span>
 </div>
 <div id="hint"></div>
 <div id="dpad">
@@ -47,8 +47,8 @@
 
 <div id="creator" style="display:none">
   <div class="card">
-    <h1>🏘️ 보드마을에 오신 걸 환영해요!</h1>
-    <p>캐릭터를 고르고 마을을 돌아다니며<br>코인을 모으고, 내 집 책장을 구경하세요.</p>
+    <h1>🏕️ 보드마을에 오신 걸 환영해요!</h1>
+    <p>캐릭터를 고르고 마을을 돌아다니며<br>코인을 모으고, 내 캠핑카 책장을 구경하세요.</p>
     <input id="nm" placeholder="닉네임" maxlength="8" value="여행자">
     <div class="swlabel">내 캐릭터</div>
     <div id="charGrid"></div>
@@ -67,48 +67,64 @@ const store={ get:(k,d)=>{try{const v=localStorage.getItem('village_'+k);return 
 let points=store.get('points',0);
 document.getElementById('pts').textContent=points;
 
-// ── 에셋 로드 (Ninja Adventure pack, CC0) ──
+// ── 에셋 로드 ──
 const CHARS=['Boy','Princess','Villager','Woman','Knight','Monk','Eskimo','Villager2'];
+const ME=['grass1','grass2','tuft1','tuft2','tuft3','tuft4','tuft5','dirtauto','dirt_fp1','dirt_fp2',
+  'waterauto','water2','lily1','lily2','tent_blue','tentS_green','sign_camping','store_blue','store_pink',
+  'signboard2','camper','fire1','fire2','btable','lamp','fount1','fount2','fbush1','fbush2','fbush3',
+  'lantern','ball1','picnic','tree1','tree2','tree4'];
 const IMGS={};
-const toLoad=['tf','tn','th','tw','tif','coin','npc',...CHARS.map(c=>'char_'+c)];
-let loadedN=0, failed={};
+const toLoad=[...ME.map(k=>'me/'+k),'coin','npc',...CHARS.map(c=>'char_'+c)];
+let loadedN=0;
 toLoad.forEach(k=>{ const im=new Image(); im.src='village-assets/'+k+'.png';
-  im.onload=()=>{ IMGS[k]=im; if(++loadedN>=toLoad.length) init(); };
-  im.onerror=()=>{ failed[k]=1; if(++loadedN>=toLoad.length) init(); }; });
+  const key=k.replace('me/','');
+  im.onload=()=>{ IMGS[key]=im; if(++loadedN>=toLoad.length) init(); };
+  im.onerror=()=>{ console.warn('load fail',k); if(++loadedN>=toLoad.length) init(); }; });
 
 // ── 캐릭터 선택 ──
 let me=store.get('me',null);
-if(me && !me.char) me=null; // 구버전(색상 방식) 저장 무시
+if(me && !me.char) me=null;
 let charSel=0;
 
-// ── 맵 ──  0잔디 1길 2물 3나무
+// ── 맵 ──  0잔디 1길 2물
 const map=[], solid=[];
 for(let y=0;y<ROWS;y++){ map[y]=[]; solid[y]=[]; for(let x=0;x<COLS;x++){ map[y][x]=0; solid[y][x]=false; } }
 const rng=(x,y)=>{ let h=(x*374761393+y*668265263)^(x*y*1274126177); h=(h^(h>>13))*1103515245; return (h^(h>>16))>>>0; };
-for(let x=2;x<28;x++) map[11][x]=1;               // 동서대로
-for(let y=3;y<20;y++) map[y][14]=1;               // 남북대로
-for(let y=8;y<11;y++) map[y][5]=1;                // 내 집 진입로
-for(let y=7;y<11;y++) map[y][19]=1;               // 도서관 진입로
-map[17][5]=1;                                     // 마켓 앞
-for(let x=5;x<15;x++) map[18][x]=1;               // 남쪽 골목
+const setRect=(arr,x,y,w,h,v)=>{ for(let j=y;j<y+h;j++) for(let i=x;i<x+w;i++){ if(j>=0&&j<ROWS&&i>=0&&i<COLS) arr[j][i]=v; } };
+// 길 (가로 3칸 폭 — 위/아래 가장자리 타일이 풀 위주라 3줄이어야 도톰해 보임)
+setRect(map,2,11,26,3,1);   // 동서대로
+setRect(map,14,2,2,9,1);    // 남북대로(위)
+setRect(map,14,14,2,6,1);   // 남북대로(아래)
+// 연못
 const POND={x:23,y:15,w:5,h:5};
-for(let y=POND.y;y<POND.y+POND.h;y++) for(let x=POND.x;x<POND.x+POND.w;x++){ map[y][x]=2; solid[y][x]=true; }
-for(let x=0;x<COLS;x++){ [0,ROWS-1].forEach(y=>{ if(rng(x,y)%3!==0){ map[y][x]=3; solid[y][x]=true; } }); }
-for(let y=0;y<ROWS;y++){ [0,COLS-1].forEach(x=>{ if(rng(x,y)%3!==0){ map[y][x]=3; solid[y][x]=true; } }); }
-[[3,3],[11,4],[17,15],[10,16],[25,9],[2,14],[27,3],[17,17],[22,13],[9,14],[26,7]].forEach(([x,y])=>{ if(map[y][x]===0){ map[y][x]=3; solid[y][x]=true; } });
+setRect(map,POND.x,POND.y,POND.w,POND.h,2); setRect(solid,POND.x,POND.y,POND.w,POND.h,true);
+// 테두리(숲) 충돌
+setRect(solid,0,0,COLS,2,true); setRect(solid,0,ROWS-2,COLS,2,true);
+setRect(solid,0,0,2,ROWS,true); setRect(solid,COLS-2,0,2,ROWS,true);
 
-// ── 건물 (TilesetHouse 프리팹, 16px→2x) ──
+// ── 건물/구조물 ──
 const buildings=[
-  { tx:0, ty:0, tw:4, th:3, x:4,  y:5,  label:'내 집',        door:1, action:'home', smoke:true },
-  { tx:12,ty:0, tw:4, th:3, x:18, y:4,  label:'보드위키 도서관', door:1, action:'wiki' },
-  { tx:16,ty:0, tw:3, th:3, x:4,  y:14, label:'보드마켓',      door:1, action:'market', wip:true },
+  { img:'camper',     x:3,  y:6,  w:6, h:4, label:'내 집',        action:'home',   door:[6,10.2] },
+  { img:'store_blue', x:18, y:6,  w:5, h:5, label:'보드위키 도서관', action:'wiki',   door:[19.5,11.2] },
+  { img:'store_pink', x:5,  y:14, w:5, h:5, label:'보드마켓',      action:'market', door:[6.5,19.2], wip:true },
+  { img:'signboard2', x:16, y:14, w:7, h:4, label:'마을 게시판',    action:'board',  door:[19.5,18.2], noplaque:true },
 ];
-buildings.forEach(b=>{ for(let y=b.y;y<b.y+b.th;y++) for(let x=b.x;x<b.x+b.tw;x++){ if(y<ROWS&&x<COLS){ solid[y][x]=true; map[y][x]=0; } } });
-const board={ x:16, y:9 };
-solid[board.y][board.x]=true;
+buildings.forEach(b=>setRect(solid,b.x,b.y,b.w,b.h,true));
+const FOUNT={x:16,y:8}; setRect(solid,FOUNT.x,FOUNT.y+1,2,2,true); // 분수 (2x3, 기둥부만 충돌)
+// 캠핑장 소품 충돌
+const TENT={x:3,y:1}; setRect(solid,TENT.x,TENT.y+1,4,3,true);
+const TENTS={x:9,y:2}; setRect(solid,TENTS.x,TENTS.y,2,2,true);
+const BTABLE={x:10,y:4}; setRect(solid,BTABLE.x,BTABLE.y,2,2,true);
+const SIGN={x:9,y:9};    // 캠핑 입간판 5x2 (비충돌 장식)
+const PICNIC={x:19,y:18.6};
+const LAMPS=[[12,9],[24,10],[12,16]];
+LAMPS.forEach(([x,y])=>{ solid[y][x]=true; });
+// 나무 (트렁크 앵커 타일)
+const TREES=[[11,3,'tree1'],[25,4,'tree4'],[26,13,'tree2'],[11,16,'tree1'],[3,20,'tree2']];
+TREES.forEach(([x,y])=>{ if(y<ROWS&&x<COLS) solid[y][x]=true; });
 
-let coins=store.get('coins_v3', [[8,11],[11,11],[17,11],[24,11],[14,5],[14,8],[14,15],[5,9],[19,8],[9,18],[12,18],[26,12]].map(([x,y])=>({x,y,got:false})));
-function saveCoins(){ store.set('coins_v3',coins); store.set('points',points); document.getElementById('pts').textContent=points; }
+let coins=store.get('coins_v5', [[4,12],[9,12],[13,12],[18,12],[23,12],[26,12],[14,4],[15,7],[14,16],[15,18],[11,19],[24,13]].map(([x,y])=>({x,y,got:false})));
+function saveCoins(){ store.set('coins_v5',coins); store.set('points',points); document.getElementById('pts').textContent=points; }
 
 // ── 책장 게임 ──
 let shelfGames=[];
@@ -129,7 +145,7 @@ shelfGames.forEach((g,i)=>{ if(g.imageUrl){ const im=new Image(); im.src=g.image
 
 // ── 입력 ──
 let scene='village';
-const player={ x:14*TILE+16, y:12*TILE+16, dir:'down', frame:0, ft:0, moving:false };
+const player={ x:14.5*TILE, y:13.5*TILE, dir:'down', frame:0, ft:0, moving:false };
 const keys={};
 const typing=e=>e.target&&['INPUT','TEXTAREA'].includes(e.target.tagName);
 addEventListener('keydown',e=>{ if(typing(e)) return; keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E'||e.key==='Enter') doAction(); });
@@ -141,18 +157,15 @@ document.querySelectorAll('#dpad button').forEach(b=>{ const k=b.dataset.k;
 document.getElementById('btnE').addEventListener('touchstart',e=>{e.preventDefault();doAction();},{passive:false});
 document.getElementById('btnE').addEventListener('click',()=>doAction());
 
-const chicken={ x:17*TILE, y:13*TILE, tx:17*TILE, ty:13*TILE, t:0, dir:'down', frame:0, ft:0 };
+const npc={ x:19*TILE, y:14.5*TILE, tx:19*TILE, ty:14.5*TILE, t:0, dir:'down', frame:0 };
 let bubble=null;
 function say(t,ms=2600){ bubble={text:t, until:performance.now()+ms}; }
 
-function doorCenter(b){ return [ (b.x+b.door)*TILE+16, (b.y+b.th-1)*TILE+16 ]; }
 function nearPrompt(){
   const py=Math.floor(player.y/TILE);
   if(scene==='village'){
-    for(const b of buildings){ const [dcx,dcy]=doorCenter(b);
+    for(const b of buildings){ const dcx=b.door[0]*TILE, dcy=b.door[1]*TILE;
       if(Math.hypot(player.x-dcx, player.y-dcy)<56) return b; }
-    const bcx=board.x*TILE+16, bcy=board.y*TILE+16;
-    if(Math.hypot(player.x-bcx, player.y-bcy)<56) return {action:'board',label:'마을 게시판'};
   } else if(scene==='home'){
     if(py>=18) return {action:'exit',label:'마을로 나가기'};
     if(py<=13) return {action:'shelf',label:'책장 구경'};
@@ -161,18 +174,17 @@ function nearPrompt(){
 }
 function doAction(){
   const p=nearPrompt(); if(!p) return;
-  if(p.action==='home'){ scene='home'; player.x=480; player.y=612; player.dir='up'; document.getElementById('loc').textContent='🏠 내 집'; say((me?me.name:'나')+'의 아늑한 집 🛋️'); }
-  else if(p.action==='exit'){ scene='village'; player.x=5*TILE+16; player.y=9*TILE+16; player.dir='down'; document.getElementById('loc').textContent='🏘️ 보드마을'; }
+  if(p.action==='home'){ scene='home'; player.x=480; player.y=612; player.dir='up'; document.getElementById('loc').textContent='🚐 내 캠핑카'; say((me?me.name:'나')+'의 아늑한 캠핑카 🛋️'); }
+  else if(p.action==='exit'){ scene='village'; player.x=6*TILE, player.y=10.8*TILE; player.dir='down'; document.getElementById('loc').textContent='🏕️ 보드마을'; }
   else if(p.action==='wiki'){ say('📚 보드위키 도서관! (보드라움 위키로 연결 예정)'); }
   else if(p.action==='market'){ say('🚧 보드마켓 — 공사중이에요! 곧 열려요'); }
   else if(p.action==='board'){ say('📢 코보게 7월 신작 소식이 올라왔어요!'); }
   else if(p.action==='shelf'){ say('🎲 내 보드게임 '+shelfGames.length+'개 전시 중! 뿌듯하다~'); }
 }
 
-// ── 타일 헬퍼 ──
-function T(c,img,tx,ty,X,Y){ c.drawImage(img,tx*16,ty*16,16,16,X,Y,TILE,TILE); }
-function TS(c,img,tx,ty,tw,th,X,Y,s=2){ c.drawImage(img,tx*16,ty*16,tw*16,th*16,X,Y,tw*16*s,th*16*s); }
-// 4방향 스프라이트 (Walk.png: 열=방향 down/up/left/right, 행=프레임)
+// ── 그리기 헬퍼 ──
+function T(c,img,tx,ty,X,Y){ if(img) c.drawImage(img,tx*16,ty*16,16,16,X,Y,TILE,TILE); }
+function P2(c,key,px,py){ const img=IMGS[key]; if(img) c.drawImage(img,px,py,img.width*2,img.height*2); }
 function drawActor(c,img,X,Y,dir,frame,s=2){
   if(!img) return;
   const fw=img.width/4, fh=img.height/4;
@@ -184,104 +196,120 @@ function drawActor(c,img,X,Y,dir,frame,s=2){
 // ── 마을 베이크 ──
 const bake=document.createElement('canvas'); bake.width=W; bake.height=H;
 const b2=bake.getContext('2d'); b2.imageSmoothingEnabled=false;
-const GRASS_DECOR=[[2,11],[3,11],[1,12],[2,12],[3,12],[4,12]];
-function pathTile(x,y){
+function roadPiece(x,y){
   const is=(dx,dy)=>{ const ty=y+dy,tx=x+dx; return ty>=0&&ty<ROWS&&tx>=0&&tx<COLS&&map[ty][tx]===1; };
   const n=is(0,-1),s=is(0,1),e=is(1,0),w=is(-1,0);
-  const cnt=n+s+e+w;
-  if(cnt===0) return [3,10];
-  if(n&&s&&!e&&!w) return [3,8];
-  if(!n&&s&&!e&&!w) return [3,7];
-  if(n&&!s&&!e&&!w) return [3,9];
-  if(!n&&!s&&e&&w) return [1,10];
-  if(!n&&!s&&e&&!w) return [0,10];
-  if(!n&&!s&&!e&&w) return [2,10];
-  return [1,8]; // 교차/코너 → 중앙 흙
+  const ci=!w?0:(!e?3:((x%2)?1:2));
+  const ri=!n?0:(!s?3:((y%2)?1:2));
+  return [ci,ri];
 }
 function bakeVillage(){
-  const c=b2, tf=IMGS.tf, tn=IMGS.tn, th=IMGS.th, tw=IMGS.tw;
+  const c=b2;
   // 잔디 + 데코
   for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-    T(c,tf,0,12,x*TILE,y*TILE);
     const r=rng(x,y);
-    if(map[y][x]===0 && r%8===0){ const d=GRASS_DECOR[r%GRASS_DECOR.length]; T(c,tf,d[0],d[1],x*TILE,y*TILE); }
-    if(map[y][x]===0 && r%37===0){ T(c,tf,1,11,x*TILE,y*TILE); } // 흙 자국
+    T(c,IMGS[r%3===0?'grass2':'grass1'],0,0,x*TILE,y*TILE);
+    if(map[y][x]===0 && r%7===0){ T(c,IMGS['tuft'+(1+r%5)],0,0,x*TILE,y*TILE); }
   }
-  // 길 (오토타일)
+  // 길 (dirtauto 4x4 오토타일)
   for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(map[y][x]===1){
-    const [px,py]=pathTile(x,y); T(c,tf,px,py,x*TILE,y*TILE);
+    const [ci,ri]=roadPiece(x,y);
+    T(c,IMGS.dirtauto,ci,ri,x*TILE,y*TILE);
+    const r=rng(x*3,y*5);
+    if(r%23===0) T(c,IMGS[r%2?'dirt_fp1':'dirt_fp2'],0,0,x*TILE,y*TILE);
   }
-  // 연못 (물 오토타일: 코너 (4,6)/(7,6)/(4,9)/(7,9), 엣지, 중앙은 순수 물 (11,4))
+  // 연못 (waterauto 3x3)
   for(let y=POND.y;y<POND.y+POND.h;y++) for(let x=POND.x;x<POND.x+POND.w;x++){
-    const L=x===POND.x, R=x===POND.x+POND.w-1, Tp=y===POND.y, B=y===POND.y+POND.h-1;
-    let sx=11, sy=4; // 중앙(순수 물)
-    if(Tp&&L){sx=4;sy=6;} else if(Tp&&R){sx=7;sy=6;} else if(B&&L){sx=4;sy=9;} else if(B&&R){sx=7;sy=9;}
-    else if(Tp){sx=5;sy=6;} else if(B){sx=5;sy=9;} else if(L){sx=4;sy=7;} else if(R){sx=7;sy=7;}
-    T(c,tw,sx,sy,x*TILE,y*TILE);
+    const cx=x===POND.x?0:(x===POND.x+POND.w-1?2:1);
+    const cy=y===POND.y?0:(y===POND.y+POND.h-1?2:1);
+    if(cx===1&&cy===1&&rng(x,y)%3===0) T(c,IMGS.water2,0,0,x*TILE,y*TILE);
+    else T(c,IMGS.waterauto,cx,cy,x*TILE,y*TILE);
   }
-  // 나무/꽃/수풀
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-    const r=rng(x,y);
-    if(map[y][x]===0 && !solid[y][x] && r%29===0){ T(c,tn,0,10,x*TILE,y*TILE); }       // 수풀
-    if(map[y][x]===0 && !solid[y][x] && r%41===0){ T(c,tn,r%2?0:1,11,x*TILE,y*TILE); } // 해바라기
-  }
-  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(map[y][x]===3){
-    const r=rng(x,y), X=x*TILE, Y=y*TILE;
-    if(r%9===0){ TS(c,tn,16,2,3,3,X-TILE,Y-2*TILE); }        // 큰 나무 3x3
-    else if(r%6===0){ TS(c,tn,14,0,2,2,X-TILE/2,Y-TILE); }   // 분홍 나무 2x2
-    else { TS(c,tn,16,0,2,2,X-TILE/2,Y-TILE); }              // 초록 나무 2x2
-  }
-  // 건물 프리팹
+  // ── y-정렬 스프라이트 ──
+  const sp=[];
+  const add=(key,px,py)=>{ const img=IMGS[key]; if(img) sp.push({key,px,py,base:py+img.height*2}); };
+  // 테두리 숲 (위/아래/좌/우)
+  for(let x=-1;x<COLS;x+=2){ add(rng(x,0)%4===0?'tree2':'tree1', x*TILE, -70); }
+  for(let x=-1;x<COLS;x+=2){ add(rng(x,9)%5===0?'tree4':'tree1', x*TILE, H-100); }
+  for(let y=1;y<ROWS-2;y+=2){ add(rng(0,y)%4===0?'tree2':'tree1', -40, y*TILE-40); add(rng(9,y)%4===0?'tree4':'tree1', W-88, y*TILE-40); }
+  // 내부 나무
+  TREES.forEach(([x,y,k])=>add(k, x*TILE+16-64, y*TILE+32-120));
+  // 캠핑장
+  add('tent_blue', TENT.x*TILE, TENT.y*TILE);
+  add('tentS_green', TENTS.x*TILE, TENTS.y*TILE);
+  add('btable', BTABLE.x*TILE, BTABLE.y*TILE);
+  add('lantern', 9.4*TILE, 7*TILE);
+  add('sign_camping', SIGN.x*TILE, SIGN.y*TILE);
+  add('picnic', PICNIC.x*TILE, PICNIC.y*TILE);
+  add('ball1', 21.3*TILE, 18.8*TILE);
+  add('fbush1', 17.5*TILE, 5.4*TILE);
+  add('fbush2', 3*TILE, 12.2*TILE);
+  add('fbush3', 24*TILE, 13.4*TILE);
+  add('fbush1', 10*TILE, 13.2*TILE);
+  // 건물
   buildings.forEach(b=>{
-    c.fillStyle='rgba(0,0,0,.18)'; c.beginPath();
-    c.ellipse(b.x*TILE+b.tw*TILE/2, (b.y+b.th)*TILE-4, b.tw*TILE/2, 8, 0,0,7); c.fill();
-    TS(c,th,b.tx,b.ty,b.tw,b.th,b.x*TILE,b.y*TILE);
-    // 간판
+    const img=IMGS[b.img]; if(!img) return;
+    sp.push({key:b.img, px:b.x*TILE, py:(b.y+b.h)*TILE-img.height*2, base:(b.y+b.h)*TILE, shadow:true});
+  });
+  // 가로등
+  LAMPS.forEach(([x,y])=>add('lamp', x*TILE-16, (y+1)*TILE-128));
+  // 그림자+그리기 (y정렬)
+  sp.sort((a,b)=>a.base-b.base);
+  sp.forEach(s=>{
+    const img=IMGS[s.key]; if(!img) return;
+    if(s.shadow){ c.fillStyle='rgba(0,0,0,.18)'; c.beginPath();
+      c.ellipse(s.px+img.width, s.base-4, img.width*0.9, 8, 0,0,7); c.fill(); }
+    c.drawImage(img, s.px, s.py, img.width*2, img.height*2);
+  });
+  // 간판(플로팅 라벨)
+  buildings.forEach(b=>{
+    if(b.noplaque) return;
+    const img=IMGS[b.img]; if(!img) return;
     c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
-    const lw=c.measureText(b.label).width, lx=b.x*TILE+b.tw*TILE/2, ly=b.y*TILE-14;
+    const lx=b.x*TILE+img.width, topY=(b.y+b.h)*TILE-img.height*2;
+    const lw=c.measureText(b.label).width, ly=topY-12;
     c.fillStyle='#5c3f22'; c.fillRect(lx-lw/2-10,ly-16,lw+20,22);
     c.fillStyle='#f5e9d0'; c.fillRect(lx-lw/2-8,ly-14,lw+16,18);
     c.fillStyle='#5c3f22'; c.fillText(b.label,lx,ly);
-    if(b.wip){ const [dx,dy]=doorCenter(b);
-      c.fillStyle='#f4d35e'; c.fillRect(dx-21,dy+2,42,9);
-      c.fillStyle='#222'; for(let i=0;i<5;i++) c.fillRect(dx-21+i*10,dy+2,5,9);
-      c.fillStyle='#fff'; c.font='bold 8px sans-serif'; c.fillText('공사중',dx,dy+9); }
+    if(b.wip){ const dx=b.door[0]*TILE, dy=b.door[1]*TILE-14;
+      c.fillStyle='#f4d35e'; c.fillRect(dx-21,dy,42,9);
+      c.fillStyle='#222'; for(let i=0;i<5;i++) c.fillRect(dx-21+i*10,dy,5,9);
+      c.fillStyle='#fff'; c.font='bold 8px sans-serif'; c.fillText('공사중',dx,dy+7); }
   });
-  // 게시판
-  const bx=board.x*TILE, by=board.y*TILE;
-  c.fillStyle='rgba(0,0,0,.18)'; c.beginPath(); c.ellipse(bx+16,by+31,15,3.5,0,0,7); c.fill();
-  c.fillStyle='#7d5530'; c.fillRect(bx+5,by+8,5,24); c.fillRect(bx+22,by+8,5,24);
-  c.fillStyle='#9a6b3d'; c.fillRect(bx-2,by-4,36,22);
-  c.fillStyle='#7d5530'; c.fillRect(bx-2,by-4,36,3);
-  c.fillStyle='#f5e9d0'; c.fillRect(bx+2,by,28,14);
-  c.fillStyle='#c94f4f'; c.fillRect(bx+4,by+2,12,4);
-  c.fillStyle='#999'; c.fillRect(bx+4,by+8,22,2); c.fillRect(bx+4,by+11,16,1.5);
 }
 
 // ── 동적 요소 ──
 const smoke=[]; let smokeT=0;
-const butterflies=[{x:300,y:250,p:0},{x:700,y:500,p:2}];
+const butterflies=[{x:320,y:230,p:0},{x:660,y:480,p:2}];
+const FIREPOS={x:10.3*TILE, y:6.8*TILE};
 function drawVillageDyn(t,dt){
   ctx.drawImage(bake,0,0);
-  // 물 반짝임 + 수련잎
-  for(let i=0;i<3;i++){ const rr=rng(i*7,Math.floor(t/700)+i);
-    const sx=(POND.x+ (rr%POND.w))*TILE+ (rr>>4)%20, sy=(POND.y+((rr>>2)%POND.h))*TILE+((rr>>6)%20);
-    ctx.fillStyle='rgba(255,255,255,.7)'; ctx.fillRect(sx,sy,3,2); }
-  [[24.2,16.2],[26.4,18.1]].forEach(([lx,ly],i)=>{ const bob=Math.sin(t/900+i*2)*1.5;
-    ctx.fillStyle='#3d8a3c'; ctx.beginPath(); ctx.ellipse(lx*TILE,ly*TILE+bob,9,6,0,0,7); ctx.fill();
-    ctx.fillStyle='#4fa34a'; ctx.beginPath(); ctx.ellipse(lx*TILE-2,ly*TILE-1+bob,5,3,0,0,7); ctx.fill();
-    if(i===0){ ctx.fillStyle='#ef6b9a'; ctx.fillRect(lx*TILE+2,ly*TILE-5+bob,4,4); ctx.fillStyle='#f4d35e'; ctx.fillRect(lx*TILE+3,ly*TILE-4+bob,2,2); } });
-  // 굴뚝 연기 (내 집 지붕)
-  smokeT-=dt; if(smokeT<=0){ smokeT=0.6; const hb=buildings[0];
-    smoke.push({x:hb.x*TILE+hb.tw*TILE-26, y:hb.y*TILE+2, r:3, a:0.45, vx:(Math.random()-0.3)*6, vy:-13-Math.random()*5}); }
+  // 분수 (2프레임)
+  P2(ctx,(Math.floor(t/450)%2)?'fount1':'fount2', FOUNT.x*TILE, FOUNT.y*TILE);
+  // 모닥불 (2프레임 + 불빛)
+  P2(ctx,(Math.floor(t/180)%2)?'fire1':'fire2', FIREPOS.x, FIREPOS.y);
+  const gl=0.06+Math.sin(t/150)*0.03;
+  ctx.fillStyle=`rgba(255,160,60,${gl})`; ctx.beginPath(); ctx.arc(FIREPOS.x+16,FIREPOS.y+22,42,0,7); ctx.fill();
+  // 모닥불 연기
+  smokeT-=dt; if(smokeT<=0){ smokeT=0.7;
+    smoke.push({x:FIREPOS.x+16, y:FIREPOS.y+6, r:2.5, a:0.4, vx:(Math.random()-0.3)*5, vy:-11-Math.random()*5}); }
   for(let i=smoke.length-1;i>=0;i--){ const s=smoke[i];
-    s.x+=s.vx*dt; s.y+=s.vy*dt; s.r+=dt*5; s.a-=dt*0.15;
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.r+=dt*4; s.a-=dt*0.14;
     if(s.a<=0){ smoke.splice(i,1); continue; }
-    ctx.fillStyle=`rgba(240,240,240,${s.a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+    ctx.fillStyle=`rgba(230,230,230,${s.a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); }
+  // 수련잎 (봅)
+  [[24.2,16.4,'lily1'],[26.2,18.2,'lily2'],[25.3,15.4,'lily1']].forEach(([lx,ly,k],i)=>{
+    const bob=Math.sin(t/900+i*2)*1.5;
+    const img=IMGS[k]; if(img) ctx.drawImage(img, lx*TILE, ly*TILE+bob, 32,32);
+  });
+  // 물 반짝임
+  for(let i=0;i<3;i++){ const rr=rng(i*7,Math.floor(t/700)+i);
+    const sx=(POND.x+(rr%POND.w))*TILE+(rr>>4)%20, sy=(POND.y+((rr>>2)%POND.h))*TILE+((rr>>6)%20);
+    ctx.fillStyle='rgba(255,255,255,.6)'; ctx.fillRect(sx,sy,3,2); }
   // 코인
   coins.forEach(cn=>{ if(cn.got) return; const X=cn.x*TILE+16, Y=cn.y*TILE+14+Math.sin(t/300+cn.x)*3;
     ctx.fillStyle='rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(X,cn.y*TILE+27,6,2,0,0,7); ctx.fill();
-    if(IMGS.coin) ctx.drawImage(IMGS.coin,X-7,Y-7,14,14); // 7x7 원본 → 2배
+    if(IMGS.coin) ctx.drawImage(IMGS.coin,X-7,Y-7,14,14);
     else { ctx.fillStyle='#f4c430'; ctx.beginPath(); ctx.arc(X,Y,7,0,7); ctx.fill(); } });
   // 나비
   butterflies.forEach(bf=>{ bf.p+=dt;
@@ -290,8 +318,8 @@ function drawVillageDyn(t,dt){
     ctx.fillStyle='#fff'; ctx.fillRect(bx-3-wing,by-2,3+wing,4); ctx.fillRect(bx+1,by-2,3+wing,4);
     ctx.fillStyle='#f4d35e'; ctx.fillRect(bx-2-wing,by-1,2,2); ctx.fillRect(bx+2,by-1,2,2);
     ctx.fillStyle='#2b2019'; ctx.fillRect(bx-0.5,by-2.5,1.5,5); });
-  // 닭 NPC
-  drawActor(ctx,IMGS.npc,chicken.x,chicken.y,chicken.dir,Math.floor(chicken.frame));
+  // NPC
+  drawActor(ctx,IMGS.npc,npc.x,npc.y,npc.dir,Math.floor(npc.frame));
   // 구름 그림자
   const cs=(t/40)%1400-200;
   ctx.fillStyle='rgba(20,45,25,.10)';
@@ -300,11 +328,11 @@ function drawVillageDyn(t,dt){
 }
 
 function drawHome(t){
-  const tif=IMGS.tif;
-  // 마루 (인테리어 우드 타일)
+  // 마루
   for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
-    if(tif) T(ctx,tif,2,13,x*TILE,y*TILE);
-    else { ctx.fillStyle=(x+y)%2?'#d9b98a':'#d2b083'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE); }
+    if(IMGS.grass1 && false){}
+    ctx.fillStyle=(x+y)%2?'#d9b98a':'#d2b083'; ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+    ctx.fillStyle='rgba(120,80,40,.12)'; ctx.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
   }
   // 벽
   ctx.fillStyle='#a4794f'; ctx.fillRect(0,0,W,70);
@@ -348,7 +376,6 @@ function drawHome(t){
     ctx.fillStyle='#7a5230'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,12);
     ctx.fillStyle='#8f6540'; ctx.fillRect(SH_X-16,sy+BH+4,SH_W+32,3);
   }
-  // 명패
   const ttl='🎲 '+(me?me.name:'나')+'의 컬렉션 ('+shelfGames.length+'개)';
   ctx.font='bold 14px Pretendard,sans-serif'; ctx.textAlign='center';
   const ttw=ctx.measureText(ttl).width;
@@ -399,13 +426,13 @@ function loop(now){
   } else player.frame=0;
   player.x=Math.max(10,Math.min(W-10,player.x)); player.y=Math.max(20,Math.min(H-6,player.y));
   if(scene==='village') coins.forEach(cn=>{ if(!cn.got && Math.hypot(cn.x*TILE+16-player.x, cn.y*TILE+16-player.y)<20){ cn.got=true; points+=10; saveCoins(); say('+10 포인트! 🪙',900); } });
-  // 닭
-  chicken.t-=dt;
-  if(chicken.t<=0){ chicken.t=2+Math.random()*3; chicken.tx=(15+Math.random()*7)*TILE; chicken.ty=(12.5+Math.random()*4)*TILE; }
-  const cdx=chicken.tx-chicken.x, cdy=chicken.ty-chicken.y;
-  if(Math.hypot(cdx,cdy)>3){ chicken.x+=cdx*dt*0.8; chicken.y+=cdy*dt*0.8;
-    chicken.dir=Math.abs(cdx)>Math.abs(cdy)?(cdx<0?'left':'right'):(cdy<0?'up':'down');
-    chicken.frame+=dt*7; } else chicken.frame=0;
+  // NPC (공원 산책)
+  npc.t-=dt;
+  if(npc.t<=0){ npc.t=2+Math.random()*3; npc.tx=(17+Math.random()*5)*TILE; npc.ty=(11.2+Math.random()*2)*TILE; }
+  const cdx=npc.tx-npc.x, cdy=npc.ty-npc.y;
+  if(Math.hypot(cdx,cdy)>3){ npc.x+=cdx*dt*0.8; npc.y+=cdy*dt*0.8;
+    npc.dir=Math.abs(cdx)>Math.abs(cdy)?(cdx<0?'left':'right'):(cdy<0?'up':'down');
+    npc.frame+=dt*7; } else npc.frame=0;
 
   ctx.clearRect(0,0,W,H);
   if(scene==='village') drawVillageDyn(now,dt); else drawHome(now);
@@ -430,7 +457,6 @@ function loop(now){
 function init(){
   document.getElementById('loading').style.display='none';
   bakeVillage();
-  // 캐릭터 선택 그리드
   const grid=document.getElementById('charGrid');
   CHARS.forEach((ch,i)=>{
     const btn=document.createElement('div'); btn.className='cbtn'+(i===0?' sel':'');
