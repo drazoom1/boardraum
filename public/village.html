@@ -56,6 +56,9 @@
   #edPanel .edrow { display:flex; flex-wrap:wrap; gap:5px; }
   .edt { background:rgba(255,255,255,.12); border:1.5px solid transparent; color:#fff; border-radius:8px; padding:5px 8px; font-size:12px; font-weight:700; cursor:pointer; }
   .edt.sel { border-color:#f4d35e; background:rgba(244,211,94,.2); }
+  #decoWalls .edt, #decoTools .edt { background:#f0f0f0; color:#444; }
+  #decoWalls .edt.sel, #decoFloors .edt.sel, #decoTools .edt.sel { border-color:#e0a13f; background:#fff3d6; color:#5c3f22; }
+  #decoFloors .edt { color:#5c3f22; background:#f0f0f0; }
   .eds { background:rgba(120,180,255,.15); border:1.5px solid transparent; color:#fff; border-radius:8px; padding:5px 8px; font-size:12px; font-weight:700; cursor:pointer; }
   .eds.sel { border-color:#7fc4ff; }
   #edProps { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
@@ -95,7 +98,12 @@
         <button class="edt" data-m="del">🗑️ 제거</button>
         <button class="edt" id="decoDelStruct" style="background:#933">🏚️ 이 구조물 삭제</button>
       </div>
-      <div id="decoPal" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:10px;max-height:120px;overflow-y:auto"></div>
+      <div style="font-size:12px;font-weight:700;color:#666;margin:2px 0">벽 스타일</div>
+      <div id="decoWalls" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px"></div>
+      <div style="font-size:12px;font-weight:700;color:#666;margin:2px 0">바닥 스타일</div>
+      <div id="decoFloors" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px"></div>
+      <div style="font-size:12px;font-weight:700;color:#666;margin:2px 0">가구</div>
+      <div id="decoPal" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:10px;max-height:110px;overflow-y:auto"></div>
       <canvas id="decoCv" style="width:100%;image-rendering:pixelated;border-radius:10px;background:#9adfd8"></canvas>
       <p style="font-size:12px;color:#888;margin-top:6px">클릭해서 배치/제거 · 닫으면 맵에 반영 · 저장은 에디터의 💾</p>
     </div>
@@ -301,6 +309,27 @@ function drawSprites(c,sp){
       c.ellipse(s.px+img.width, s.base-4, img.width*0.9, 8, 0,0,7); c.fill(); }
     c.drawImage(img, s.px, s.py, img.width*2, img.height*2); });
 }
+// 벽/바닥 스타일
+const FLOOR_STYLES={
+  wood:['#e6c493','#dfbb87'], light:['#f0dcae','#e9d3a0'], beige:['#e9ddc4','#e2d4b8'], sand:['#e6d9bd','#dfd0b1'],
+  pink:['#f2cfd6','#ecc3cc'], mint:['#d2e9d5','#c5e1ca'], sky:['#d3e3f0','#c6daea'], dark:['#cfa16e','#c69763'], stone:'tile' };
+const WALL_TINTS={ wood:null, cream:[250,235,200], pink:[240,190,200], mint:[190,225,195], sky:[185,210,235], gray:[205,205,210] };
+const WALLS={};
+function makeWallStyles(){
+  Object.keys(WALL_TINTS).forEach(st=>{
+    const tint=WALL_TINTS[st], set={};
+    ['wallL','wallM','wallR'].forEach(k=>{
+      const src=IMGS[k]; if(!src){ set[k]=null; return; }
+      if(!tint){ set[k]=src; return; }
+      const cnv=document.createElement('canvas'); cnv.width=src.width; cnv.height=src.height;
+      const g=cnv.getContext('2d'); g.drawImage(src,0,0);
+      g.globalCompositeOperation='source-atop'; g.globalAlpha=0.45;
+      g.fillStyle=`rgb(${tint[0]},${tint[1]},${tint[2]})`; g.fillRect(0,0,cnv.width,cnv.height);
+      set[k]=cnv;
+    });
+    WALLS[st]=set;
+  });
+}
 const STRUCT_SIZE={home:[6,5],hall:[12,6],lib:[6,5],mkt:[6,5],board:[1,1]};
 function drawFurn(c,solid,st){
   (st.furn||[]).forEach(f=>{
@@ -316,16 +345,22 @@ function roomSolid(solid,rx,ry,rw,rh,doorXs){
   for(let x=rx;x<rx+rw;x++){ solid[ry][x]=true; if(!doorXs.includes(x)) solid[ry+rh-1][x]=true; }
   for(let y=ry;y<ry+rh;y++){ solid[y][rx]=true; solid[y][rx+rw-1]=true; }
 }
-function roomDraw(c,rx,ry,rw,rh,doorXs,fA,fB){
+function roomDraw(c,rx,ry,rw,rh,doorXs,floorStyle,wallStyle){
+  const fs=FLOOR_STYLES[floorStyle]||FLOOR_STYLES.wood;
+  const ws=WALLS[wallStyle]||WALLS.wood||{wallL:IMGS.wallL,wallM:IMGS.wallM,wallR:IMGS.wallR};
   for(let y=ry;y<ry+rh;y++) for(let x=rx;x<rx+rw;x++){
-    c.fillStyle=(x+y)%2?fA:fB; c.fillRect(x*TILE,y*TILE,TILE,TILE);
-    c.fillStyle='rgba(120,80,40,.12)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
+    if(fs==='tile'){ T(c,IMGS.stonetile,0,0,x*TILE,y*TILE); }
+    else {
+      c.fillStyle=(x+y)%2?fs[0]:fs[1]; c.fillRect(x*TILE,y*TILE,TILE,TILE);
+      c.fillStyle='rgba(120,80,40,.12)'; c.fillRect(x*TILE,y*TILE+TILE-2,TILE,2);
+    }
   }
+  const W2=(img,X,Y)=>{ if(img) c.drawImage(img,0,0,16,16,X,Y,TILE,TILE); };
   for(let x=rx;x<rx+rw;x++){
-    T(c,IMGS.wallM,0,0,x*TILE,ry*TILE);
-    if(!doorXs.includes(x)) T(c,IMGS.wallM,0,0,x*TILE,(ry+rh-1)*TILE);
+    W2(ws.wallM,x*TILE,ry*TILE);
+    if(!doorXs.includes(x)) W2(ws.wallM,x*TILE,(ry+rh-1)*TILE);
   }
-  for(let y=ry;y<ry+rh;y++){ T(c,IMGS.wallL,0,0,rx*TILE,y*TILE); T(c,IMGS.wallR,0,0,(rx+rw-1)*TILE,y*TILE); }
+  for(let y=ry;y<ry+rh;y++){ W2(ws.wallL,rx*TILE,y*TILE); W2(ws.wallR,(rx+rw-1)*TILE,y*TILE); }
   c.fillStyle='#c95561'; c.fillRect(doorXs[0]*TILE+4,(ry+rh-1)*TILE+6,doorXs.length*TILE-8,20);
 }
 function makeBookshelfSprite(){
@@ -522,7 +557,7 @@ function buildScene(name){
     const sx=st.x, sy=st.y;
     if(st.k==='home'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
-      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6c493','#dfbb87');
+      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],st.floorStyle||'wood',st.wallStyle||'wood');
       drawFurn(c,solid,st);
       plaque(c,(sx+3)*TILE,sy*TILE-10,'🏡 내 집');
       interact.push({x:(sx+4)*TILE,y:(sy+2)*TILE,r:52,label:'내 컬렉션 보기',act:'collection'});
@@ -531,7 +566,7 @@ function buildScene(name){
       interact.push({x:(sx+0.5)*TILE,y:(sy+1)*TILE,r:56,label:'마을 게시판',act:'board'});
     } else if(st.k==='hall'){
       roomSolid(solid,sx,sy,12,6,[sx+5,sx+6]);
-      roomDraw(c,sx,sy,12,6,[sx+5,sx+6],'#e9ddc4','#e2d4b8');
+      roomDraw(c,sx,sy,12,6,[sx+5,sx+6],st.floorStyle||'beige',st.wallStyle||'wood');
       c.fillStyle='#cc5a52'; c.fillRect((sx+4.6)*TILE,(sy+1)*TILE,2.8*TILE,4.6*TILE);
       drawFurn(c,solid,st);
       for(let i=0;i<11;i++){ const gx=(sx+0.6)*TILE+i*32, colsF=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
@@ -541,13 +576,13 @@ function buildScene(name){
       hallRect={x1:(sx+1)*TILE,x2:(sx+11)*TILE,y1:(sy+1)*TILE,y2:(sy+4.5)*TILE};
     } else if(st.k==='lib'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
-      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6d9bd','#dfd0b1');
+      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],st.floorStyle||'sand',st.wallStyle||'wood');
       drawFurn(c,solid,st);
       plaque(c, (sx+3)*TILE, (sy-0.4)*TILE, '보드위키 도서관');
       interact.push({x:(sx+3)*TILE,y:(sy+5.3)*TILE,r:56,label:'보드위키 도서관',act:'bubble',text:'📚 보드위키로 연결 예정이에요!'});
     } else if(st.k==='mkt'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
-      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6d9bd','#dfd0b1');
+      roomDraw(c,sx,sy,6,5,[sx+2,sx+3],st.floorStyle||'sand',st.wallStyle||'wood');
       drawFurn(c,solid,st);
       plaque(c, (sx+3)*TILE, (sy-0.4)*TILE, '보드마켓 (공사중)');
       interact.push({x:(sx+3)*TILE,y:(sy+5.3)*TILE,r:56,label:'보드마켓',act:'bubble',text:'🚧 보드마켓 — 공사중! 곧 열려요'});
@@ -662,6 +697,25 @@ function openDeco(st){
   cv2.width=rw*deco.T2; cv2.height=rh*deco.T2;
   const names={home:'🏡 내 집',hall:'🎲 보드게임광장',lib:'📚 도서관',mkt:'🛒 보드마켓'};
   document.getElementById('decoTitle').textContent='🎨 '+(names[st.k]||st.k)+' 꾸미기';
+  // 벽/바닥 스타일 버튼
+  const wl=document.getElementById('decoWalls'), fl=document.getElementById('decoFloors');
+  wl.innerHTML=''; fl.innerHTML='';
+  const WNAMES={wood:'우드',cream:'크림',pink:'핑크',mint:'민트',sky:'하늘',gray:'그레이'};
+  Object.keys(WALL_TINTS).forEach(k=>{
+    const b=document.createElement('button'); b.className='edt'+((st.wallStyle||'wood')===k?' sel':'');
+    b.textContent=WNAMES[k]||k; b.style.fontSize='11px';
+    b.onclick=()=>{ st.wallStyle=k; wl.querySelectorAll('.edt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); renderDeco(); };
+    wl.appendChild(b);
+  });
+  const FNAMES={wood:'우드',light:'라이트',beige:'베이지',sand:'샌드',pink:'핑크',mint:'민트',sky:'하늘',dark:'다크',stone:'돌바닥'};
+  Object.keys(FLOOR_STYLES).forEach(k=>{
+    const b=document.createElement('button'); b.className='edt'+((st.floorStyle||((st.k==='home')?'wood':(st.k==='hall'?'beige':'sand')))===k?' sel':'');
+    b.textContent=FNAMES[k]||k; b.style.fontSize='11px';
+    const fsv=FLOOR_STYLES[k];
+    if(fsv!=='tile'){ b.style.background=fsv[0]; b.style.color='#5c3f22'; }
+    b.onclick=()=>{ st.floorStyle=k; fl.querySelectorAll('.edt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); renderDeco(); };
+    fl.appendChild(b);
+  });
   const pal=document.getElementById('decoPal');
   if(!pal.children.length){
     FURN_KEYS.forEach(k=>{
@@ -697,12 +751,15 @@ function renderDeco(){
   const cv2=document.getElementById('decoCv'), g=cv2.getContext('2d');
   g.imageSmoothingEnabled=false;
   const T2=deco.T2, k2=T2/32;
+  const fs=FLOOR_STYLES[st.floorStyle||((st.k==='home')?'wood':(st.k==='hall'?'beige':'sand'))]||FLOOR_STYLES.wood;
   for(let y=0;y<rh;y++) for(let x=0;x<rw;x++){
-    g.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; g.fillRect(x*T2,y*T2,T2,T2);
+    if(fs==='tile'&&IMGS.stonetile){ g.drawImage(IMGS.stonetile,0,0,16,16,x*T2,y*T2,T2,T2); }
+    else { g.fillStyle=(x+y)%2?fs[0]:fs[1]; g.fillRect(x*T2,y*T2,T2,T2); }
   }
+  const ws=WALLS[st.wallStyle||'wood']||WALLS.wood;
   const wall=(img,x,y)=>{ if(img) g.drawImage(img,0,0,16,16,x*T2,y*T2,T2,T2); };
-  for(let x=0;x<rw;x++){ wall(IMGS.wallM,x,0); if(!(x===2||x===3||(st.k==='hall'&&(x===5||x===6)))) wall(IMGS.wallM,x,rh-1); }
-  for(let y=0;y<rh;y++){ wall(IMGS.wallL,0,y); wall(IMGS.wallR,rw-1,y); }
+  for(let x=0;x<rw;x++){ wall(ws.wallM,x,0); if(!(x===2||x===3||(st.k==='hall'&&(x===5||x===6)))) wall(ws.wallM,x,rh-1); }
+  for(let y=0;y<rh;y++){ wall(ws.wallL,0,y); wall(ws.wallR,rw-1,y); }
   (st.furn||[]).forEach(f=>{
     const img=IMGS[f.k]; if(!img) return;
     g.drawImage(img, f.fx*T2, f.fy*T2, img.width*2*k2, img.height*2*k2);
@@ -1268,7 +1325,7 @@ function openCreator(){
 async function init(){
   await loadWorldMaps();
   document.getElementById('loading').style.display='none';
-  makeBookshelfSprite();
+  makeBookshelfSprite(); makeWallStyles();
   buildCamp(); buildRoad(); buildFesta();
   edInit();
   loadCoins();
