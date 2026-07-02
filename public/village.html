@@ -7,9 +7,16 @@
 <!-- Graphics: "Sprout Lands" by Cup Nooble (구매 라이선스) + LimeZu Modern Exteriors 일부 -->
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { height:100%; background:#2a3b2e; font-family:'Pretendard',-apple-system,sans-serif; overflow:hidden; touch-action:none; }
+  html,body { height:100%; background:#7fccc8; font-family:'Pretendard',-apple-system,sans-serif; overflow:hidden; touch-action:none; }
   #wrap { display:flex; align-items:center; justify-content:center; height:100%; }
-  canvas#cv { image-rendering:pixelated; max-width:100vw; max-height:100vh; border-radius:6px; }
+  canvas#cv { image-rendering:pixelated; max-width:100vw; max-height:100vh; }
+  #chatBar { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); display:none; gap:6px; z-index:7; width:min(420px,80vw); }
+  #chatBar input { flex:1; border:2px solid rgba(0,0,0,.3); border-radius:12px; padding:10px 14px; font-size:14px; outline:none; }
+  #chatBar button { border:none; background:#111; color:#fff; border-radius:12px; padding:0 16px; font-weight:800; cursor:pointer; }
+  #chatLog { position:fixed; left:12px; bottom:14px; z-index:6; display:flex; flex-direction:column; gap:3px; pointer-events:none; max-width:44vw; }
+  #chatLog div { background:rgba(0,0,0,.45); color:#fff; font-size:12px; padding:4px 10px; border-radius:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #btnChat { position:fixed; right:18px; bottom:118px; width:52px; height:52px; border-radius:50%; font-size:20px; background:rgba(255,255,255,.22); border:1.5px solid rgba(255,255,255,.4); z-index:6; display:none; }
+  @media (hover:none) { #btnChat { display:block; } }
   #hud { position:fixed; top:10px; left:10px; display:flex; gap:8px; align-items:center; z-index:5; }
   .chip { background:rgba(0,0,0,.55); color:#fff; padding:6px 12px; border-radius:20px; font-size:14px; font-weight:700; border:none; cursor:pointer; }
   a.chip { text-decoration:none; }
@@ -63,6 +70,9 @@
   <span></span><button data-k="ArrowDown">▼</button><span></span>
 </div>
 <button id="btnE">E</button>
+<button id="btnChat">💬</button>
+<div id="chatLog"></div>
+<div id="chatBar"><input id="chatIn" maxlength="60" placeholder="메시지 입력… (Enter 전송)"><button id="chatSend">전송</button></div>
 
 <div id="creator">
   <div class="card">
@@ -88,6 +98,7 @@
 </div>
 <div id="loading">🌱 보드마을 불러오는 중...</div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 const TILE=32, VW=960, VH=704;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
@@ -185,23 +196,31 @@ function soilPiece(map,cols,rows,x,y){
   if(!n&&!s) return [!w?0:(!e?2:1), 3];
   return [!w?0:(!e?2:1), !n?0:(!s?2:1)];
 }
-// 섬 마스크: 모서리 둥근 섬 + 출구 corridors(육지 다리)
-function makeIsland(cols,rows,exits){
+// 섬 마스크: 유기적(울퉁불퉁) 모양 + 출구 corridors(육지 다리) + 길/연못 보정
+function makeIsland(cols,rows,exits,map,seed){
   const m=newGrid(cols,rows,false);
-  const mar=1, rad=3;
-  const Lb=mar, Rb=cols-1-mar, Tb=mar, Bb=rows-1-mar;
-  for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
-    if(x<Lb||x>Rb||y<Tb||y>Bb) continue;
-    const dx=Math.max(0,(Lb+rad)-x, x-(Rb-rad));
-    const dy=Math.max(0,(Tb+rad)-y, y-(Bb-rad));
-    if(dx*dx+dy*dy<=rad*rad+rad) m[y][x]=true;
+  const cx=cols/2, cy=rows/2, s=seed||1;
+  for(let y=1;y<rows-1;y++) for(let x=1;x<cols-1;x++){
+    const nx=(x-cx)/(cols/2-1.2), ny=(y-cy)/(rows/2-1.2);
+    const ang=Math.atan2(ny,nx);
+    const wob=0.80+0.13*Math.sin(ang*3+s*2.1)+0.09*Math.sin(ang*5+s*4.7)+0.05*Math.sin(ang*9+s*7.3);
+    if(nx*nx+ny*ny<=wob*wob) m[y][x]=true;
   }
   (exits||[]).forEach(ex=>{
     for(let x=ex.x1;x<=ex.x2;x++){
-      if(ex.side==='bottom'){ for(let y=Bb-rad;y<rows;y++) m[y][x]=true; }
-      else { for(let y=0;y<=Tb+rad;y++) m[y][x]=true; }
+      if(ex.side==='bottom'){ for(let y=Math.floor(rows*0.6);y<rows;y++) m[y][x]=true; }
+      else { for(let y=0;y<Math.ceil(rows*0.4);y++) m[y][x]=true; }
     }
   });
+  // 길·연못이 물 위에 뜨지 않게: 해당 칸 + 주변 1칸 육지 보정
+  if(map){
+    for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) if(map[y][x]!==0){
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        const ty=y+dy,tx=x+dx;
+        if(ty>0&&ty<rows-0&&tx>0&&tx<cols-0&&ty<rows&&tx<cols&&m[ty]) m[ty][tx]=true;
+      }
+    }
+  }
   return m;
 }
 function bakeGround(c,map,cols,rows,island){
@@ -299,8 +318,9 @@ function buildCamp(){
   setRect(map,14,14,2,8,1);
   const pond={x:20,y:14,w:6,h:6};
   setRect(map,pond.x,pond.y,pond.w,pond.h,2);
-  // 섬 (남쪽 출구 다리)
-  const island=makeIsland(cols,rows,[{side:'bottom',x1:13,x2:16}]);
+  // 섬 (남쪽 출구 다리, 유기적 모양 + 구조물 육지 보정)
+  const island=makeIsland(cols,rows,[{side:'bottom',x1:13,x2:16}],map,1.3);
+  [[2,3,8,7],[8,1,5,5],[11,2,4,4],[10,8,4,4],[17,16,4,4],[23,1,4,4]].forEach(([px,py,pw,ph])=>setRect(island,px,py,pw,ph,true));
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) solid[y][x]=!island[y][x];
   setRect(solid,pond.x,pond.y,pond.w,pond.h,true);
   // 내 집: 지붕 없는 오픈탑 룸 (벽 테두리 + 입구, 안에 침대·책장)
@@ -313,7 +333,7 @@ function buildCamp(){
   setRect(solid,12,3,2,2,true);         // 우물 (위치 이동)
   solid[10][11]=true;                   // 표지판
   const TREES=[[11,4,'treeB'],[18,4,'treeC'],[24,6,'treeD'],[6,13,'treeB'],[11,16,'treeC'],[18,17,'treeD'],[4,16,'treeC'],[25,11,'treeB']];
-  TREES.forEach(([x,y])=>{ solid[y][x]=true; });
+  TREES.forEach(([x,y])=>{ for(let dy=-2;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const ty=y+dy,tx=x+dx; if(island[ty]&&island[ty][tx]!==undefined){island[ty][tx]=true; solid[ty][tx]=false;}} solid[y][x]=true; });
   const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
   const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
   bakeGround(c,map,cols,rows,island);
@@ -393,8 +413,9 @@ function buildRoad(){
   setRect(map,2,8,26,3,1);
   setRect(map,14,11,2,3,1);
   const pond=null;
-  // 섬 (북쪽 출구 다리)
-  const island=makeIsland(cols,rows,[{side:'top',x1:25,x2:28}]);
+  // 섬 (북쪽 출구 다리, 유기적 모양 + 구조물 육지 보정)
+  const island=makeIsland(cols,rows,[{side:'top',x1:25,x2:28}],map,2.7);
+  [[8,5,14,4],[3,13,8,6],[17,13,8,6],[12,14,4,4],[15,11,4,3],[2,4,6,3]].forEach(([px,py,pw,ph])=>setRect(island,px,py,pw,ph,true));
   for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) solid[y][x]=!island[y][x];
   // 광장 게이트 (심플 입구: 기둥 2 + 울타리 날개, 진입 시 페스타 로딩)
   setRect(solid,12,6,1,2,true); setRect(solid,17,6,1,2,true);   // 기둥
@@ -403,7 +424,7 @@ function buildRoad(){
   setRect(solid,18,14,6,4,true);   // 마켓
   setRect(solid,13,15,2,2,true);   // 우물
   const TREES=[[3,5,'treeB'],[6,5,'treeC'],[3,17,'treeD'],[26,12,'treeB'],[26,17,'treeC'],[12,19,'treeD']];
-  TREES.forEach(([x,y])=>{ solid[y][x]=true; });
+  TREES.forEach(([x,y])=>{ for(let dy=-2;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const ty=y+dy,tx=x+dx; if(island[ty]&&island[ty][tx]!==undefined){island[ty][tx]=true; solid[ty][tx]=false;}} solid[y][x]=true; });
   const bake=document.createElement('canvas'); bake.width=w; bake.height=h;
   const c=bake.getContext('2d'); c.imageSmoothingEnabled=false;
   bakeGround(c,map,cols,rows,island);
@@ -644,7 +665,7 @@ const typing=e=>e.target&&['INPUT','TEXTAREA'].includes(e.target.tagName);
 const modalOpen=()=>['colModal','newsModal','creator'].some(id=>document.getElementById(id).style.display==='flex');
 addEventListener('keydown',e=>{ if(typing(e)) return;
   if(modalOpen()){ if(e.key==='Escape'){ ['colModal','newsModal'].forEach(id=>document.getElementById(id).style.display='none'); } return; }
-  keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E'||e.key==='Enter') doAction(); });
+  keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E') doAction(); if(e.key==='Enter') openChat(); });
 addEventListener('keyup',e=>{ if(typing(e)) return; keys[e.key]=false; });
 addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; });
 document.querySelectorAll('#dpad button').forEach(b=>{ const k=b.dataset.k;
@@ -654,9 +675,96 @@ document.getElementById('btnE').addEventListener('touchstart',e=>{e.preventDefau
 document.getElementById('btnE').addEventListener('click',()=>doAction());
 document.getElementById('btnChar').addEventListener('click',()=>{ openCreator(); });
 
+function tagTopOf(key){ return key&&key.startsWith('slc_')?38:42; }
+function drawTag(name,X,Y,key,color){
+  const top=tagTopOf(key);
+  ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
+  const tw=ctx.measureText(name).width;
+  ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(X-tw/2-6,Y-top-12,tw+12,15);
+  ctx.fillStyle=color||'#fff'; ctx.fillText(name,X,Y-top);
+}
+// ── 실시간 멀티(프레즌스+채팅) ──
+let rt=null; const others={};
+const myPid=(()=>{ let k=store.get('pid',null); if(!k){ k='p'+Math.random().toString(36).slice(2,10); store.set('pid',k); } return k; })();
+function chatLog(name,text){
+  const log=document.getElementById('chatLog');
+  const d=document.createElement('div'); d.textContent=name+': '+text;
+  log.appendChild(d);
+  while(log.children.length>6) log.removeChild(log.firstChild);
+  setTimeout(()=>{ if(d.parentNode) d.parentNode.removeChild(d); },12000);
+}
+function initRealtime(){
+  try{
+    if(!window.supabase) return;
+    const cl=window.supabase.createClient('https://wwpvntmueafieessgnbu.supabase.co', ANON);
+    rt=cl.channel('village-v1',{config:{presence:{key:myPid},broadcast:{self:false}}});
+    rt.on('presence',{event:'sync'},()=>{
+      const st=rt.presenceState();
+      for(const k in others){ if(!st[k]) delete others[k]; }
+      for(const k in st){ if(k===myPid) continue;
+        const m=st[k][0]; if(!m) continue;
+        const o=others[k]||(others[k]={dx:m.x,dy:m.y});
+        Object.assign(o,m);
+      }
+    });
+    rt.on('broadcast',{event:'chat'},({payload})=>{
+      if(!payload||payload.key===myPid) return;
+      chatLog(payload.name||'여행자',payload.text||'');
+      const o=others[payload.key];
+      if(o){ o.chatText=payload.text; o.chatUntil=performance.now()+4500; }
+    });
+    rt.subscribe((status)=>{ if(status==='SUBSCRIBED') trackNow(true); });
+  }catch(e){ console.warn('realtime fail',e); }
+}
+let lastTrack=0, lastSig='';
+function trackNow(force){
+  if(!rt) return;
+  const now=Date.now();
+  if(!force && now-lastTrack<250) return;
+  const st={x:Math.round(player.x),y:Math.round(player.y),dir:player.dir,moving:player.moving,char:me?me.char:'slc_cream',name:me?me.name:'여행자',scene};
+  const sig=JSON.stringify(st);
+  if(!force && sig===lastSig) return;
+  lastTrack=now; lastSig=sig;
+  try{ rt.track(st); }catch{}
+}
+function drawOthers(t,dt){
+  const now=performance.now();
+  Object.values(others).forEach(o=>{
+    if(o.scene!==scene) return;
+    if(o.dx===undefined){ o.dx=o.x; o.dy=o.y; }
+    o.dx+=(o.x-o.dx)*Math.min(1,dt*10); o.dy+=(o.y-o.dy)*Math.min(1,dt*10);
+    const moving=Math.hypot(o.x-o.dx,o.y-o.dy)>2||o.moving;
+    drawChar(o.char||'slc_cream',o.dx,o.dy,o.dir||'down',moving,t);
+    drawTag(o.name||'여행자',o.dx,o.dy,o.char||'slc_cream','#cfe8ff');
+    if(o.chatUntil&&now<o.chatUntil){
+      ctx.font='bold 13px Pretendard,sans-serif';
+      const tw=Math.min(ctx.measureText(o.chatText).width,300);
+      const bx=o.dx-tw/2-10, by=o.dy-tagTopOf(o.char)-46;
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.roundRect(bx,by,tw+20,24,8); ctx.fill();
+      ctx.fillStyle='#222'; ctx.textAlign='left'; ctx.fillText(o.chatText,bx+10,by+17,300);
+    }
+  });
+}
+function openChat(){
+  if(modalOpen()) return;
+  const bar=document.getElementById('chatBar');
+  bar.style.display='flex';
+  document.getElementById('chatIn').focus();
+}
+function sendChat(){
+  const inp=document.getElementById('chatIn');
+  const text=(inp.value||'').trim();
+  inp.value='';
+  document.getElementById('chatBar').style.display='none';
+  if(!text) return;
+  const name=me?me.name:'여행자';
+  chatLog(name,text);
+  sayAt(player.x, player.y-tagTopOf(me?me.char:'slc_cream')-26, text, 4500);
+  if(rt){ try{ rt.send({type:'broadcast',event:'chat',payload:{key:myPid,name,text}}); }catch{} }
+}
 let bubble=null;
 function sayAt(x,y,t,ms=3400){ bubble={x,y,text:t, until:performance.now()+ms}; }
-function say(t,ms=2600){ sayAt(player.x,player.y-88,t,ms); }
+function say(t,ms=2600){ const k=me?me.char:'slc_cream'; sayAt(player.x,player.y-tagTopOf(k)-26,t,ms); }
 
 let coins=[];
 function loadCoins(){
@@ -743,14 +851,9 @@ function drawSceneDyn(t,dt){
   // NPC
   s.npcs.forEach(n=>{
     drawChar(n.img,n.x,n.y,n.dir||'down',false,t+(n.x*7));
-    if(!n.hideTag){
-      const oy = n.img.startsWith('slc_') ? 62 : 76;
-      ctx.font='bold 10px Pretendard,sans-serif'; ctx.textAlign='center';
-      const tw=ctx.measureText(n.name).width;
-      ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(n.x-tw/2-5,n.y-oy-11,tw+10,14);
-      ctx.fillStyle='#ffe9a8'; ctx.fillText(n.name,n.x,n.y-oy);
-    }
+    if(!n.hideTag) drawTag(n.name,n.x,n.y,n.img,'#ffe9a8');
   });
+  drawOthers(t,dt);
   if(scene==='camp'||scene==='road'){
     butterflies.forEach(bf=>{ bf.p+=dt;
       const bx=bf.x+Math.sin(bf.p*0.7)*60+Math.sin(bf.p*2.3)*14, by=bf.y+Math.cos(bf.p*0.9)*40;
@@ -806,6 +909,7 @@ function loop(now){
       else { a.movingRow=false; a.fr+=dt*2.5; }
     });
   }
+  trackNow();
   cam.x=Math.max(0,Math.min(sw-VW, player.x-VW/2));
   cam.y=Math.max(0,Math.min(sh-VH, player.y-VH/2));
 
@@ -814,10 +918,7 @@ function loop(now){
   drawSceneDyn(now,dt);
   const myKey=me?me.char:'slc_cream';
   drawChar(myKey,player.x,player.y,player.dir,player.moving,now);
-  if(me){ const ty=myKey.startsWith('slc_')?66:88;
-    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.font='bold 11px Pretendard,sans-serif'; ctx.textAlign='center';
-    const tw=ctx.measureText(me.name).width; ctx.fillRect(player.x-tw/2-6,player.y-ty-12,tw+12,16);
-    ctx.fillStyle='#fff'; ctx.fillText(me.name,player.x,player.y-ty); }
+  drawTag(me?me.name:'여행자',player.x,player.y,myKey);
   if(bubble && now<bubble.until){
     ctx.font='bold 13px Pretendard,sans-serif';
     const tw=Math.min(ctx.measureText(bubble.text).width, 430);
@@ -874,6 +975,10 @@ function init(){
     store.set('me',me); document.getElementById('creator').style.display='none';
   };
   fetchMyRank();
+  initRealtime();
+  document.getElementById('chatSend').onclick=sendChat;
+  document.getElementById('chatIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendChat(); } if(e.key==='Escape'){ document.getElementById('chatBar').style.display='none'; e.target.blur(); } });
+  document.getElementById('btnChat').addEventListener('click',openChat);
   if(!me) openCreator();
   requestAnimationFrame(loop);
 }
