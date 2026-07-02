@@ -13346,6 +13346,28 @@ app.post("/make-server-0b7d3bae/admin/migrate/games", async (c) => {
 });
 
 
+// ─── 보드마을 맵 (관리자 맵에디터 저장/조회) ─────────────────────────────────
+app.get("/make-server-0b7d3bae/village/map/:scene", async (c) => {
+  try {
+    const scene = c.req.param('scene');
+    if (!/^[a-z]+$/.test(scene)) return c.json({ error: 'bad scene' }, 400);
+    const data = await kv.get(`village_map_${scene}`);
+    return c.json({ data: data || null });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+app.put("/make-server-0b7d3bae/village/map/:scene", async (c) => {
+  const { error } = await requireAdmin(c);
+  if (error) return error;
+  try {
+    const scene = c.req.param('scene');
+    if (!/^[a-z]+$/.test(scene)) return c.json({ error: 'bad scene' }, 400);
+    const body = await c.req.json();
+    if (body && body.data) await kv.set(`village_map_${scene}`, body.data);
+    else await kv.del(`village_map_${scene}`);
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // ─── 트렌딩 블랙리스트 관리 (관리자) ─────────────────────────────────────────
 app.post("/make-server-0b7d3bae/admin/trending-blacklist", async (c) => {
   try {
