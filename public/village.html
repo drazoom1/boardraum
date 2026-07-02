@@ -107,17 +107,48 @@ const ME=['grass1','grass2','tuft1','tuft2','tuft3','tuft4','tuft5','dirtauto','
   'camper','fire1','fire2','btable','lamp','fount1','fount2','fbush1','fbush2','fbush3',
   'lantern','ball1','picnic','tree1','tree2','tree4','stadium'];
 for(let i=1;i<=NCHAR;i++) ME.push('lz'+i);
+// 등급 달걀 캐릭터 (티어 6 × 말 6)
+const EGG_PIECES=['pawn','rook','knight','bishop','queen','king'];
+const EGGS=[];
+for(let t=1;t<=6;t++) EGG_PIECES.forEach(p=>EGGS.push('eg_t'+t+'_'+p));
 const IMGS={};
-const toLoad=[...ME.map(k=>'me/'+k),'coin'];
+const toLoad=[...ME.map(k=>'me/'+k),...EGGS.map(k=>'eg/'+k),'coin'];
 let loadedN=0;
 toLoad.forEach(k=>{ const im=new Image(); im.src='village-assets/'+k+'.png';
-  const key=k.replace('me/','');
+  const key=k.replace('me/','').replace('eg/','');
   im.onload=()=>{ IMGS[key]=im; if(++loadedN>=toLoad.length) init(); };
   im.onerror=()=>{ console.warn('load fail',k); if(++loadedN>=toLoad.length) init(); }; });
 
 let me=store.get('me',null);
-if(me && !(typeof me.char==='string' && me.char.startsWith('lz'))) me=null;
-let charSel=1;
+if(me && !(typeof me.char==='string' && (me.char.startsWith('lz')||me.char.startsWith('eg_')))) me=null;
+let charSel='lz1';
+
+// ── 내 보드라움 등급 → 달걀 캐릭터 ──
+const RANK_RAW=[[0,0,0,0],[80,3,10,1],[200,6,25,3],[400,10,50,6],[700,15,80,10],[1100,22,120,15],
+ [1600,30,170,20],[2200,40,230,28],[2900,52,300,38],[3700,65,380,50],[4600,80,470,63],[5600,97,570,78],
+ [6800,115,680,95],[8200,135,800,115],[9800,157,930,138],[11600,180,1080,163],[13600,206,1240,191],[15800,234,1410,222],
+ [18300,265,1600,256],[21000,298,1800,293],[24000,334,2020,334],[27300,373,2260,379],[30900,415,2520,428],[34800,460,2800,481],
+ [39200,510,3100,539],[43900,563,3420,602],[49000,620,3760,670],[54600,682,4120,744],[60600,748,4510,824],[67000,820,4920,910],
+ [74000,898,5360,1003],[81500,982,5830,1103],[89500,1073,6330,1210],[98000,1171,6860,1325],[107000,1277,7420,1449],[116500,1391,8010,1582]];
+const TIER_KO={1:'애기',2:'유아',3:'보린이',4:'대딩',5:'회사원',6:'원로'};
+let myRank=null;
+async function fetchMyRank(){
+  try{
+    const raw=localStorage.getItem('supabase-auth-token'); if(!raw) return;
+    let tok=null; try{ const s=JSON.parse(raw); tok=s.access_token||(s.currentSession&&s.currentSession.access_token); }catch{}
+    if(!tok) return;
+    const r=await fetch(SB+'/points/me',{headers:{'Authorization':'Bearer '+tok}});
+    if(!r.ok) return;
+    const d=await r.json();
+    const st=[d.points||0,d.posts||0,d.comments||0,d.likesReceived||0];
+    let idx=0;
+    for(let i=0;i<RANK_RAW.length;i++){ const R=RANK_RAW[i];
+      if(st[0]>=R[0]&&st[1]>=R[1]&&st[2]>=R[2]&&st[3]>=R[3]) idx=i; else break; }
+    const tier=Math.floor(idx/6)+1;
+    myRank={ tier, piece:EGG_PIECES[idx%6], label:TIER_KO[tier]+' '+(idx%6+1), key:'eg_t'+tier+'_'+EGG_PIECES[idx%6] };
+    addRankCell();
+  }catch{}
+}
 
 // ── LimeZu 캐릭터 (row0=idle, row1=walk / 방향순서: right,up,left,down) ──
 const DIRO={right:0,up:6,left:12,down:18};
@@ -392,7 +423,7 @@ function buildFesta(){
   c.fillStyle='#c94f4f'; c.fillRect((cols/2-1.5)*TILE+6,(rows-2)*TILE-10,3*TILE-12,32);
   c.fillStyle='#fff'; c.font='bold 13px Pretendard,sans-serif'; c.textAlign='center';
   c.fillText('밖으로 ⬇', cols/2*TILE, (rows-2)*TILE+10);
-  const npcs=boothPos.map(([bx,by,co],i)=>({ name:co.name, img:'lz'+(1+(i%NCHAR)), x:bx*TILE+4*TILE, y:by*TILE+2*TILE+2, dir:'down', hideTag:true, lines:[co.greet] }));
+  const npcs=boothPos.map(([bx,by,co],i)=>({ name:co.name, img:'eg_t3_'+EGG_PIECES[i%6], x:bx*TILE+4*TILE, y:by*TILE+2*TILE+2, dir:'down', hideTag:true, lines:[co.greet] }));
   const interact=boothPos.map(([bx,by,co])=>({ x:bx*TILE+4*TILE, y:(by+4.6)*TILE, r:70, label:co.name+' 부스 구경', act:'booth', co }));
   interact.push({x:cols/2*TILE, y:(rows-1.4)*TILE, r:56, label:'밖으로 나가기', act:'exitFesta'});
   SC.festa={ cols,rows,w,h,map,solid,bake,pond:null, interact, npcs,
@@ -449,7 +480,7 @@ function buildBooth(co){
     interact:[...disp,
       {x:26*TILE+32, y:12*TILE, r:64, label:co.name+' 소식 보기', act:'news', co},
       {x:cols/2*TILE, y:(rows-1.3)*TILE, r:56, label:'페스타로 나가기', act:'exitBooth'}],
-    npcs:[{name:co.name,img:'lz'+(1+(COMPANIES.indexOf(co)%NCHAR)),x:3.5*TILE,y:8.5*TILE,dir:'right',hideTag:true,lines:[co.greet,'천천히 구경하세요~ 🙌']}],
+    npcs:[{name:co.name,img:'eg_t3_'+EGG_PIECES[COMPANIES.indexOf(co)%6],x:3.5*TILE,y:8.5*TILE,dir:'right',hideTag:true,lines:[co.greet,'천천히 구경하세요~ 🙌']}],
     coins:null, coinPos:[], loc:'🎪 '+co.name+' 부스', co };
 }
 
@@ -768,12 +799,33 @@ function loop(now){
 }
 
 // ── 초기화 ──
+function makeCharCell(grid,key,labelText){
+  const btn=document.createElement('div'); btn.className='cbtn'; btn.dataset.key=key;
+  const cc=document.createElement('canvas'); cc.width=48; cc.height=58;
+  btn.appendChild(cc);
+  if(labelText){ const lb=document.createElement('div');
+    lb.style.cssText='font-size:10px;font-weight:800;color:#b8860b;padding-bottom:2px'; lb.textContent=labelText; btn.appendChild(lb); }
+  grid.appendChild(btn);
+  const g=cc.getContext('2d'); g.imageSmoothingEnabled=false;
+  const img=IMGS[key]; if(img) g.drawImage(img,DIRO.down*16,0,16,32,8,2,32,56);
+  btn.onclick=()=>{ grid.querySelectorAll('.cbtn').forEach(x=>x.classList.remove('sel')); btn.classList.add('sel'); charSel=key; };
+  return btn;
+}
+function addRankCell(){
+  if(!myRank) return;
+  const grid=document.getElementById('charGrid');
+  if(grid.querySelector('[data-key^="eg_"]')) return;
+  const btn=makeCharCell(grid,myRank.key,'🏆 '+myRank.label);
+  btn.style.borderColor='#e0b23a'; btn.style.background='#fffbe8';
+  grid.prepend(btn);
+  if(me && me.char===myRank.key){ grid.querySelectorAll('.cbtn').forEach(x=>x.classList.remove('sel')); btn.classList.add('sel'); }
+}
 function openCreator(){
   const c=document.getElementById('creator');
   document.getElementById('nm').value=me?me.name:'여행자';
-  const cur=me?parseInt(me.char.replace('lz',''))||1:1;
-  charSel=cur;
-  c.querySelectorAll('.cbtn').forEach((b,i)=>b.classList.toggle('sel',i+1===cur));
+  charSel=me?me.char:'lz1';
+  c.querySelectorAll('.cbtn').forEach(b=>b.classList.toggle('sel',b.dataset.key===charSel));
+  if(!c.querySelector('.sel')){ const f=c.querySelector('.cbtn'); if(f){ f.classList.add('sel'); charSel=f.dataset.key; } }
   c.style.display='flex';
 }
 function init(){
@@ -781,18 +833,13 @@ function init(){
   buildCamp(); buildRoad(); buildFesta();
   loadCoins();
   const grid=document.getElementById('charGrid');
-  for(let i=1;i<=NCHAR;i++){
-    const btn=document.createElement('div'); btn.className='cbtn'+(i===1?' sel':'');
-    const cc=document.createElement('canvas'); cc.width=48; cc.height=58;
-    btn.appendChild(cc); grid.appendChild(btn);
-    const g=cc.getContext('2d'); g.imageSmoothingEnabled=false;
-    const img=IMGS['lz'+i]; if(img) g.drawImage(img,DIRO.down*16,0,16,32,8,2,32,56);
-    ((idx)=>{ btn.onclick=()=>{ grid.querySelectorAll('.cbtn').forEach(x=>x.classList.remove('sel')); btn.classList.add('sel'); charSel=idx; }; })(i);
-  }
+  for(let i=1;i<=NCHAR;i++) makeCharCell(grid,'lz'+i);
+  grid.querySelector('.cbtn').classList.add('sel');
   document.getElementById('go').onclick=()=>{
-    me={ name:(document.getElementById('nm').value||'여행자').slice(0,8), char:'lz'+charSel };
+    me={ name:(document.getElementById('nm').value||'여행자').slice(0,8), char:charSel };
     store.set('me',me); document.getElementById('creator').style.display='none';
   };
+  fetchMyRank();
   if(!me) openCreator();
   requestAnimationFrame(loop);
 }
