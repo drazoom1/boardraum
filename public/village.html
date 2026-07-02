@@ -86,6 +86,21 @@
 <button id="btnChat">💬</button>
 <div id="chatLog"></div>
 <div id="chatBar"><input id="chatIn" maxlength="60" placeholder="메시지 입력… (Enter 전송)"><button id="chatSend">전송</button></div>
+<div id="decoModal" class="modal">
+  <div class="mcard" style="width:min(720px,94vw)">
+    <div class="mhead"><h2 id="decoTitle">🎨 꾸미기</h2><button onclick="closeDeco()">✕</button></div>
+    <div class="mbody">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="decoTools">
+        <button class="edt sel" data-m="place">🪑 배치</button>
+        <button class="edt" data-m="del">🗑️ 제거</button>
+        <button class="edt" id="decoDelStruct" style="background:#933">🏚️ 이 구조물 삭제</button>
+      </div>
+      <div id="decoPal" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:10px;max-height:120px;overflow-y:auto"></div>
+      <canvas id="decoCv" style="width:100%;image-rendering:pixelated;border-radius:10px;background:#9adfd8"></canvas>
+      <p style="font-size:12px;color:#888;margin-top:6px">클릭해서 배치/제거 · 닫으면 맵에 반영 · 저장은 에디터의 💾</p>
+    </div>
+  </div>
+</div>
 <div id="edPanel">
   <div class="edh">🛠️ 맵 에디터 <span style="font-weight:400;font-size:11px">(캠핑존·길에서 사용)</span></div>
   <div class="edrow">
@@ -99,6 +114,7 @@
     <button class="eds" data-k="home">🏡 내집</button><button class="eds" data-k="hall">🎲 광장</button>
     <button class="eds" data-k="lib">📚 도서관</button><button class="eds" data-k="mkt">🛒 마켓</button>
     <button class="eds" data-k="board">💬 게시판</button>
+    <button class="edt" data-t="deco">🎨 내부꾸미기</button>
   </div>
   <div class="edh2">소품 (클릭 후 맵에 배치)</div>
   <div id="edProps"></div>
@@ -285,6 +301,17 @@ function drawSprites(c,sp){
       c.ellipse(s.px+img.width, s.base-4, img.width*0.9, 8, 0,0,7); c.fill(); }
     c.drawImage(img, s.px, s.py, img.width*2, img.height*2); });
 }
+const STRUCT_SIZE={home:[6,5],hall:[12,6],lib:[6,5],mkt:[6,5],board:[1,1]};
+function drawFurn(c,solid,st){
+  (st.furn||[]).forEach(f=>{
+    const img=IMGS[f.k]; if(!img) return;
+    c.drawImage(img,(st.x+f.fx)*TILE,(st.y+f.fy)*TILE,img.width*2,img.height*2);
+    if(PROP_DEF[f.k]&&PROP_DEF[f.k].s){
+      const tx=Math.floor(st.x+f.fx+ img.width/32), ty=Math.floor(st.y+f.fy+ img.height/16 -0.5);
+      if(solid[ty]&&solid[ty][tx]!==undefined) solid[ty][tx]=true;
+    }
+  });
+}
 function roomSolid(solid,rx,ry,rw,rh,doorXs){
   for(let x=rx;x<rx+rw;x++){ solid[ry][x]=true; if(!doorXs.includes(x)) solid[ry+rh-1][x]=true; }
   for(let y=ry;y<ry+rh;y++){ solid[y][rx]=true; solid[y][rx+rw-1]=true; }
@@ -300,6 +327,18 @@ function roomDraw(c,rx,ry,rw,rh,doorXs,fA,fB){
   }
   for(let y=ry;y<ry+rh;y++){ T(c,IMGS.wallL,0,0,rx*TILE,y*TILE); T(c,IMGS.wallR,0,0,(rx+rw-1)*TILE,y*TILE); }
   c.fillStyle='#c95561'; c.fillRect(doorXs[0]*TILE+4,(ry+rh-1)*TILE+6,doorXs.length*TILE-8,20);
+}
+function makeBookshelfSprite(){
+  const cnv=document.createElement('canvas'); cnv.width=36; cnv.height=30;
+  const g=cnv.getContext('2d');
+  g.fillStyle='#5c3f22'; g.fillRect(0,0,36,30);
+  g.fillStyle='#3a2412'; g.fillRect(2,2,32,26);
+  for(let r2=0;r2<2;r2++) for(let i=0;i<5;i++){
+    const hgt=7+((i*7+r2*5)%3), hue=(i*53+r2*80)%360;
+    g.fillStyle=`hsl(${hue},48%,52%)`; g.fillRect(4+i*6, 2+r2*12+(9-hgt), 4, hgt);
+  }
+  g.fillStyle='#5c3f22'; g.fillRect(2,13,32,2); g.fillRect(2,26,32,2);
+  IMGS.bookshelf=cnv;
 }
 function miniShelf(c,shx,shy){
   c.fillStyle='#5c3f22'; c.fillRect(shx-4,shy-4,72,60);
@@ -369,9 +408,10 @@ const PROP_DEF={
   wobj1:{s:0},wobj2:{s:0},wobj3:{s:0},wobj4:{s:0},wobj5:{s:0},wobj6:{s:0},
 };
 for(let i=1;i<=54;i++) PROP_DEF['deco'+i]={s:0};
+PROP_DEF.bookshelf={s:1};
 const SCENE_DEF={
   camp:{ cols:30, rows:22, seed:1.3, loc:'🏡 보드마을 캠핑존',
-    structs:[{k:'home',x:3,y:4},{k:'board',x:11,y:9}],
+    structs:[{k:'home',x:3,y:4,furn:[{k:'bedP',fx:1,fy:0.6},{k:'bookshelf',fx:3,fy:0.5},{k:'rugT',fx:1.6,fy:2.6}]},{k:'board',x:11,y:9}],
     exits:[{side:'bottom',x1:13,x2:16}],
     patches:[[2,3,8,7],[9,8,6,4]],
     roads:[[2,11,26,3],[14,2,2,9],[14,14,2,8]],
@@ -387,7 +427,11 @@ const SCENE_DEF={
       {k:'flower1',x:9,y:13},{k:'flower3',x:21,y:8},{k:'mush1',x:5,y:14},
     ] },
   road:{ cols:30, rows:22, seed:2.7, loc:'🌲 광장 가는 길',
-    structs:[{k:'hall',x:9,y:2},{k:'lib',x:4,y:13},{k:'mkt',x:18,y:13},{k:'board',x:16,y:11}],
+    structs:[
+      {k:'hall',x:9,y:2,furn:[{k:'btable',fx:1.4,fy:1.4},{k:'btable',fx:8.6,fy:1.4}]},
+      {k:'lib',x:4,y:13,furn:[{k:'bookshelf',fx:0.6,fy:0.8},{k:'bookshelf',fx:3.2,fy:0.8}]},
+      {k:'mkt',x:18,y:13,furn:[{k:'dresser',fx:0.7,fy:0.6},{k:'btable',fx:2.2,fy:0.6},{k:'dresser',fx:4.2,fy:0.6}]},
+      {k:'board',x:16,y:11}],
     exits:[{side:'top',x1:25,x2:28}],
     patches:[[8,1,14,8],[3,12,8,7],[17,12,8,7],[15,11,4,3]],
     roads:[[2,8,26,3],[26,0,2,9],[14,11,2,3]],
@@ -478,11 +522,8 @@ function buildScene(name){
     const sx=st.x, sy=st.y;
     if(st.k==='home'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
-      if(solid[sy+1]){ solid[sy+1][sx+1]=true; solid[sy+1][sx+3]=true; solid[sy+1][sx+4]=true; }
       roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6c493','#dfbb87');
-      const bp=IMGS.bedP; if(bp) c.drawImage(bp,(sx+1)*TILE,(sy+0.6)*TILE,32,96);
-      miniShelf(c,(sx+3)*TILE,(sy+0.5)*TILE);
-      const rg=IMGS.rugT; if(rg) c.drawImage(rg,(sx+1.6)*TILE,(sy+2.6)*TILE,64,32);
+      drawFurn(c,solid,st);
       plaque(c,(sx+3)*TILE,sy*TILE-10,'🏡 내 집');
       interact.push({x:(sx+4)*TILE,y:(sy+2)*TILE,r:52,label:'내 컬렉션 보기',act:'collection'});
     } else if(st.k==='board'){
@@ -492,8 +533,7 @@ function buildScene(name){
       roomSolid(solid,sx,sy,12,6,[sx+5,sx+6]);
       roomDraw(c,sx,sy,12,6,[sx+5,sx+6],'#e9ddc4','#e2d4b8');
       c.fillStyle='#cc5a52'; c.fillRect((sx+4.6)*TILE,(sy+1)*TILE,2.8*TILE,4.6*TILE);
-      const tb0=IMGS.btable;
-      if(tb0){ c.drawImage(tb0,(sx+1.4)*TILE,(sy+1.4)*TILE,64,64); c.drawImage(tb0,(sx+8.6)*TILE,(sy+1.4)*TILE,64,64); }
+      drawFurn(c,solid,st);
       for(let i=0;i<11;i++){ const gx=(sx+0.6)*TILE+i*32, colsF=['#e05656','#3f9cde','#f4d35e','#4fa54c','#8e6ad1'];
         c.fillStyle=colsF[i%5]; c.beginPath(); c.moveTo(gx,sy*TILE+8); c.lineTo(gx+14,sy*TILE+8); c.lineTo(gx+7,sy*TILE+22); c.closePath(); c.fill(); }
       plaque(c, (sx+6)*TILE, (sy-0.4)*TILE, '🎲 보드게임광장', true);
@@ -502,15 +542,13 @@ function buildScene(name){
     } else if(st.k==='lib'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
       roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6d9bd','#dfd0b1');
-      miniShelf(c,(sx+0.6)*TILE,(sy+0.8)*TILE); miniShelf(c,(sx+3.2)*TILE,(sy+0.8)*TILE);
+      drawFurn(c,solid,st);
       plaque(c, (sx+3)*TILE, (sy-0.4)*TILE, '보드위키 도서관');
       interact.push({x:(sx+3)*TILE,y:(sy+5.3)*TILE,r:56,label:'보드위키 도서관',act:'bubble',text:'📚 보드위키로 연결 예정이에요!'});
     } else if(st.k==='mkt'){
       roomSolid(solid,sx,sy,6,5,[sx+2,sx+3]);
       roomDraw(c,sx,sy,6,5,[sx+2,sx+3],'#e6d9bd','#dfd0b1');
-      const dr0=IMGS.dresser, tb1=IMGS.btable;
-      if(dr0){ c.drawImage(dr0,(sx+0.7)*TILE,(sy+0.6)*TILE,32,64); c.drawImage(dr0,(sx+4.2)*TILE,(sy+0.6)*TILE,32,64); }
-      if(tb1) c.drawImage(tb1,(sx+2.2)*TILE,(sy+0.6)*TILE,64,64);
+      drawFurn(c,solid,st);
       plaque(c, (sx+3)*TILE, (sy-0.4)*TILE, '보드마켓 (공사중)');
       interact.push({x:(sx+3)*TILE,y:(sy+5.3)*TILE,r:56,label:'보드마켓',act:'bubble',text:'🚧 보드마켓 — 공사중! 곧 열려요'});
     }
@@ -573,6 +611,13 @@ function edApply(e){
   else if(t==='pond'){ d.ground[ty][tx]=2; d.land[ty][tx]=true; }
   else if(t==='grass'){ d.ground[ty][tx]=0; }
   else if(t==='prop'){ if(!editor.drag){ d.props.push({k:editor.key,x:tx,y:ty}); } }
+  else if(t==='deco'){
+    let bestS=null,bd=1e9;
+    d.structs.forEach(st2=>{ const [rw,rh]=STRUCT_SIZE[st2.k]||[6,5];
+      if(tx>=st2.x&&tx<st2.x+rw&&ty>=st2.y&&ty<st2.y+rh){ bestS=st2; bd=0; } });
+    if(bestS&&bestS.k!=='board') openDeco(bestS);
+    return;
+  }
   else if(t==='struct'){
     const ex=d.structs.find(x2=>x2.k===editor.key);
     if(ex){ ex.x=tx; ex.y=ty; } else d.structs.push({k:editor.key,x:tx,y:ty});
@@ -604,6 +649,87 @@ async function edReset(){
   let tok=null; try{ const j=JSON.parse(raw); tok=j.access_token||(j.currentSession&&j.currentSession.access_token);}catch{}
   if(tok) fetch(SB+'/village/map/'+scene,{method:'PUT',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({data:null})}).catch(()=>{});
   buildScene(scene);
+}
+// ── 구조물 내부 꾸미기 (리모컨 창) ──
+const FURN_KEYS=['bookshelf','bedP','bedY','bedG','dresser','nstand','btable','chairB2','clockB','frame2',
+ 'rugT','rugP','rugS1','rugS2','plantA','plantB','chest','basket','workst','picnic',
+ 'deco1','deco2','deco3','deco4','deco5','deco6','deco7','deco8'];
+const deco={ st:null, mode:'place', key:'bookshelf', T2:56 };
+function openDeco(st){
+  deco.st=st; deco.mode='place';
+  const [rw,rh]=STRUCT_SIZE[st.k]||[6,5];
+  const cv2=document.getElementById('decoCv');
+  cv2.width=rw*deco.T2; cv2.height=rh*deco.T2;
+  const names={home:'🏡 내 집',hall:'🎲 보드게임광장',lib:'📚 도서관',mkt:'🛒 보드마켓'};
+  document.getElementById('decoTitle').textContent='🎨 '+(names[st.k]||st.k)+' 꾸미기';
+  const pal=document.getElementById('decoPal');
+  if(!pal.children.length){
+    FURN_KEYS.forEach(k=>{
+      const b=document.createElement('div'); b.className='edp'; b.dataset.k=k; b.style.background='#eee';
+      const cc=document.createElement('canvas'); cc.width=32; cc.height=32; b.appendChild(cc);
+      const g=cc.getContext('2d'); g.imageSmoothingEnabled=false;
+      const img=IMGS[k]; if(img){ const sc2=Math.min(30/img.width,30/img.height); g.drawImage(img,1,1,img.width*sc2,img.height*sc2); }
+      b.onclick=()=>{ deco.key=k; deco.mode='place';
+        pal.querySelectorAll('.edp').forEach(x=>x.style.outline=''); b.style.outline='2px solid #e0a13f';
+        document.querySelectorAll('#decoTools .edt').forEach(x=>x.classList.remove('sel'));
+        document.querySelector('#decoTools .edt[data-m="place"]').classList.add('sel'); };
+      pal.appendChild(b);
+    });
+    document.querySelectorAll('#decoTools .edt[data-m]').forEach(b=>{
+      b.onclick=()=>{ deco.mode=b.dataset.m;
+        document.querySelectorAll('#decoTools .edt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); };
+    });
+    document.getElementById('decoDelStruct').onclick=()=>{
+      if(!confirm('이 구조물을 맵에서 삭제할까요?')) return;
+      const d=SCENE_DATA[scene]; const i=d.structs.indexOf(deco.st);
+      if(i>=0) d.structs.splice(i,1);
+      closeDeco(); buildScene(scene);
+    };
+    cv2.addEventListener('pointerdown',decoClick);
+  }
+  renderDeco();
+  document.getElementById('decoModal').style.display='flex';
+}
+function closeDeco(){ document.getElementById('decoModal').style.display='none'; if(deco.st){ buildScene(scene); } }
+function renderDeco(){
+  const st=deco.st; if(!st) return;
+  const [rw,rh]=STRUCT_SIZE[st.k]||[6,5];
+  const cv2=document.getElementById('decoCv'), g=cv2.getContext('2d');
+  g.imageSmoothingEnabled=false;
+  const T2=deco.T2, k2=T2/32;
+  for(let y=0;y<rh;y++) for(let x=0;x<rw;x++){
+    g.fillStyle=(x+y)%2?'#e6c493':'#dfbb87'; g.fillRect(x*T2,y*T2,T2,T2);
+  }
+  const wall=(img,x,y)=>{ if(img) g.drawImage(img,0,0,16,16,x*T2,y*T2,T2,T2); };
+  for(let x=0;x<rw;x++){ wall(IMGS.wallM,x,0); if(!(x===2||x===3||(st.k==='hall'&&(x===5||x===6)))) wall(IMGS.wallM,x,rh-1); }
+  for(let y=0;y<rh;y++){ wall(IMGS.wallL,0,y); wall(IMGS.wallR,rw-1,y); }
+  (st.furn||[]).forEach(f=>{
+    const img=IMGS[f.k]; if(!img) return;
+    g.drawImage(img, f.fx*T2, f.fy*T2, img.width*2*k2, img.height*2*k2);
+  });
+}
+function decoClick(e){
+  const st=deco.st; if(!st) return;
+  const cv2=document.getElementById('decoCv'), r=cv2.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*(cv2.width/r.width), my=(e.clientY-r.top)*(cv2.height/r.height);
+  const T2=deco.T2;
+  if(!st.furn) st.furn=[];
+  if(deco.mode==='del'){
+    let best=-1,bd=1e9;
+    st.furn.forEach((f,i)=>{
+      const img=IMGS[f.k]; if(!img) return;
+      const cx=f.fx*T2+img.width*T2/32, cy=f.fy*T2+img.height*T2/32;
+      const dd=Math.hypot(cx-mx,cy-my); if(dd<bd){bd=dd;best=i;}
+    });
+    if(best>=0&&bd<T2*1.5) st.furn.splice(best,1);
+  } else {
+    const img=IMGS[deco.key]; if(!img) return;
+    const fx=Math.round((mx/T2 - img.width/32)*4)/4;
+    const fy=Math.round((my/T2 - img.height/16 + 0.5)*4)/4;
+    const [rw,rh]=STRUCT_SIZE[st.k]||[6,5];
+    st.furn.push({k:deco.key, fx:Math.max(0.2,Math.min(rw-img.width/16-0.2,fx)), fy:Math.max(0.4,Math.min(rh-img.height/16,fy))});
+  }
+  renderDeco();
 }
 function edInit(){
   if(!new URLSearchParams(location.search).has('edit')) return;
@@ -829,7 +955,7 @@ async function openNews(co){
 const player={ x:14.5*TILE+16, y:8*TILE, dir:'down', moving:false };
 const keys={};
 const typing=e=>e.target&&['INPUT','TEXTAREA'].includes(e.target.tagName);
-const modalOpen=()=>['colModal','newsModal','creator'].some(id=>document.getElementById(id).style.display==='flex');
+const modalOpen=()=>['colModal','newsModal','creator','decoModal'].some(id=>document.getElementById(id).style.display==='flex');
 addEventListener('keydown',e=>{ if(typing(e)) return;
   if(modalOpen()){ if(e.key==='Escape'){ ['colModal','newsModal'].forEach(id=>document.getElementById(id).style.display='none'); } return; }
   keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); if(e.key==='e'||e.key==='E') doAction(); if(e.key==='Enter') openChat(); });
@@ -1142,6 +1268,7 @@ function openCreator(){
 async function init(){
   await loadWorldMaps();
   document.getElementById('loading').style.display='none';
+  makeBookshelfSprite();
   buildCamp(); buildRoad(); buildFesta();
   edInit();
   loadCoins();
