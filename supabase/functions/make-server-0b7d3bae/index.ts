@@ -736,7 +736,7 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
     if (!/^\d+$/.test(id)) return c.json({ reviews: [], bggUrl: '' });
     const bggUrl = `https://boardgamegeek.com/boardgame/${id}/ratings?comment=1`;
 
-    const cacheKey = `bgg_reviews_v3_${id}`;
+    const cacheKey = `bgg_reviews_v4_${id}`;
     const cached = await kv.get(cacheKey);
     if (cached?.reviews) return c.json(cached);
 
@@ -748,24 +748,25 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
       .replace(/\[\/?[a-z][^\]]*\]/gi, ' ')    // BBCode 태그 [b] [thing=..] 등
       .replace(/\s+/g, ' ').trim();
 
-    const bggToken = Deno.env.get('BGG_API_TOKEN');
-    const headers: Record<string, string> = {};
-    if (bggToken) headers['Authorization'] = `Bearer ${bggToken}`;
-
+    // geekdo collections API: 댓글을 최신순(comment_tstamp desc)으로 반환하고 날짜·별점을 포함한다.
+    // xmlapi2 의 ratingcomments 는 별점 오름차순이라 최신 후기를 뽑을 수 없어 이 API를 사용.
     let comments: Array<{ username: string; rating: string; value: string }> = [];
     try {
-      const url = `https://boardgamegeek.com/xmlapi2/thing?id=${id}&ratingcomments=1&pagesize=60`;
-      const res = await fetch(url, { headers });
+      const url = `https://api.geekdo.com/api/collections?objectid=${id}&objecttype=thing&comment=1&sort=comment_tstamp&sortdir=desc&pageid=1`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (res.ok) {
-        const xml = await res.text();
-        for (const m of xml.matchAll(/<comment[^>]*username="([^"]*)"[^>]*rating="([^"]*)"[^>]*value="([^"]*)"[^>]*\/>/g)) {
-          const value = dec(m[3]);
-          if (value && value.length >= 15) comments.push({ username: m[1], rating: m[2], value });
+        const data = await res.json();
+        for (const it of (data?.items || [])) {
+          const rating = parseFloat(it?.rating);
+          if (!(rating > 0)) continue;                    // 별점 없는 개인 메모(예: "Checkout Library") 제외
+          const value = dec(it?.textfield?.comment?.value || '');
+          if (value && value.length >= 15) {
+            comments.push({ username: it?.user?.username || '익명', rating: String(it?.rating ?? ''), value });
+          }
+          if (comments.length >= 5) break;                // 이미 최신순 정렬이라 앞에서 5개면 충분
         }
       }
     } catch (e) { console.error('bgg reviews fetch error:', e); }
-
-    // BGG ratingcomments=1 은 최신 평점순으로 반환됨 → 그 순서(최신순) 유지, 상위 5개
     comments = comments.slice(0, 5);
 
     // 한국어 번역 (MyMemory 무료 API, 키 불필요) — 병렬 처리로 로딩 단축
