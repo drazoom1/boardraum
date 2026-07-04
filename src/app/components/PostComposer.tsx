@@ -742,8 +742,8 @@ export function PostComposer({ accessToken, userId, userEmail, userProfile, owne
     '♟️','🎮','🏆','🥇','❤️','🧡','💛','💚','💙','💜',
     '🔥','⭐','✨','💫','🎉','🎊','👍','👎','👏','🙌',
   ];
-  // 메인 카테고리 5개
-  const MAIN_CATEGORIES = ['이벤트', '자유', '정보', '게임리뷰', '질문'];
+  // 메인 카테고리 (일단 3개만: 자유·소식·질문)
+  const MAIN_CATEGORIES = ['자유', '소식', '질문'];
   const SUB_CATEGORIES: Record<string, string[]> = {
     '정보': ['보드게임 소식', '보드게임 정보등록', '재능판매'],
     '질문': ['살래말래', '보드게임 Q&A'],
