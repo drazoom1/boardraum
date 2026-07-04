@@ -736,7 +736,7 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
     if (!/^\d+$/.test(id)) return c.json({ reviews: [], bggUrl: '' });
     const bggUrl = `https://boardgamegeek.com/boardgame/${id}/ratings?comment=1`;
 
-    const cacheKey = `bgg_reviews_v4_${id}`;
+    const cacheKey = `bgg_reviews_v5_${id}`;
     const cached = await kv.get(cacheKey);
     if (cached?.reviews) return c.json(cached);
 
@@ -760,7 +760,7 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
           const rating = parseFloat(it?.rating);
           if (!(rating > 0)) continue;                    // 별점 없는 개인 메모(예: "Checkout Library") 제외
           const value = dec(it?.textfield?.comment?.value || '');
-          if (value && value.length >= 15) {
+          if (value && value.length >= 30) {           // 짧은 개인 메모("With expansions" 등) 제외, 실제 후기만
             comments.push({ username: it?.user?.username || '익명', rating: String(it?.rating ?? ''), value });
           }
           if (comments.length >= 5) break;                // 이미 최신순 정렬이라 앞에서 5개면 충분
