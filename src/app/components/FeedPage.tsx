@@ -4706,6 +4706,12 @@ export function FeedPage({ accessToken, userId, userEmail, ownedGames = [], onVi
             {subCategory ?? (category === '이벤트' ? '🎉 이벤트' : category === '숙제' ? '📚 숙제' : category)}
             <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCategories ? 'rotate-180' : ''}`} />
           </button>
+          {/* 소식 퀵탭 — 전체 옆에 바로 노출 */}
+          <button
+            onClick={() => { setCategory('소식'); setSubCategory(null); setShowSubPicker(null); setShowCategories(false); }}
+            className={`px-3.5 py-1.5 rounded-full text-sm font-bold transition-all ${category === '소식' && !subCategory ? 'bg-green-500 text-white shadow-sm' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+            소식
+          </button>
           {subCategory && (
             <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">{category}</span>
           )}

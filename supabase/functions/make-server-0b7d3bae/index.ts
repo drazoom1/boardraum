@@ -736,7 +736,7 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
     if (!/^\d+$/.test(id)) return c.json({ reviews: [], bggUrl: '' });
     const bggUrl = `https://boardgamegeek.com/boardgame/${id}/ratings?comment=1`;
 
-    const cacheKey = `bgg_reviews_v2_${id}`;
+    const cacheKey = `bgg_reviews_v3_${id}`;
     const cached = await kv.get(cacheKey);
     if (cached?.reviews) return c.json(cached);
 
@@ -765,8 +765,7 @@ app.get("/make-server-0b7d3bae/game/reviews-bgg", async (c) => {
       }
     } catch (e) { console.error('bgg reviews fetch error:', e); }
 
-    // 텍스트 긴 것 우선, 상위 5개
-    comments.sort((a, b) => b.value.length - a.value.length);
+    // BGG ratingcomments=1 은 최신 평점순으로 반환됨 → 그 순서(최신순) 유지, 상위 5개
     comments = comments.slice(0, 5);
 
     // 한국어 번역 (MyMemory 무료 API, 키 불필요) — 병렬 처리로 로딩 단축
