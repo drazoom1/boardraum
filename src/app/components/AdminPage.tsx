@@ -2075,7 +2075,7 @@ function WikiMigrationSection({ accessToken }: { accessToken: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games' | 'operator' | 'auction-results' | 'ice-event';
+type Tab = 'approval' | 'members' | 'analytics' | 'backup' | 'popup' | 'migration' | 'player-migration' | 'calculators' | 'homework' | 'sallae' | 'image-review' | 'last-event' | 'notices' | 'recommended' | 'spam' | 'activity-cards' | 'bulk-mail' | 'site-games' | 'operator' | 'auction-results' | 'ice-event' | 'security';
 
 
 // ── 이미지 검수 섹션 ──
@@ -4478,6 +4478,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { id: 'ice-event', label: '얼음깨기 이벤트', icon: <span className="text-base leading-none">🧊</span>, desc: '얼음깨기 이벤트 관리' },
     { id: 'deploy-info', label: '배포 정보', icon: <span className="text-base leading-none">🚀</span>, desc: '배포 날짜 및 시간' },
     { id: 'influencer', label: '인플루언서', icon: <span className="text-base leading-none">⭐</span>, desc: '인플루언서 신청 및 관리' },
+    { id: 'security', label: '2차 인증(2FA)', icon: <span className="text-base leading-none">🔐</span>, desc: '관리자 이메일 OTP' },
   ];
 
   const menuGroups: { label: string; ids: Tab[] }[] = [
@@ -4489,7 +4490,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
     { label: '운영',         ids: ['operator', 'auction-results'] },
     { label: '이벤트',       ids: ['ice-event'] },
     { label: '인플루언서',   ids: ['influencer'] },
-    { label: '시스템',       ids: ['deploy-info'] },
+    { label: '시스템',       ids: ['deploy-info', 'security'] },
   ];
 
   return (
@@ -4570,6 +4571,7 @@ export function AdminPage({ accessToken, onBack }: { accessToken: string; onBack
           {activeTab === 'ice-event' && <IceEventAdmin accessToken={accessToken} />}
           {activeTab === 'influencer' && <InfluencerAdmin accessToken={accessToken} />}
           {activeTab === 'deploy-info' && <DeployInfoSection />}
+          {activeTab === 'security' && <Admin2FASection accessToken={accessToken} />}
         </div>
       </div>
     </div>
@@ -8575,6 +8577,122 @@ function OperatorSection({ accessToken }: { accessToken: string }) {
 // ─── 배포 정보 섹션 ──────────────────────────────────────────────────────────
 
 declare const __BUILD_TIME__: string;
+
+// ─── 관리자 2차 인증(이메일 OTP) 테스트 섹션 ───────────────────────────────
+// 서버 엔드포인트: /admin/2fa/request · /admin/2fa/verify · /admin/2fa/status
+// ⚠️ 현재는 테스트용(non-blocking). requireAdmin 강제전환은 아직 켜지 않음 →
+//    코드 미수신 시에도 관리자 잠금 없음. 회장 실측(네이버 수신) 후 마스터 승인으로 활성화.
+function Admin2FASection({ accessToken }: { accessToken: string }) {
+  const [status, setStatus] = useState<{ verified: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [code, setCode] = useState('');
+
+  const base = `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae`;
+  const auth = { Authorization: `Bearer ${accessToken}` };
+
+  const loadStatus = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${base}/admin/2fa/status`, { headers: auth });
+      setStatus(res.ok ? await res.json() : null);
+    } catch { setStatus(null); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
+  const requestCode = async () => {
+    setSending(true);
+    try {
+      const res = await fetch(`${base}/admin/2fa/request`, {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(data.mailSent
+          ? '인증코드를 이메일로 보냈어요. 메일함(스팸함 포함)을 확인하세요.'
+          : '요청은 처리됐지만 메일 발송에 실패했어요. 발송 설정을 확인해주세요.');
+      } else if (res.status === 429) {
+        toast.error('잠시 후 다시 시도해주세요.');
+      } else {
+        toast.error(data.error || '코드 발송에 실패했어요.');
+      }
+    } catch { toast.error('네트워크 오류로 실패했어요.'); }
+    finally { setSending(false); }
+  };
+
+  const verifyCode = async () => {
+    if (!/^\d{6}$/.test(code.trim())) { toast.error('6자리 숫자 코드를 입력하세요.'); return; }
+    setVerifying(true);
+    try {
+      const res = await fetch(`${base}/admin/2fa/verify`, {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        toast.success('2차 인증 완료! (12시간 유효)');
+        setCode('');
+        loadStatus();
+      } else {
+        toast.error(data.error || '코드 확인에 실패했어요.');
+      }
+    } catch { toast.error('네트워크 오류로 실패했어요.'); }
+    finally { setVerifying(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-50 bg-gradient-to-r from-slate-50 to-gray-50">
+          <h2 className="text-sm font-bold text-gray-800">🔐 관리자 2차 인증 (이메일 OTP)</h2>
+          <p className="text-xs text-gray-400 mt-0.5">비밀번호에 더해 이메일 6자리 코드로 본인 확인</p>
+        </div>
+        <div className="px-5 py-6 space-y-5">
+          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-lg shrink-0">
+              {status?.verified ? '✅' : '🔓'}
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">현재 상태</p>
+              <p className="text-sm font-bold text-gray-900">
+                {loading ? '확인 중…' : status?.verified ? '인증됨 (재인증 창 유효)' : '미인증'}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-[12px] text-amber-800 leading-relaxed">
+            지금은 <b>테스트 모드</b>예요. 강제 적용(2FA 없으면 관리자 차단)은 아직 켜지 않았습니다.
+            먼저 <b>코드 받기</b>를 눌러 이메일함에 6자리 코드가 도착하는지 확인해주세요.
+          </div>
+
+          <button onClick={requestCode} disabled={sending}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-cyan-500 text-white text-sm font-semibold hover:bg-cyan-600 disabled:opacity-50">
+            {sending ? '보내는 중…' : '이메일로 인증코드 받기'}
+          </button>
+
+          <div className="space-y-2">
+            <input value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputMode="numeric" placeholder="6자리 코드 입력"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-[0.4em] font-bold focus:outline-none focus:ring-2 focus:ring-cyan-300" />
+            <button onClick={verifyCode} disabled={verifying || code.length !== 6}
+              className="w-full px-4 py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50">
+              {verifying ? '확인 중…' : '코드 확인'}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            코드는 5분간 유효하고 한 번만 쓸 수 있어요. 5회 틀리면 다시 받아야 합니다.
+            보안을 위해 코드는 화면이나 응답에 노출되지 않습니다.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DeployInfoSection() {
   const buildTime = new Date(__BUILD_TIME__);
