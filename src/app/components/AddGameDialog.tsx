@@ -765,10 +765,14 @@ export function AddGameDialog({ open, onOpenChange, onAddGame, onAddGames, exist
       const formData = new FormData();
       formData.append('file', file);
 
+      // upload-image는 로그인 필수 → 세션 토큰 사용 (anon 키로는 401)
+      const { data: { session } } = await getSupabaseClient().auth.getSession();
+      const uploadToken = session?.access_token || publicAnonKey;
+
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/upload-image`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${uploadToken}`,
         },
         body: formData,
       });

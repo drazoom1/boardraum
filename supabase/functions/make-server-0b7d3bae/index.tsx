@@ -1148,6 +1148,10 @@ app.post("/make-server-0b7d3bae/game/image-requests/:requestId/review", async (c
 
 app.post("/make-server-0b7d3bae/upload-image", async (c) => {
   try {
+    // 🔒 로그인 필수 (무인증 업로드=요금·임의 콘텐츠 호스팅 차단)
+    const { error: authError } = await requireAuth(c);
+    if (authError) return authError;
+
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
     
@@ -1237,10 +1241,23 @@ app.post("/make-server-0b7d3bae/auth/send-verification-code", async (c) => {
     const { email } = await c.req.json();
     if (!email) return c.json({ error: '이메일을 입력해주세요' }, 400);
 
+    const emailLower = email.toLowerCase().trim();
+
+    // 🔒 레이트리밋: 이메일당 30초 최소간격 + 10분 내 5회 (메일폭탄·Resend 요금폭탄 방지)
+    const rlKey = `email_verify_rl_${emailLower}`;
+    const rlNow = Date.now();
+    const rl = ((await kv.get(rlKey).catch(() => null)) as any) || { count: 0, first: rlNow, last: 0 };
+    if (rlNow - (rl.last || 0) < 30 * 1000) {
+      return c.json({ error: '잠시 후 다시 시도해주세요.' }, 429);
+    }
+    const rlWindowFresh = rlNow - (rl.first || rlNow) < 10 * 60 * 1000;
+    if (rlWindowFresh && (rl.count || 0) >= 5) {
+      return c.json({ error: '요청이 너무 많아요. 잠시 후 다시 시도해주세요.' }, 429);
+    }
+
     // 중복 이메일 체크
     // KV에 beta_user로 등록된 유저만 진짜 가입된 유저로 판단 (Supabase 임시 유저 제외)
     const allUsers = await getByPrefix('beta_user_');
-    const emailLower = email.toLowerCase().trim();
     console.log('[check-dup] 검사 이메일:', emailLower, '| KV 유저 수:', allUsers.length);
     const alreadyExists = allUsers.some((item: any) => {
       const val = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
@@ -1286,8 +1303,15 @@ app.post("/make-server-0b7d3bae/auth/send-verification-code", async (c) => {
       }
     }
 
-    // 메일 발송 성공이면 성공만, 실패면 devCode도 함께 반환
-    return c.json({ success: true, mailSent, devCode: mailSent ? undefined : code });
+    // 레이트리밋 카운터 갱신
+    await kv.set(rlKey, {
+      count: (rlWindowFresh ? (rl.count || 0) : 0) + 1,
+      first: rlWindowFresh ? (rl.first || rlNow) : rlNow,
+      last: rlNow,
+    }).catch(() => {});
+
+    // 🔒 devCode(6자리 코드)는 개발모드에서만 노출. 운영에서 코드 응답노출=인증우회 → 차단.
+    return c.json({ success: true, mailSent, devCode: (!mailSent && isDevelopment) ? code : undefined });
   } catch (e) {
     console.error('send-verification-code error:', e);
     return c.json({ error: '인증번호 발송에 실패했어요. 다시 시도해주세요.' }, 500);
@@ -1771,7 +1795,10 @@ app.get("/make-server-0b7d3bae/data/all-games", async (c) => {
 // 🔧 DEBUG: Show all KV store keys (temporary debug endpoint)
 app.get("/make-server-0b7d3bae/debug/kv-keys", async (c) => {
   try {
-    
+    // 🔒 관리자 권한 필수 (무인증 KV 키덤프 차단)
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
+
     // ⚠️ 중요: 모든 prefix를 시도해서 전체 키 목록 확인
     
     // 1. user_ prefix로 시도
@@ -2242,6 +2269,18 @@ async function setUserRole(userId: string, role: string): Promise<void> {
   const profile = await kvGetWithRetry<any>(`user_profile_${userId}`) || {};
   profile.role = role;
   await kvSetWithRetry(`user_profile_${userId}`, profile);
+}
+
+// ─── 중앙 인증 헬퍼 ───────────────────────────────────────────────
+// 액세스 토큰을 "존재"만이 아니라 실제로 검증(supabase.auth.getUser)해서 user를 돌려준다.
+// 공개 anon 키는 유저 토큰이 아니므로 user=null → 401 로 차단된다.
+// 함수 선언(hoisting)이라 이 위치보다 앞선 라우트에서도 런타임에 호출 가능.
+async function requireAuth(c: any): Promise<{ user: any; error?: Response }> {
+  const token = c.req.header('Authorization')?.split(' ')[1];
+  if (!token) return { user: null, error: c.json({ error: 'Unauthorized' }, 401) };
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user?.id) return { user: null, error: c.json({ error: 'Unauthorized' }, 401) };
+  return { user };
 }
 
 // Set admin role for sityplanner2@naver.com
@@ -2784,8 +2823,12 @@ app.get("/make-server-0b7d3bae/customs/pending/all", async (c) => {
 // Set user role (admin setup endpoint)
 app.post("/make-server-0b7d3bae/admin/set-role", async (c) => {
   try {
+    // 🔒 관리자 권한 필수 (무인증 권한상승=사이트장악 차단)
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
+
     const { email, role } = await c.req.json();
-    
+
     if (!email || !role) {
       return c.json({ error: 'Email and role are required' }, 400);
     }
@@ -3317,7 +3360,10 @@ app.get("/make-server-0b7d3bae/check-beta-status", async (c) => {
 // Get all keys (for debugging)
 app.get("/make-server-0b7d3bae/admin/all-keys", async (c) => {
   try {
-    
+    // 🔒 관리자 권한 필수 (무인증 KV 키덤프 차단)
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
+
     // Get all keys from KV store
     const allKeysData = await getByPrefix('');
     const keys = allKeysData.map((item: any) => item.key);
@@ -3337,8 +3383,12 @@ app.get("/make-server-0b7d3bae/admin/all-keys", async (c) => {
 // Debug endpoint: Check specific user data
 app.get("/make-server-0b7d3bae/admin/debug-user/:userId", async (c) => {
   try {
+    // 🔒 관리자 권한 필수 (무인증 타인 컬렉션 덤프 차단)
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
+
     const userId = c.req.param('userId');
-    
+
     // ==================== 🆕 NEW: Load with fallback ====================
     const owned = await loadGamesWithFallback(userId, 'owned');
     const wishlist = await loadGamesWithFallback(userId, 'wishlist');
@@ -3528,13 +3578,17 @@ app.post("/make-server-0b7d3bae/admin/beta-testers/:userId/status", async (c) =>
 // Get user info by ID
 app.get("/make-server-0b7d3bae/beta-user/:userId", async (c) => {
   try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    
-    if (!accessToken) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-    
+    // 🔒 토큰 "존재"만이 아니라 실제 세션 검증 + 본인/관리자만 (email·실명·전화 PII 보호)
+    const { user: authUser, error: authError } = await requireAuth(c);
+    if (authError) return authError;
+
     const userId = c.req.param('userId');
+    const role = await getUserRole(authUser.id);
+    const isAdmin = role === 'admin' || authUser.email === 'sityplanner2@naver.com';
+    if (authUser.id !== userId && !isAdmin) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
     const user = await kv.get(`beta_user_${userId}`);
     
     if (!user) {
@@ -3910,6 +3964,17 @@ app.get("/make-server-0b7d3bae/community/posts/:postId", async (c) => {
     }
     const post = await kv.get(`beta_post_${postId}`);
     if (!post || post.isDraft) return c.json({ error: 'Post not found' }, 404);
+    // 🔒 비공개글은 작성자 본인 또는 관리자만 (IDOR 차단)
+    if (post.isPrivate) {
+      let viewerIsAdmin = false;
+      if (userId) {
+        const viewerRole = await getUserRole(userId);
+        viewerIsAdmin = viewerRole === 'admin';
+      }
+      if (post.userId !== userId && !viewerIsAdmin) {
+        return c.json({ error: 'Post not found' }, 404);
+      }
+    }
     const pts = await getUserPoints(post.userId).catch(() => null);
     return c.json({ post: { ...post, userRankPoints: pts } });
   } catch (e) { return c.json({ error: String(e) }, 500); }
@@ -9038,7 +9103,8 @@ app.post("/make-server-0b7d3bae/admin/last-post-event/card-gift", async (c) => {
 // 관리자: 수동으로 당첨 배너 등록
 app.post("/make-server-0b7d3bae/last-post-event/winner/manual", async (c) => {
   try {
-    await requireAdmin(c);
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
     const { eventId, winnerUserName, prize, prizeImageUrl, eventTitle } = await c.req.json();
     if (!eventId) return c.json({ error: 'eventId required' }, 400);
     const winners: any[] = await kv.get("last_event_winners") || [];
@@ -9979,7 +10045,8 @@ app.post("/make-server-0b7d3bae/site-games/register", async (c) => {
 // ─── 트렌딩 블랙리스트 관리 (관리자) ─────────────────────────────────────────
 app.post("/make-server-0b7d3bae/admin/trending-blacklist", async (c) => {
   try {
-    await requireAdmin(c);
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
     const { gameId, action } = await c.req.json(); // action: 'add' | 'remove'
     const blacklist: string[] = (await kv.get('trending_blacklist')) || [];
     let updated: string[];
@@ -9999,7 +10066,8 @@ app.post("/make-server-0b7d3bae/admin/trending-blacklist", async (c) => {
 // ─── 트렌딩 캐시 강제 삭제 ─────────────────────────────────────────────────────
 app.post("/make-server-0b7d3bae/admin/trending-cache-clear", async (c) => {
   try {
-    await requireAdmin(c);
+    const { error: gateErr } = await requireAdmin(c);
+    if (gateErr) return gateErr;
     await kv.del('trending_games_cache').catch(() => {});
     return c.json({ success: true, message: '트렌딩 캐시가 삭제되었어요' });
   } catch (e) { return c.json({ error: String(e) }, 500); }
@@ -10095,7 +10163,8 @@ app.get("/make-server-0b7d3bae/prerender", async (c) => {
     if (postMatch) {
       const postId = decodeURIComponent(postMatch[1]);
       const post = await kv.get(`beta_post_${postId}`) as any;
-      if (post && !post.isDraft) {
+      // 🔒 비공개글은 프리렌더(SEO/소셜 미리보기)에 노출하지 않음 (render.ts와 동일 정책)
+      if (post && !post.isDraft && !post.isPrivate) {
         const content = (post.content || '').replace(/\n/g, ' ');
         const truncated = content.slice(0, 50);
         const gameName = post.linkedGame?.name || post.linkedGames?.[0]?.name;

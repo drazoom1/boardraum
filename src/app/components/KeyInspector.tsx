@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { getSupabaseClient } from '../lib/supabase';
 
 // KV Store 키 검사 도구
 export function KeyInspector() {
@@ -10,14 +11,22 @@ export function KeyInspector() {
   const [debugResult, setDebugResult] = useState<any>(null);
   const [isDebugging, setIsDebugging] = useState(false);
 
+  // 관리자 전용 엔드포인트이므로 로그인 세션 토큰을 사용 (anon 키로는 401)
+  const getAdminToken = async () => {
+    const supabase = getSupabaseClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || publicAnonKey;
+  };
+
   const loadAllKeys = async () => {
     setIsLoading(true);
     try {
+      const token = await getAdminToken();
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/all-keys`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -43,11 +52,12 @@ export function KeyInspector() {
     setDebugResult(null);
     
     try {
+      const token = await getAdminToken();
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-0b7d3bae/admin/debug-user/${debugUserId.trim()}`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${token}`,
           },
         }
       );
