@@ -10671,6 +10671,100 @@ async function requireAuth(c: any): Promise<{ user: any; error?: Response }> {
   return { user };
 }
 
+// ─── 관리자 2FA (이메일 OTP) ────────────────────────────────────────
+// 세션(비밀번호 로그인) 위에 2차 인증. requireAdminIdentity = 본인+관리자 신원만 확인
+// (2FA 검증여부는 보지 않음 → 코드 발송/확인 라우트가 이걸로 자기 자신을 보호).
+const ADMIN_2FA_TTL_MS = 5 * 60 * 1000;            // 코드 유효 5분
+const ADMIN_2FA_MAX_ATTEMPTS = 5;                  // 코드 시도 제한
+const ADMIN_2FA_SESSION_MS = 12 * 60 * 60 * 1000;  // 검증 후 재인증 창 12시간
+async function requireAdminIdentity(c: any): Promise<{ user: any; error?: Response }> {
+  const { user, error } = await requireAuth(c);
+  if (error) return { user: null, error };
+  const role = await getUserRole(user.id);
+  if (role !== 'admin' && user.email !== 'sityplanner2@naver.com') {
+    return { user: null, error: c.json({ error: 'Forbidden' }, 403) };
+  }
+  return { user };
+}
+
+// 관리자 2FA가 유효하게 검증돼 있는지 (향후 requireAdmin 강제 시 사용)
+async function isAdmin2faVerified(userId: string): Promise<boolean> {
+  const ok = (await kv.get(`admin_2fa_ok_${userId}`).catch(() => null)) as any;
+  return !!(ok && ok.until > Date.now());
+}
+
+// POST /admin/2fa/request — 관리자 본인에게 6자리 코드 이메일 발송 (코드 응답노출 금지)
+app.post("/make-server-0b7d3bae/admin/2fa/request", async (c) => {
+  try {
+    const { user, error } = await requireAdminIdentity(c);
+    if (error) return error;
+
+    // 레이트리밋: 30초 최소간격 (메일폭탄 방지)
+    const rlKey = `admin_2fa_rl_${user.id}`;
+    const now = Date.now();
+    const last = ((await kv.get(rlKey).catch(() => null)) as any)?.last || 0;
+    if (now - last < 30 * 1000) return c.json({ error: '잠시 후 다시 시도해주세요.' }, 429);
+
+    const code = String(Math.floor(100000 + Math.random() * 900000)); // 6자리
+    await kv.set(`admin_2fa_${user.id}`, { code, expiresAt: now + ADMIN_2FA_TTL_MS, attempts: 0, used: false });
+    await kv.set(rlKey, { last: now }).catch(() => {});
+
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    let mailSent = false;
+    if (resendKey && user.email) {
+      try {
+        const r = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendKey}` },
+          body: JSON.stringify({
+            from: '보드라움 <noreply@boardraum.site>',
+            to: user.email,
+            subject: '[보드라움] 관리자 인증코드',
+            html: `<p>관리자 로그인 인증코드예요.</p><p style="font-size:24px;font-weight:700;letter-spacing:3px">${code}</p><p>5분 안에 입력하세요. 본인이 요청하지 않았다면 이 메일을 무시하세요.</p>`,
+          }),
+        });
+        mailSent = r.ok;
+        if (!r.ok) console.error('admin 2fa mail fail:', await r.text().catch(() => ''));
+      } catch (e) { console.error('admin 2fa mail error:', e); }
+    }
+    // 🔒 코드는 어떤 경우에도 응답에 넣지 않음 (개발모드 예외 없음 — 관리자 계정 보호)
+    return c.json({ success: true, mailSent });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// POST /admin/2fa/verify — 코드 확인 (5분·1회용·시도제한). 성공 시 재인증 창 부여
+app.post("/make-server-0b7d3bae/admin/2fa/verify", async (c) => {
+  try {
+    const { user, error } = await requireAdminIdentity(c);
+    if (error) return error;
+    const { code } = await c.req.json().catch(() => ({}));
+    if (!code) return c.json({ error: '코드를 입력해주세요' }, 400);
+
+    const key = `admin_2fa_${user.id}`;
+    const rec = (await kv.get(key).catch(() => null)) as any;
+    if (!rec || rec.used) return c.json({ error: '코드를 다시 요청해주세요' }, 400);
+    if (Date.now() > rec.expiresAt) { await kv.del(key).catch(() => {}); return c.json({ error: '코드가 만료됐어요. 다시 요청해주세요' }, 400); }
+    if ((rec.attempts || 0) >= ADMIN_2FA_MAX_ATTEMPTS) { await kv.del(key).catch(() => {}); return c.json({ error: '시도 횟수를 초과했어요. 다시 요청해주세요' }, 429); }
+    if (String(code).trim() !== String(rec.code)) {
+      await kv.set(key, { ...rec, attempts: (rec.attempts || 0) + 1 }).catch(() => {});
+      return c.json({ error: '코드가 일치하지 않아요' }, 400);
+    }
+    // 성공: 1회용 소진 + 재인증 창(12h) 부여
+    await kv.set(key, { ...rec, used: true }).catch(() => {});
+    await kv.set(`admin_2fa_ok_${user.id}`, { until: Date.now() + ADMIN_2FA_SESSION_MS }).catch(() => {});
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
+// GET /admin/2fa/status — 프론트가 OTP 모달 표시 여부 판단용
+app.get("/make-server-0b7d3bae/admin/2fa/status", async (c) => {
+  try {
+    const { user, error } = await requireAdminIdentity(c);
+    if (error) return error;
+    return c.json({ verified: await isAdmin2faVerified(user.id) });
+  } catch (e) { return c.json({ error: String(e) }, 500); }
+});
+
 // ============================================================
 // 🎯 경매 시스템 API
 // ============================================================
